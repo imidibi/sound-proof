@@ -10,6 +10,7 @@ import SwiftData
 
 struct ProjectListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
     @Query(sort: \Project.updatedAt, order: .reverse) private var projects: [Project]
     @State private var selectedMix: Mix?
     @State private var selectedSongForMenu: Song?
@@ -17,6 +18,7 @@ struct ProjectListView: View {
     @State private var showingNewProjectSheet = false
     @State private var showingNewSongSheet = false
     @State private var showingImportMixSheet = false
+    @State private var showingJoinProjectSheet = false
     @State private var expandedProjects: Set<UUID> = []
     @State private var expandedSongs: Set<UUID> = []
     
@@ -79,6 +81,15 @@ struct ProjectListView: View {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
                         
+                        // Show Join Project for clients
+                        if authService.currentUser?.role == .client {
+                            Button {
+                                showingJoinProjectSheet = true
+                            } label: {
+                                Label("Join Project", systemImage: "link")
+                            }
+                        }
+                        
                         // Context-aware options based on selection
                         if let selectedProject = selectedProjectForMenu {
                             Divider()
@@ -114,6 +125,9 @@ struct ProjectListView: View {
                 if let song = selectedSongForMenu {
                     ImportMixSheet(song: song)
                 }
+            }
+            .sheet(isPresented: $showingJoinProjectSheet) {
+                JoinProjectSheet()
             }
         } detail: {
             if let mix = selectedMix {
@@ -178,6 +192,7 @@ struct ProjectFolderRow: View {
     let onToggleExpand: () -> Void
     
     @State private var showingNewSongSheet = false
+    @State private var showingShareSheet = false
     @State private var isEditingName = false
     @FocusState private var isNameFieldFocused: Bool
     
@@ -226,6 +241,28 @@ struct ProjectFolderRow: View {
                 
                 Spacer()
                 
+                // Share code indicator
+                if let shareCode = project.shareCode {
+                    Button {
+                        showingShareSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "link")
+                                .font(.caption)
+                            Text(shareCode)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .monospacedDigit()
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundStyle(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                }
+                
                 if project.status != .draft {
                     StatusBadge(status: project.status)
                 }
@@ -242,6 +279,16 @@ struct ProjectFolderRow: View {
                 onToggleExpand()
             }
             .contextMenu {
+                if project.shareCode != nil {
+                    Button {
+                        showingShareSheet = true
+                    } label: {
+                        Label("Share Project", systemImage: "square.and.arrow.up")
+                    }
+                    
+                    Divider()
+                }
+                
                 Button {
                     isEditingName = true
                     isNameFieldFocused = true
@@ -283,6 +330,9 @@ struct ProjectFolderRow: View {
         }
         .sheet(isPresented: $showingNewSongSheet) {
             NewSongSheet(project: project)
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareProjectSheet(project: project)
         }
     }
 }

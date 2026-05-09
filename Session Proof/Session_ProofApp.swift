@@ -7,9 +7,15 @@
 
 import SwiftUI
 import SwiftData
+import FirebaseCore
 
 @main
 struct Session_ProofApp: App {
+    @State private var authService = AuthenticationService()
+    @State private var firestoreService = FirestoreService()
+    @State private var cloudStorageService = CloudStorageService()
+    @State private var syncService: ProjectSyncService?
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Project.self,
@@ -27,11 +33,36 @@ struct Session_ProofApp: App {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+    
+    init() {
+        // Configure Firebase
+        FirebaseApp.configure()
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if authService.isAuthenticated {
+                ContentView()
+                    .environment(authService)
+                    .environment(firestoreService)
+                    .environment(cloudStorageService)
+                    .environment(getSyncService())
+            } else {
+                AuthenticationView()
+                    .environment(authService)
+            }
         }
         .modelContainer(sharedModelContainer)
+    }
+    
+    private func getSyncService() -> ProjectSyncService {
+        if syncService == nil {
+            syncService = ProjectSyncService(
+                firestoreService: firestoreService,
+                cloudStorageService: cloudStorageService,
+                authService: authService
+            )
+        }
+        return syncService!
     }
 }

@@ -13,10 +13,12 @@ struct NewSongSheet: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProjectSyncService.self) private var syncService
     
     @State private var songName = ""
     @State private var artist = ""
     @State private var notes = ""
+    @State private var isCreating = false
     
     var body: some View {
         NavigationStack {
@@ -108,10 +110,19 @@ struct NewSongSheet: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        createSong()
+                    Button {
+                        Task {
+                            await createSong()
+                        }
+                    } label: {
+                        if isCreating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Create")
+                        }
                     }
-                    .disabled(songName.isEmpty)
+                    .disabled(songName.isEmpty || isCreating)
                 }
             }
         }
@@ -120,7 +131,9 @@ struct NewSongSheet: View {
         #endif
     }
     
-    private func createSong() {
+    private func createSong() async {
+        isCreating = true
+        
         let sortOrder = project.songs.count
         let song = Song(
             name: songName,
@@ -134,9 +147,29 @@ struct NewSongSheet: View {
         
         do {
             try modelContext.save()
-            dismiss()
+            
+            // Sync to cloud if project is synced
+            if let projectId = project.firestoreId {
+                do {
+                    try await syncService.syncSong(
+                        song: song,
+                        projectId: projectId,
+                        modelContext: modelContext
+                    )
+                } catch {
+                    print("Cloud sync failed: \(error)")
+                }
+            }
+            
+            await MainActor.run {
+                isCreating = false
+                dismiss()
+            }
         } catch {
             print("Error creating song: \(error)")
+            await MainActor.run {
+                isCreating = false
+            }
         }
     }
 }

@@ -12,15 +12,32 @@ struct WaveformPlayerView: View {
     @Bindable var mix: Mix
     let audioPlayerService: AudioPlayerService
     
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProjectSyncService.self) private var syncService
+    @Environment(CloudStorageService.self) private var cloudStorage
+    
     @State private var waveformData: WaveformData?
     @State private var isLoadingWaveform = false
     @State private var zoomLevel: Double = 1.0
+    @State private var isDownloading = false
+    @State private var downloadError: String?
     
     var body: some View {
         VStack(spacing: 0) {
             // Waveform display
             ZStack {
-                if isLoadingWaveform {
+                if isDownloading {
+                    VStack(spacing: 16) {
+                        ProgressView(value: cloudStorage.downloadProgress)
+                            .frame(width: 200)
+                        Text("Downloading mix from cloud...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(Int(cloudStorage.downloadProgress * 100))%")
+                            .font(.headline)
+                            .monospacedDigit()
+                    }
+                } else if isLoadingWaveform {
                     ProgressView("Generating waveform...")
                 } else if let waveformData = waveformData {
                     WaveformView(
@@ -99,7 +116,15 @@ struct WaveformPlayerView: View {
     }
     
     private func loadAudioAndWaveform() async {
-        guard let url = mix.assetURL else { return }
+        // Check if we need to download from cloud first
+        if mix.assetURL == nil && mix.cloudURL != nil {
+            await downloadMixFromCloud()
+        }
+        
+        guard let url = mix.assetURL else {
+            downloadError = "No audio file available"
+            return
+        }
         
         do {
             try audioPlayerService.loadAudio(from: url)
@@ -126,6 +151,29 @@ struct WaveformPlayerView: View {
         } catch {
             print("Error loading audio or waveform: \(error)")
             isLoadingWaveform = false
+        }
+    }
+    
+    private func downloadMixFromCloud() async {
+        await MainActor.run {
+            isDownloading = true
+            downloadError = nil
+        }
+        
+        do {
+            try await syncService.downloadMix(
+                mix: mix,
+                modelContext: modelContext
+            )
+            
+            await MainActor.run {
+                isDownloading = false
+            }
+        } catch {
+            await MainActor.run {
+                downloadError = error.localizedDescription
+                isDownloading = false
+            }
         }
     }
 }

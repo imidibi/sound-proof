@@ -27,6 +27,12 @@ final class Project {
     var status: ProjectStatus
     var notes: String?
     
+    // Cloud sync fields
+    var firestoreId: String? // ID in Firebase
+    var shareCode: String? // 6-character code for sharing
+    var isSynced: Bool = false // Whether synced to cloud
+    var lastSyncedAt: Date?
+    
     @Relationship(deleteRule: .cascade, inverse: \Song.project)
     var songs: [Song] = []
     
@@ -41,7 +47,11 @@ final class Project {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         status: ProjectStatus = .draft,
-        notes: String? = nil
+        notes: String? = nil,
+        firestoreId: String? = nil,
+        shareCode: String? = nil,
+        isSynced: Bool = false,
+        lastSyncedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -51,5 +61,9 @@ final class Project {
         self.updatedAt = updatedAt
         self.status = status
         self.notes = notes
+        self.firestoreId = firestoreId
+        self.shareCode = shareCode
+        self.isSynced = isSynced
+        self.lastSyncedAt = lastSyncedAt
     }
 }

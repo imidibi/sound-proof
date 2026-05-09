@@ -32,6 +32,9 @@ final class Song {
     var updatedAt: Date
     var sortOrder: Int
     
+    // Cloud sync fields
+    var firestoreId: String?
+    
     var project: Project?
     
     @Relationship(deleteRule: .cascade, inverse: \Mix.song)

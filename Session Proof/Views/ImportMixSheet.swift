@@ -15,6 +15,8 @@ struct ImportMixSheet: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProjectSyncService.self) private var syncService
+    @Environment(CloudStorageService.self) private var cloudStorage
     
     @State private var mixName = ""
     @State private var notes = ""
@@ -22,6 +24,7 @@ struct ImportMixSheet: View {
     @State private var selectedFileURL: URL?
     @State private var isImporting = false
     @State private var errorMessage: String?
+    @State private var uploadProgress: String?
     
     var body: some View {
         NavigationStack {
@@ -64,6 +67,17 @@ struct ImportMixSheet: View {
                     Text("Mix Details")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                }
+                
+                if let uploadProgress = uploadProgress {
+                    Section {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(uploadProgress)
+                                .font(.callout)
+                        }
+                    }
                 }
                 
                 if let errorMessage = errorMessage {
@@ -243,6 +257,31 @@ struct ImportMixSheet: View {
             modelContext.insert(mix)
             
             try modelContext.save()
+            
+            // Upload to cloud if project is synced
+            if let project = song.project,
+               let projectId = project.firestoreId,
+               let songId = song.firestoreId {
+                
+                await MainActor.run {
+                    uploadProgress = "Uploading to cloud..."
+                }
+                
+                do {
+                    try await syncService.uploadMix(
+                        mix: mix,
+                        projectId: projectId,
+                        songId: songId,
+                        modelContext: modelContext
+                    )
+                } catch {
+                    // Don't fail the whole import if upload fails
+                    print("Cloud upload failed: \(error)")
+                    await MainActor.run {
+                        uploadProgress = "Cloud upload failed (saved locally)"
+                    }
+                }
+            }
             
             await MainActor.run {
                 dismiss()

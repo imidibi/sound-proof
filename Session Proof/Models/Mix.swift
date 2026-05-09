@@ -21,7 +21,7 @@ final class Mix {
     var id: UUID
     var name: String
     var versionNumber: Int
-    var assetURL: URL?
+    var assetURL: URL? // Local file path
     var duration: TimeInterval
     var sampleRate: Double
     var channels: Int
@@ -29,6 +29,12 @@ final class Mix {
     var createdAt: Date
     var notes: String?
     var waveformCache: Data?
+    
+    // Cloud sync fields
+    var cloudURL: String? // Firebase Storage download URL
+    var firestoreId: String? // ID in Firebase
+    var isUploaded: Bool = false // Whether uploaded to cloud
+    var uploadedAt: Date?
     
     var song: Song?
     
@@ -49,7 +55,11 @@ final class Mix {
         approvalStatus: MixStatus = .draft,
         createdAt: Date = Date(),
         notes: String? = nil,
-        waveformCache: Data? = nil
+        waveformCache: Data? = nil,
+        cloudURL: String? = nil,
+        firestoreId: String? = nil,
+        isUploaded: Bool = false,
+        uploadedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -62,5 +72,9 @@ final class Mix {
         self.createdAt = createdAt
         self.notes = notes
         self.waveformCache = waveformCache
+        self.cloudURL = cloudURL
+        self.firestoreId = firestoreId
+        self.isUploaded = isUploaded
+        self.uploadedAt = uploadedAt
     }
 }
