@@ -186,77 +186,89 @@ struct WaveformView: View {
     let comments: [Comment]
     let onSeek: (TimeInterval) -> Void
     
-    @State private var scrollOffset: CGFloat = 0
     @State private var selectedComment: Comment?
     
     var body: some View {
         GeometryReader { geometry in
-            ScrollView(.horizontal, showsIndicators: true) {
-                ZStack(alignment: .leading) {
-                    // Waveform bars
-                    HStack(spacing: 2) {
-                        ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(barColor(for: index, geometry: geometry))
-                                .frame(width: max(1, ((geometry.size.width * zoomLevel) / CGFloat(waveformData.samples.count)) - 2))
-                                .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
-                        }
+            let centerX = geometry.size.width / 2
+            let totalWaveformWidth = geometry.size.width * zoomLevel
+            
+            ZStack {
+                // Waveform content that scrolls
+                HStack(spacing: 2) {
+                    ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.white.opacity(0.7))
+                            .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
+                            .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
                     }
-                    .frame(maxHeight: .infinity)
-                    
-                    // Comment markers (should be above waveform)
-                    ForEach(comments) { comment in
-                        CommentMarkerView(
-                            comment: comment,
-                            duration: duration,
-                            isSelected: selectedComment?.id == comment.id
-                        )
-                        .offset(x: commentPosition(for: comment.timestamp, in: geometry))
-                        .onTapGesture {
-                            selectedComment = comment
-                            onSeek(comment.timestamp)
-                        }
-                    }
-                    
-                    // Playhead (should be on top)
-                    Rectangle()
-                        .fill(Color.red)
-                        .frame(width: 3)
-                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 0)
-                        .offset(x: playheadPosition(in: geometry))
-                        .zIndex(100)
                 }
-                .frame(width: max(geometry.size.width * zoomLevel, geometry.size.width), height: geometry.size.height)
-                .padding(.horizontal, 20)
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            let adjustedX = value.location.x - 20
-                            let position = adjustedX / (geometry.size.width * zoomLevel)
-                            let time = max(0, min(duration, duration * position))
-                            onSeek(time)
-                        }
-                )
+                .frame(width: totalWaveformWidth, height: geometry.size.height, alignment: .leading)
+                .offset(x: -waveformOffset(centerX: centerX, totalWidth: totalWaveformWidth))
+                
+                // Comment markers
+                ForEach(comments) { comment in
+                    CommentMarkerView(
+                        comment: comment,
+                        duration: duration,
+                        isSelected: selectedComment?.id == comment.id
+                    )
+                    .offset(x: commentXPosition(for: comment.timestamp, centerX: centerX, totalWidth: totalWaveformWidth))
+                    .onTapGesture {
+                        selectedComment = comment
+                        onSeek(comment.timestamp)
+                    }
+                }
+                
+                // Fixed center playhead (always in the middle)
+                Rectangle()
+                    .fill(Color.red)
+                    .frame(width: 3)
+                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 0)
+                    .position(x: centerX, y: geometry.size.height / 2)
+                    .zIndex(100)
             }
-            .defaultScrollAnchor(.center)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        // Convert tap/drag position to time
+                        let relativeX = value.location.x - centerX
+                        let pixelOffset = waveformOffset(centerX: centerX, totalWidth: totalWaveformWidth) + relativeX
+                        let position = pixelOffset / totalWaveformWidth
+                        let time = max(0, min(duration, duration * position))
+                        onSeek(time)
+                    }
+            )
         }
     }
     
-    private func barColor(for index: Int, geometry: GeometryProxy) -> Color {
-        let position = CGFloat(index) / CGFloat(waveformData.samples.count)
-        let currentPosition = duration > 0 ? currentTime / duration : 0
+    // Calculate how much to offset the waveform to keep playhead centered
+    private func waveformOffset(centerX: CGFloat, totalWidth: CGFloat) -> CGFloat {
+        guard duration > 0 else { return 0 }
+        let playbackPosition = currentTime / duration
+        let targetOffset = playbackPosition * totalWidth
         
-        return position <= currentPosition ? Color.accentColor : Color.secondary.opacity(0.5)
+        // Clamp offset so waveform doesn't scroll past its bounds
+        let maxOffset = totalWidth - centerX
+        
+        if targetOffset < centerX {
+            // At beginning, waveform starts at left edge
+            return 0
+        } else if targetOffset > maxOffset {
+            // At end, waveform stops at right edge
+            return maxOffset - centerX
+        } else {
+            // Middle, keep playhead centered
+            return targetOffset - centerX
+        }
     }
     
-    private func playheadPosition(in geometry: GeometryProxy) -> CGFloat {
-        guard duration > 0 else { return 20 }
-        return 20 + (currentTime / duration) * (geometry.size.width * zoomLevel)
-    }
-    
-    private func commentPosition(for timestamp: TimeInterval, in geometry: GeometryProxy) -> CGFloat {
-        guard duration > 0 else { return 20 }
-        return 20 + (timestamp / duration) * (geometry.size.width * zoomLevel)
+    private func commentXPosition(for timestamp: TimeInterval, centerX: CGFloat, totalWidth: CGFloat) -> CGFloat {
+        guard duration > 0 else { return centerX }
+        let commentPosition = (timestamp / duration) * totalWidth
+        let waveformScroll = waveformOffset(centerX: centerX, totalWidth: totalWidth)
+        return commentPosition - waveformScroll
     }
 }
 
@@ -369,8 +381,8 @@ struct PlayerControlsView: View {
     private func formatTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
-        let fraction = Int((time.truncatingRemainder(dividingBy: 1)) * 10)
-        return String(format: "%d:%02d.%d", minutes, seconds, fraction)
+        let hundredths = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
+        return String(format: "%d:%02d.%02d", minutes, seconds, hundredths)
     }
 }
 
