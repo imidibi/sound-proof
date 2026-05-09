@@ -14,7 +14,7 @@ struct Session_ProofApp: App {
     @State private var authService: AuthenticationService
     @State private var firestoreService: FirestoreService
     @State private var cloudStorageService: CloudStorageService
-    @State private var syncService: ProjectSyncService?
+    @State private var syncService: ProjectSyncService
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -39,9 +39,19 @@ struct Session_ProofApp: App {
         FirebaseApp.configure()
         
         // Now initialize services
-        _authService = State(initialValue: AuthenticationService())
-        _firestoreService = State(initialValue: FirestoreService())
-        _cloudStorageService = State(initialValue: CloudStorageService())
+        let auth = AuthenticationService()
+        let firestore = FirestoreService()
+        let cloudStorage = CloudStorageService()
+        let sync = ProjectSyncService(
+            firestoreService: firestore,
+            cloudStorageService: cloudStorage,
+            authService: auth
+        )
+        
+        _authService = State(initialValue: auth)
+        _firestoreService = State(initialValue: firestore)
+        _cloudStorageService = State(initialValue: cloudStorage)
+        _syncService = State(initialValue: sync)
     }
 
     var body: some Scene {
@@ -51,23 +61,12 @@ struct Session_ProofApp: App {
                     .environment(authService)
                     .environment(firestoreService)
                     .environment(cloudStorageService)
-                    .environment(getSyncService())
+                    .environment(syncService)
             } else {
                 AuthenticationView()
                     .environment(authService)
             }
         }
         .modelContainer(sharedModelContainer)
-    }
-    
-    private func getSyncService() -> ProjectSyncService {
-        if syncService == nil {
-            syncService = ProjectSyncService(
-                firestoreService: firestoreService,
-                cloudStorageService: cloudStorageService,
-                authService: authService
-            )
-        }
-        return syncService!
     }
 }
