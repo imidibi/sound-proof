@@ -76,7 +76,7 @@ struct WaveformPlayerView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.secondary.opacity(0.1))
+            .background(Color.black.opacity(0.8))
             
             // Zoom control
             HStack(spacing: 12) {
@@ -198,7 +198,7 @@ struct WaveformView: View {
                 HStack(spacing: 2) {
                     ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.white.opacity(0.7))
+                            .fill(Color.primary.opacity(0.6))
                             .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
                             .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
                     }
@@ -222,7 +222,7 @@ struct WaveformView: View {
                 
                 // Fixed center playhead (always in the middle)
                 Rectangle()
-                    .fill(Color.red)
+                    .fill(Color.blue)
                     .frame(width: 3)
                     .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 0)
                     .position(x: centerX, y: geometry.size.height / 2)
