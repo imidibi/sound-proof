@@ -54,7 +54,7 @@ struct ImportMixSheet: View {
                                 .frame(height: 80)
                                 .scrollContentBackground(.hidden)
                                 .padding(8)
-                                .background(Color(.systemGray6))
+                                .background(Color(nsColor: .controlBackgroundColor))
                                 .cornerRadius(6)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 6)

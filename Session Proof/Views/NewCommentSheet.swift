@@ -45,7 +45,7 @@ struct NewCommentSheet: View {
                             .frame(height: 120)
                             .scrollContentBackground(.hidden)
                             .padding(8)
-                            .background(Color(.systemGray6))
+                            .background(Color(nsColor: .controlBackgroundColor))
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)

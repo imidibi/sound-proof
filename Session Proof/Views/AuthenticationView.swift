@@ -118,8 +118,6 @@ struct SignInView: View {
                 TextField("email@example.com", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.emailAddress)
-                    .autocapitalization(.none)
-                    .keyboardType(.emailAddress)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -171,7 +169,6 @@ struct SignInView: View {
                 TextField("ABC123", text: $shareCode)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.oneTimeCode)
-                    .autocapitalization(.allCharacters)
                     .font(.system(.title3, design: .monospaced))
             }
             
@@ -277,8 +274,6 @@ struct SignUpView: View {
                         TextField("email@example.com", text: $email)
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.emailAddress)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
