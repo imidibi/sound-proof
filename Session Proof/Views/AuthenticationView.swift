@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import FirebaseCore
 
 struct AuthenticationView: View {
     @State private var isSignUp = false
+    @State private var showFirebaseStatus = false
     
     var body: some View {
         ZStack {
@@ -33,7 +35,50 @@ struct AuthenticationView: View {
                     }
                 })
             }
+            
+            // Firebase status indicator in top-right corner
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        showFirebaseStatus.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(firebaseStatusColor)
+                                .frame(width: 10, height: 10)
+                            Text(firebaseStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.3))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding()
+                Spacer()
+            }
         }
+        .sheet(isPresented: $showFirebaseStatus) {
+            FirebaseStatusView()
+        }
+    }
+    
+    private var firebaseStatusColor: Color {
+        guard let app = FirebaseApp.app() else { return .red }
+        let options = app.options
+        guard let apiKey = options.apiKey, !apiKey.isEmpty else { return .red }
+        return .green
+    }
+    
+    private var firebaseStatusText: String {
+        guard let app = FirebaseApp.app() else { return "Firebase Not Configured" }
+        let options = app.options
+        guard let apiKey = options.apiKey, !apiKey.isEmpty else { return "No API Key" }
+        return "Firebase Ready"
     }
 }
 
@@ -381,7 +426,174 @@ struct SignUpView: View {
     }
 }
 
+struct FirebaseStatusView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Firebase Configuration") {
+                    StatusRow(
+                        label: "Firebase App",
+                        status: FirebaseApp.app() != nil,
+                        detail: FirebaseApp.app() != nil ? "Configured" : "Not configured"
+                    )
+                    
+                    if let app = FirebaseApp.app() {
+                        let options = app.options
+                        
+                        StatusRow(
+                            label: "API Key",
+                            status: options.apiKey != nil && !(options.apiKey?.isEmpty ?? true),
+                            detail: (options.apiKey == nil || options.apiKey!.isEmpty) ? "Missing" : "Present (\(options.apiKey!.prefix(10))...)"
+                        )
+                        
+                        StatusRow(
+                            label: "Project ID",
+                            status: options.projectID != nil && !options.projectID!.isEmpty,
+                            detail: options.projectID ?? "Missing"
+                        )
+                        
+                        StatusRow(
+                            label: "App ID",
+                            status: !(options.googleAppID.isEmpty),
+                            detail: options.googleAppID.isEmpty ? "Missing" : "Present"
+                        )
+                        
+                        StatusRow(
+                            label: "Storage Bucket",
+                            status: options.storageBucket != nil && !options.storageBucket!.isEmpty,
+                            detail: options.storageBucket ?? "Not configured"
+                        )
+                    }
+                }
+                
+                Section("Required Services") {
+                    ServiceRow(
+                        name: "Authentication",
+                        description: "Email/password sign-in must be enabled in Firebase Console",
+                        icon: "person.circle"
+                    )
+                    
+                    ServiceRow(
+                        name: "Firestore Database",
+                        description: "Must be created in Firebase Console",
+                        icon: "externaldrive"
+                    )
+                    
+                    ServiceRow(
+                        name: "Cloud Storage",
+                        description: "Must be enabled for audio file uploads",
+                        icon: "cloud"
+                    )
+                }
+                
+                Section("Next Steps") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if FirebaseApp.app() == nil {
+                            Text("⚠️ Firebase not configured")
+                                .font(.headline)
+                                .foregroundStyle(.orange)
+                            Text("The GoogleService-Info.plist file is missing or invalid. See FIREBASE_SETUP.md for instructions.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if let options = FirebaseApp.app()?.options, options.projectID == nil || options.projectID!.isEmpty {
+                            Text("⚠️ Incomplete configuration")
+                                .font(.headline)
+                                .foregroundStyle(.orange)
+                            Text("Firebase is initialized but missing project ID. Check your GoogleService-Info.plist file.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("✓ Configuration looks good")
+                                .font(.headline)
+                                .foregroundStyle(.green)
+                            Text("Firebase SDK is configured. Make sure to enable Authentication, Firestore, and Storage in the Firebase Console.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                Section("Test Connection") {
+                    Text("Try creating an account to test if Firebase Authentication is working. If you get network errors, check that:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Email/Password auth is enabled in Firebase Console", systemImage: "checkmark.circle")
+                        Label("Your Mac has internet connection", systemImage: "checkmark.circle")
+                        Label("The app has network entitlements", systemImage: "checkmark.circle")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Firebase Status")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 500, minHeight: 600)
+    }
+}
+
+struct StatusRow: View {
+    let label: String
+    let status: Bool
+    let detail: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: status ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(status ? .green : .red)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct ServiceRow: View {
+    let name: String
+    let description: String
+    let icon: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 30)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 #Preview("Sign In") {
     AuthenticationView()
         .environment(AuthenticationService())
+}
+
+#Preview("Firebase Status") {
+    FirebaseStatusView()
 }
