@@ -11,9 +11,9 @@ import FirebaseCore
 
 @main
 struct Session_ProofApp: App {
-    @State private var authService = AuthenticationService()
-    @State private var firestoreService = FirestoreService()
-    @State private var cloudStorageService = CloudStorageService()
+    @State private var authService: AuthenticationService
+    @State private var firestoreService: FirestoreService
+    @State private var cloudStorageService: CloudStorageService
     @State private var syncService: ProjectSyncService?
     
     var sharedModelContainer: ModelContainer = {
@@ -35,8 +35,13 @@ struct Session_ProofApp: App {
     }()
     
     init() {
-        // Configure Firebase
+        // Configure Firebase FIRST before creating any services
         FirebaseApp.configure()
+        
+        // Now initialize services
+        _authService = State(initialValue: AuthenticationService())
+        _firestoreService = State(initialValue: FirestoreService())
+        _cloudStorageService = State(initialValue: CloudStorageService())
     }
 
     var body: some Scene {
