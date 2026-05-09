@@ -12,7 +12,12 @@ import SwiftData
 struct Session_ProofApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Project.self,
+            Song.self,
+            Mix.self,
+            Comment.self,
+            Reviewer.self,
+            Approval.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
