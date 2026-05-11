@@ -250,14 +250,20 @@ struct SignInView: View {
         errorMessage = nil
         isLoading = true
         
+        defer {
+            isLoading = false
+        }
+        
         do {
+            print("🔵 Attempting to sign in with email: \(email)")
             try await authService.signIn(email: email, password: password)
+            print("✅ Sign in successful!")
+            // Success - the view will automatically transition when currentUser is set
         } catch {
             errorMessage = "Sign in failed: \(error.localizedDescription)"
             print("❌ Sign in error: \(error)")
+            print("❌ Error details: \(error)")
         }
-        
-        isLoading = false
     }
     
     private func joinWithShareCode() async {
@@ -413,19 +419,25 @@ struct SignUpView: View {
         errorMessage = nil
         isLoading = true
         
+        defer {
+            isLoading = false
+        }
+        
         do {
+            print("🔵 Attempting to sign up with email: \(email)")
             try await authService.signUp(
                 email: email,
                 password: password,
                 displayName: displayName,
                 role: selectedRole
             )
+            print("✅ Sign up successful!")
+            // Success - the view will automatically transition when currentUser is set
         } catch {
             errorMessage = "Sign up failed: \(error.localizedDescription)"
             print("❌ Sign up error: \(error)")
+            print("❌ Error details: \(error)")
         }
-        
-        isLoading = false
     }
 }
 
