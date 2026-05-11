@@ -56,7 +56,10 @@ struct Session_ProofApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if authService.isAuthenticated {
+            if authService.isCheckingAuth {
+                ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if authService.isAuthenticated {
                 ContentView()
                     .environment(authService)
                     .environment(firestoreService)

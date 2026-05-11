@@ -19,6 +19,7 @@ struct ProjectListView: View {
     @State private var showingNewSongSheet = false
     @State private var showingImportMixSheet = false
     @State private var showingJoinProjectSheet = false
+    @State private var showingSettings = false
     @State private var expandedProjects: Set<UUID> = []
     @State private var expandedSongs: Set<UUID> = []
     
@@ -112,6 +113,14 @@ struct ProjectListView: View {
                         Label("Add", systemImage: "plus")
                     }
                 }
+                
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
             }
             .sheet(isPresented: $showingNewProjectSheet) {
                 NewProjectSheet()
@@ -128,6 +137,9 @@ struct ProjectListView: View {
             }
             .sheet(isPresented: $showingJoinProjectSheet) {
                 JoinProjectSheet()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
         } detail: {
             if let mix = selectedMix {

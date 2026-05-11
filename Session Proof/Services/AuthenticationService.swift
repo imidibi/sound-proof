@@ -32,6 +32,7 @@ class AuthenticationService {
     var isAuthenticated: Bool {
         currentUser != nil
     }
+    var isCheckingAuth: Bool = true
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
@@ -41,7 +42,12 @@ class AuthenticationService {
         if let firebaseUser = auth.currentUser {
             Task {
                 await loadUserProfile(uid: firebaseUser.uid)
+                await MainActor.run {
+                    self.isCheckingAuth = false
+                }
             }
+        } else {
+            isCheckingAuth = false
         }
     }
     
