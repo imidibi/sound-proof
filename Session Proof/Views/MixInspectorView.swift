@@ -96,9 +96,10 @@ struct SongStatusSection: View {
             
             Picker("Status", selection: $song.status) {
                 ForEach([SongStatus.inReview, .revisionsNeeded, .approved, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
-                    HStack {
-                        SongStatusBadge(status: status)
+                    Label {
                         Text(status.rawValue)
+                    } icon: {
+                        SongStatusBadge(status: status)
                     }
                     .tag(status)
                 }
@@ -159,9 +160,10 @@ struct MixInfoSection: View {
             
             Picker("Status", selection: $mix.approvalStatus) {
                 ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
-                    HStack {
-                        MixStatusBadge(status: status)
+                    Label {
                         Text(status.rawValue)
+                    } icon: {
+                        MixStatusBadge(status: status)
                     }
                     .tag(status)
                 }
