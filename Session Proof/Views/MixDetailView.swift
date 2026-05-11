@@ -65,9 +65,17 @@ struct MixDetailView: View {
                 Divider()
                 
                 // Right inspector
-                MixInspectorView(mix: mix, audioPlayerService: audioPlayerService)
-                    .frame(width: 300)
-                    .transition(.move(edge: .trailing))
+                MixInspectorView(
+                    mix: mix,
+                    audioPlayerService: audioPlayerService,
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showingInspector = false
+                        }
+                    }
+                )
+                .frame(width: 300)
+                .transition(.move(edge: .trailing))
             }
         }
     }

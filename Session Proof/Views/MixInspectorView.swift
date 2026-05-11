@@ -11,6 +11,7 @@ import SwiftData
 struct MixInspectorView: View {
     @Bindable var mix: Mix
     let audioPlayerService: AudioPlayerService
+    var onClose: (() -> Void)? = nil
     
     @Environment(\.modelContext) private var modelContext
     @State private var showingNewCommentSheet = false
@@ -30,6 +31,20 @@ struct MixInspectorView: View {
                     Image(systemName: "plus.circle.fill")
                 }
                 .buttonStyle(.plain)
+                .help("Add Comment")
+                
+                #if os(macOS)
+                if let onClose = onClose {
+                    Button {
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Hide Inspector (Cmd+I)")
+                }
+                #endif
             }
             .padding()
             
