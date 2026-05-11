@@ -11,6 +11,7 @@ import FirebaseCore
 struct AuthenticationView: View {
     @State private var isSignUp = false
     @State private var showFirebaseStatus = false
+    @State private var showDebugAlert = false
     
     var body: some View {
         ZStack {
@@ -252,7 +253,8 @@ struct SignInView: View {
         do {
             try await authService.signIn(email: email, password: password)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Sign in failed: \(error.localizedDescription)"
+            print("❌ Sign in error: \(error)")
         }
         
         isLoading = false
@@ -419,7 +421,8 @@ struct SignUpView: View {
                 role: selectedRole
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Sign up failed: \(error.localizedDescription)"
+            print("❌ Sign up error: \(error)")
         }
         
         isLoading = false
