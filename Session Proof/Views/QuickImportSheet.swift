@@ -242,11 +242,12 @@ struct QuickImportSheet: View {
             
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
             
-            // Create mix
+            // Create mix with relative filename
             let mix = Mix(
                 name: mixName,
                 versionNumber: 1,
                 assetURL: destinationURL,
+                assetFileName: fileName, // Store relative filename for persistence
                 notes: notes.isEmpty ? nil : notes
             )
             

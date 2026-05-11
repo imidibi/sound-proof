@@ -225,12 +225,13 @@ struct ImportMixSheet: View {
             
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
             
-            // Create mix
+            // Create mix with relative filename
             let versionNumber = song.mixes.count + 1
             let mix = Mix(
                 name: mixName,
                 versionNumber: versionNumber,
                 assetURL: destinationURL,
+                assetFileName: fileName, // Store relative filename for persistence
                 notes: notes.isEmpty ? nil : notes
             )
             

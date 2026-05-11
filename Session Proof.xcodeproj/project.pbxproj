@@ -301,6 +301,7 @@
 				XROS_DEPLOYMENT_TARGET = 26.2;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Session Proof needs access to your microphone to record voice notes and comments for audio reviews.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Session Proof needs access to your photo library to import audio files.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Sound Proof";
 			};
 			name = Debug;
 		};
@@ -349,6 +350,7 @@
 				XROS_DEPLOYMENT_TARGET = 26.2;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Session Proof needs access to your microphone to record voice notes and comments for audio reviews.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Session Proof needs access to your photo library to import audio files.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Sound Proof";
 			};
 			name = Release;
 		};

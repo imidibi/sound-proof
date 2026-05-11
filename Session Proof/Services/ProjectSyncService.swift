@@ -76,7 +76,7 @@ class ProjectSyncService {
         songId: String,
         modelContext: ModelContext
     ) async throws {
-        guard let fileURL = mix.assetURL else {
+        guard let fileURL = mix.resolvedAssetURL else {
             throw NSError(domain: "ProjectSync", code: 400, userInfo: [NSLocalizedDescriptionKey: "Mix has no local file"])
         }
         
@@ -141,9 +141,10 @@ class ProjectSyncService {
                 destinationURL: destinationURL
             )
             
-            // Update local mix
+            // Update local mix with both URL and filename
             await MainActor.run {
                 mix.assetURL = destinationURL
+                mix.assetFileName = fileName
                 try? modelContext.save()
             }
             

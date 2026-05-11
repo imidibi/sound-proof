@@ -134,12 +134,20 @@ struct WaveformPlayerView: View {
     
     private func loadAudioAndWaveform() async {
         // Check if we need to download from cloud first
-        if mix.assetURL == nil && mix.cloudURL != nil {
+        if mix.resolvedAssetURL == nil && mix.cloudURL != nil {
             await downloadMixFromCloud()
         }
         
-        guard let url = mix.assetURL else {
+        guard let url = mix.resolvedAssetURL else {
             downloadError = "No audio file available"
+            print("❌ No audio file: assetURL=\(String(describing: mix.assetURL)), fileName=\(String(describing: mix.assetFileName))")
+            return
+        }
+        
+        // Verify file exists
+        if !FileManager.default.fileExists(atPath: url.path) {
+            downloadError = "Audio file not found at path"
+            print("❌ Audio file not found at: \(url.path)")
             return
         }
         

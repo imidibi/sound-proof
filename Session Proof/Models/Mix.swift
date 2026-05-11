@@ -22,6 +22,7 @@ final class Mix {
     var name: String
     var versionNumber: Int
     var assetURL: URL? // Local file path
+    var assetFileName: String? // Relative filename in documents directory
     var duration: TimeInterval
     var sampleRate: Double
     var channels: Int
@@ -38,6 +39,15 @@ final class Mix {
     
     var song: Song?
     
+    // Computed property to get the current full URL from the relative filename
+    var resolvedAssetURL: URL? {
+        if let fileName = assetFileName {
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            return documentsPath.appendingPathComponent(fileName)
+        }
+        return assetURL // Fallback to legacy full URL
+    }
+    
     @Relationship(deleteRule: .cascade, inverse: \Comment.mix)
     var comments: [Comment] = []
     
@@ -49,6 +59,7 @@ final class Mix {
         name: String,
         versionNumber: Int,
         assetURL: URL? = nil,
+        assetFileName: String? = nil,
         duration: TimeInterval = 0,
         sampleRate: Double = 44100,
         channels: Int = 2,
@@ -65,6 +76,7 @@ final class Mix {
         self.name = name
         self.versionNumber = versionNumber
         self.assetURL = assetURL
+        self.assetFileName = assetFileName
         self.duration = duration
         self.sampleRate = sampleRate
         self.channels = channels
