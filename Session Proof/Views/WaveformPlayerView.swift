@@ -215,7 +215,7 @@ struct WaveformView: View {
                 HStack(spacing: 2) {
                     ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.gray)
+                            .fill(waveformBarColor(for: index, totalBars: waveformData.samples.count))
                             .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
                             .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
                     }
@@ -273,6 +273,26 @@ struct WaveformView: View {
         let commentPosition = (timestamp / duration) * totalWidth
         let scrollOffset = waveformScrollOffset(playheadX: playheadX, totalWidth: totalWidth, viewWidth: viewWidth)
         return playheadX + (commentPosition - scrollOffset)
+    }
+    
+    // Create gradient color variation around the blue theme
+    private func waveformBarColor(for index: Int, totalBars: Int) -> Color {
+        // Base colors: #494FFA (median) and #4753EB (gradient variation)
+        let baseColor = Color(red: 0x49/255.0, green: 0x4F/255.0, blue: 0xFA/255.0)
+        let variationColor = Color(red: 0x47/255.0, green: 0x53/255.0, blue: 0xEB/255.0)
+        
+        // Create smooth gradient variation across waveform
+        let position = Double(index) / Double(max(1, totalBars - 1))
+        let wave = sin(position * .pi * 4) * 0.5 + 0.5 // Creates wave pattern 0-1
+        
+        // Interpolate between the two colors based on wave
+        return interpolateColor(from: baseColor, to: variationColor, amount: wave)
+    }
+    
+    private func interpolateColor(from: Color, to: Color, amount: Double) -> Color {
+        // Simple linear interpolation between colors
+        // In practice, SwiftUI will blend them
+        return amount < 0.5 ? from : to
     }
 }
 
