@@ -103,9 +103,15 @@ final class WaveformService {
         let naturalTimeScale = try await track.load(.naturalTimeScale)
         let sampleRate = Double(naturalTimeScale)
         
+        print("🔍 Sample rate info:")
+        print("   naturalTimeScale: \(naturalTimeScale)")
+        print("   Using sampleRate: \(sampleRate)Hz")
+        
+        let expectedFrames = Int(duration * sampleRate)
         print("📊 Read \(totalFramesRead) audio frames (\(channelCount) channel(s)) at \(sampleRate)Hz")
-        print("   Expected frames for \(duration)s: \(Int(duration * sampleRate))")
+        print("   Expected frames for \(duration)s: \(expectedFrames)")
         print("   L: \(leftSamples.count) samples, R: \(rightSamples.count) samples")
+        print("   Ratio: \(Double(totalFramesRead) / Double(expectedFrames))")
         
         // Downsample each channel to target number of samples
         let downsampledLeft = downsample(leftSamples, to: targetSamples)

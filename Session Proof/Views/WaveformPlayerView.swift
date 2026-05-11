@@ -235,10 +235,36 @@ struct WaveformView: View {
     
     @State private var selectedComment: Comment?
     
+    // Pre-calculate expensive values to avoid recalculating in body
+    private var playbackPosition: Double {
+        guard duration > 0 else { return 0 }
+        return currentTime / duration
+    }
+    
     var body: some View {
         GeometryReader { geometry in
             let playheadX: CGFloat = 40 // Fixed position from left edge
+            let numberOfBars = CGFloat(waveformData.leftSamples.count)
+            // Total waveform width based on zoom
             let totalWaveformWidth = geometry.size.width * zoomLevel
+            // Each bar gets equal space, no gaps
+            let barWidth = totalWaveformWidth / numberOfBars
+            let scrollOffset = playbackPosition * totalWaveformWidth
+            
+            // Debug logging every 5 seconds
+            let _ = {
+                if Int(currentTime) % 5 == 0 && currentTime > 0 && currentTime.truncatingRemainder(dividingBy: 1.0) < 0.02 {
+                    print("🔍 Waveform Debug:")
+                    print("   Time: \(String(format: "%.2f", currentTime))s / \(String(format: "%.2f", duration))s")
+                    print("   Playback position: \(String(format: "%.3f", playbackPosition)) (\(String(format: "%.1f", playbackPosition * 100))%)")
+                    print("   Zoom level: \(String(format: "%.1f", zoomLevel))x")
+                    print("   View width: \(Int(geometry.size.width))px")
+                    print("   Bar count: \(Int(numberOfBars)), Bar width: \(String(format: "%.2f", barWidth))px")
+                    print("   Total waveform width: \(Int(totalWaveformWidth))px")
+                    print("   Scroll offset: \(Int(scrollOffset))px")
+                    print("   Playhead X: \(Int(playheadX))px")
+                }
+            }()
             
             ZStack(alignment: .leading) {
                 // Dual waveform display (L/R channels)
@@ -246,12 +272,12 @@ struct WaveformView: View {
                     // Left channel (top half) - extends down from center
                     ZStack(alignment: .bottom) {
                         Color.clear
-                        HStack(spacing: 2) {
+                        HStack(spacing: 0) {
                             ForEach(Array(waveformData.leftSamples.enumerated()), id: \.offset) { index, sample in
-                                RoundedRectangle(cornerRadius: 1)
+                                RoundedRectangle(cornerRadius: 0.5)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.leftSamples.count))
                                     .frame(
-                                        width: max(1, (totalWaveformWidth / CGFloat(waveformData.leftSamples.count)) - 2),
+                                        width: barWidth,
                                         height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
                                     )
                             }
@@ -268,12 +294,12 @@ struct WaveformView: View {
                     // Right channel (bottom half) - extends up from center
                     ZStack(alignment: .top) {
                         Color.clear
-                        HStack(spacing: 2) {
+                        HStack(spacing: 0) {
                             ForEach(Array(waveformData.rightSamples.enumerated()), id: \.offset) { index, sample in
-                                RoundedRectangle(cornerRadius: 1)
+                                RoundedRectangle(cornerRadius: 0.5)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.rightSamples.count))
                                     .frame(
-                                        width: max(1, (totalWaveformWidth / CGFloat(waveformData.rightSamples.count)) - 2),
+                                        width: barWidth,
                                         height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
                                     )
                             }
@@ -283,16 +309,17 @@ struct WaveformView: View {
                     .frame(height: geometry.size.height / 2)
                 }
                 .frame(width: totalWaveformWidth, height: geometry.size.height, alignment: .leading)
-                .offset(x: playheadX - waveformScrollOffset(playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width))
+                .offset(x: playheadX - scrollOffset)
                 
                 // Comment markers
                 ForEach(comments) { comment in
+                    let commentPosition = (comment.timestamp / max(duration, 0.001)) * totalWaveformWidth
                     CommentMarkerView(
                         comment: comment,
                         duration: duration,
                         isSelected: selectedComment?.id == comment.id
                     )
-                    .offset(x: commentXPosition(for: comment.timestamp, playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width))
+                    .offset(x: playheadX + (commentPosition - scrollOffset))
                     .onTapGesture {
                         selectedComment = comment
                         onSeek(comment.timestamp)
@@ -313,7 +340,6 @@ struct WaveformView: View {
                     .onChanged { value in
                         // Convert tap/drag position to time relative to playhead
                         let relativeX = value.location.x - playheadX
-                        let scrollOffset = waveformScrollOffset(playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width)
                         let pixelOffset = scrollOffset + relativeX
                         let position = pixelOffset / totalWaveformWidth
                         let time = max(0, min(duration, duration * position))
@@ -323,27 +349,7 @@ struct WaveformView: View {
         }
     }
     
-    // Calculate how much to scroll the waveform to keep current position at playhead
-    private func waveformScrollOffset(playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
-        guard duration > 0 else { return 0 }
-        let playbackPosition = currentTime / duration
-        let offset = playbackPosition * totalWidth
-        
-        // Debug: Log every 1 second
-        if Int(currentTime) != Int(currentTime - 0.01) {
-            print("📍 Playback: \(String(format: "%.2f", currentTime))s / \(String(format: "%.2f", duration))s = \(String(format: "%.1f", playbackPosition * 100))%")
-            print("   Scroll offset: \(Int(offset))px of \(Int(totalWidth))px total")
-        }
-        
-        return offset
-    }
-    
-    private func commentXPosition(for timestamp: TimeInterval, playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
-        guard duration > 0 else { return playheadX }
-        let commentPosition = (timestamp / duration) * totalWidth
-        let scrollOffset = waveformScrollOffset(playheadX: playheadX, totalWidth: totalWidth, viewWidth: viewWidth)
-        return playheadX + (commentPosition - scrollOffset)
-    }
+
     
     // Create gradient color variation around the blue theme
     private func waveformBarColor(for index: Int, totalBars: Int) -> Color {

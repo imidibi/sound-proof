@@ -28,7 +28,11 @@ final class AudioPlayerService {
         duration = audioPlayer?.duration ?? 0
         currentTime = 0
         
-        print("🎵 Audio loaded: duration=\(duration)s, url=\(url.lastPathComponent)")
+        if let player = audioPlayer {
+            print("🎵 Audio loaded: duration=\(duration)s, url=\(url.lastPathComponent)")
+            print("   Format: \(player.format.sampleRate)Hz, \(player.format.channelCount) channels")
+            print("   Number of channels: \(player.numberOfChannels)")
+        }
     }
     
     func play() {
@@ -67,7 +71,9 @@ final class AudioPlayerService {
     }
     
     private func startTimeObserver() {
-        timeObserverTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
+        // Use DisplayLink-compatible timer for smooth 60fps updates
+        // RunLoop.common ensures updates even during scrolling/gestures
+        timeObserverTimer = Timer(timeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
             guard let self = self, let player = self.audioPlayer else { return }
             self.currentTime = player.currentTime
             
@@ -76,6 +82,7 @@ final class AudioPlayerService {
                 self.stopTimeObserver()
             }
         }
+        RunLoop.main.add(timeObserverTimer!, forMode: .common)
     }
     
     private func stopTimeObserver() {
