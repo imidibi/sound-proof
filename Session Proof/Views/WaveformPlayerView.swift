@@ -56,7 +56,7 @@ struct WaveformPlayerView: View {
                     // Large time display overlay
                     VStack {
                         Text(formatLargeTime(audioPlayerService.currentTime))
-                            .font(.system(size: 72, weight: .bold, design: .rounded))
+                            .font(.system(size: timeDisplaySize, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
@@ -123,6 +123,15 @@ struct WaveformPlayerView: View {
         .task(id: mix.id) {
             await loadAudioAndWaveform()
         }
+    }
+    
+    private var timeDisplaySize: CGFloat {
+        #if os(iOS)
+        // Smaller font on iPhone
+        return UIDevice.current.userInterfaceIdiom == .phone ? 48 : 72
+        #else
+        return 72
+        #endif
     }
     
     private func formatLargeTime(_ time: TimeInterval) -> String {
@@ -357,6 +366,14 @@ struct CommentMarkerView: View {
 struct PlayerControlsView: View {
     let audioPlayerService: AudioPlayerService
     
+    private var controlSpacing: CGFloat {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .phone ? 12 : 20
+        #else
+        return 20
+        #endif
+    }
+    
     var body: some View {
         VStack(spacing: 12) {
             // Time display
@@ -373,7 +390,7 @@ struct PlayerControlsView: View {
             }
             
             // Transport controls
-            HStack(spacing: 20) {
+            HStack(spacing: controlSpacing) {
                 // Return to Zero
                 Button {
                     audioPlayerService.seek(to: 0)
