@@ -24,8 +24,8 @@ struct MixDetailView: View {
     
     #if os(macOS)
     private var macOSLayout: some View {
-        HStack(spacing: 0) {
-            // Main waveform area
+        ZStack(alignment: .trailing) {
+            // Main waveform area - always full width
             VStack(spacing: 0) {
                 // Mix info header with inspector toggle
                 HStack {
@@ -59,23 +59,27 @@ struct MixDetailView: View {
                     audioPlayerService: audioPlayerService
                 )
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
+            // Floating inspector overlay on the right
             if showingInspector {
-                Divider()
-                
-                // Right inspector
-                MixInspectorView(
-                    mix: mix,
-                    audioPlayerService: audioPlayerService,
-                    onClose: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showingInspector = false
+                VStack(spacing: 0) {
+                    Divider()
+                    
+                    MixInspectorView(
+                        mix: mix,
+                        audioPlayerService: audioPlayerService,
+                        onClose: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showingInspector = false
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 .frame(width: 300)
+                .background(.ultraThinMaterial)
                 .transition(.move(edge: .trailing))
+                .zIndex(20)
             }
         }
     }
