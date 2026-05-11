@@ -96,17 +96,25 @@ struct SongStatusSection: View {
             
             Picker("Status", selection: $song.status) {
                 ForEach([SongStatus.inReview, .revisionsNeeded, .approved, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
-                    Label {
-                        Text(status.rawValue)
-                    } icon: {
-                        SongStatusBadge(status: status)
-                    }
-                    .tag(status)
+                    Text("\(statusEmoji(for: status)) \(status.rawValue)")
+                        .tag(status)
                 }
             }
             .pickerStyle(.menu)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private func statusEmoji(for status: SongStatus) -> String {
+        switch status {
+        case .inReview: return "👀"
+        case .revisionsNeeded: return "⚠️"
+        case .approved: return "✅"
+        case .archived: return "📦"
+        case .draft: return "📝"
+        case .inProgress: return "🔄"
+        case .mixingComplete: return "🎵"
+        }
     }
 }
 
@@ -160,12 +168,8 @@ struct MixInfoSection: View {
             
             Picker("Status", selection: $mix.approvalStatus) {
                 ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
-                    Label {
-                        Text(status.rawValue)
-                    } icon: {
-                        MixStatusBadge(status: status)
-                    }
-                    .tag(status)
+                    Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
+                        .tag(status)
                 }
             }
             .pickerStyle(.menu)
@@ -199,6 +203,16 @@ struct MixInfoSection: View {
         
         for otherMix in song.mixes where otherMix.id != mix.id && otherMix.approvalStatus == .approved {
             otherMix.approvalStatus = .superseded
+        }
+    }
+    
+    private func mixStatusEmoji(for status: MixStatus) -> String {
+        switch status {
+        case .draft: return "📝"
+        case .shared: return "📤"
+        case .inReview: return "👀"
+        case .approved: return "✅"
+        case .superseded: return "⏭️"
         }
     }
 }
