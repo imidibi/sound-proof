@@ -282,7 +282,15 @@ struct WaveformView: View {
     private func waveformScrollOffset(playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
         guard duration > 0 else { return 0 }
         let playbackPosition = currentTime / duration
-        return playbackPosition * totalWidth
+        let offset = playbackPosition * totalWidth
+        
+        // Debug: Log every 1 second
+        if Int(currentTime) != Int(currentTime - 0.01) {
+            print("📍 Playback: \(String(format: "%.2f", currentTime))s / \(String(format: "%.2f", duration))s = \(String(format: "%.1f", playbackPosition * 100))%")
+            print("   Scroll offset: \(Int(offset))px of \(Int(totalWidth))px total")
+        }
+        
+        return offset
     }
     
     private func commentXPosition(for timestamp: TimeInterval, playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {

@@ -25,13 +25,26 @@ final class WaveformService {
             throw WaveformError.noAudioTrack
         }
         
+        // Get channel count to handle stereo properly
+        let formatDescriptions = try await track.load(.formatDescriptions)
+        var channelCount = 1
+        if let formatDescription = formatDescriptions.first {
+            if let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) {
+                channelCount = Int(audioStreamBasicDescription.pointee.mChannelsPerFrame)
+            }
+        }
+        
+        print("🎵 Audio has \(channelCount) channel(s)")
+        
         let reader = try AVAssetReader(asset: asset)
+        // Force mono output for consistent waveform generation
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsNonInterleaved: false
+            AVLinearPCMIsNonInterleaved: false,
+            AVNumberOfChannelsKey: 1  // Convert to mono
         ]
         
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
