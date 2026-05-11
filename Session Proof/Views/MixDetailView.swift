@@ -48,6 +48,12 @@ struct MixDetailView: View {
                     .help(showingInspector ? "Hide Inspector (Cmd+I)" : "Show Inspector (Cmd+I)")
                     .keyboardShortcut("i", modifiers: .command)
                     .padding()
+                    
+                    // Spacer to account for inspector overlay
+                    if showingInspector {
+                        Spacer()
+                            .frame(width: 300)
+                    }
                 }
                 .zIndex(10)
                 
