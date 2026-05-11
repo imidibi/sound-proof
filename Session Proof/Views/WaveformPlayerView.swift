@@ -20,6 +20,7 @@ struct WaveformPlayerView: View {
     @State private var waveformData: WaveformData?
     @State private var isLoadingWaveform = false
     @State private var zoomLevel: Double = 1.0
+    @State private var verticalScale: Double = 1.5
     @State private var isDownloading = false
     @State private var downloadError: String?
     
@@ -46,12 +47,14 @@ struct WaveformPlayerView: View {
                         currentTime: audioPlayerService.currentTime,
                         duration: audioPlayerService.duration,
                         zoomLevel: zoomLevel,
+                        verticalScale: verticalScale,
                         comments: mix.song?.comments.filter { $0.mix?.id == mix.id } ?? [],
                         onSeek: { time in
                             audioPlayerService.seek(to: time)
                         }
                     )
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
                     
                     // Large time display overlay
                     VStack {
@@ -83,21 +86,34 @@ struct WaveformPlayerView: View {
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
             #endif
             
-            // Zoom control
+            // Zoom and Scale controls
             HStack(spacing: 12) {
-                Image(systemName: "minus.magnifyingglass")
+                // Horizontal zoom
+                Image(systemName: "arrow.left.and.right")
                     .foregroundStyle(.secondary)
                 
                 Slider(value: $zoomLevel, in: 1.0...10.0, step: 0.5)
-                    .frame(maxWidth: 400)
-                
-                Image(systemName: "plus.magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 300)
                 
                 Text("\(Int(zoomLevel))x")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 30)
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Vertical scale
+                Image(systemName: "arrow.up.and.down")
+                    .foregroundStyle(.secondary)
+                
+                Slider(value: $verticalScale, in: 0.5...3.0, step: 0.1)
+                    .frame(maxWidth: 300)
+                
+                Text("\(Int(verticalScale * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40)
                 
                 // Spacer to account for inspector overlay
                 if inspectorWidth > 0 {
@@ -230,6 +246,7 @@ struct WaveformView: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
     let zoomLevel: Double
+    let verticalScale: Double
     let comments: [Comment]
     let onSeek: (TimeInterval) -> Void
     
@@ -274,11 +291,11 @@ struct WaveformView: View {
                         Color.clear
                         HStack(spacing: 0) {
                             ForEach(Array(waveformData.leftSamples.enumerated()), id: \.offset) { index, sample in
-                                RoundedRectangle(cornerRadius: 0.5)
+                                RoundedRectangle(cornerRadius: 2)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.leftSamples.count))
                                     .frame(
                                         width: barWidth,
-                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
+                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * verticalScale)
                                     )
                             }
                         }
@@ -296,11 +313,11 @@ struct WaveformView: View {
                         Color.clear
                         HStack(spacing: 0) {
                             ForEach(Array(waveformData.rightSamples.enumerated()), id: \.offset) { index, sample in
-                                RoundedRectangle(cornerRadius: 0.5)
+                                RoundedRectangle(cornerRadius: 2)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.rightSamples.count))
                                     .frame(
                                         width: barWidth,
-                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
+                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * verticalScale)
                                     )
                             }
                         }
