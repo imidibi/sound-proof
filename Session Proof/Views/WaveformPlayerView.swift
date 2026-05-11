@@ -243,36 +243,42 @@ struct WaveformView: View {
             ZStack(alignment: .leading) {
                 // Dual waveform display (L/R channels)
                 VStack(spacing: 0) {
-                    // Left channel (top half)
-                    HStack(spacing: 2) {
-                        ForEach(Array(waveformData.leftSamples.enumerated()), id: \.offset) { index, sample in
-                            VStack {
-                                Spacer()
+                    // Left channel (top half) - extends down from center
+                    ZStack(alignment: .bottom) {
+                        Color.clear
+                        HStack(spacing: 2) {
+                            ForEach(Array(waveformData.leftSamples.enumerated()), id: \.offset) { index, sample in
                                 RoundedRectangle(cornerRadius: 1)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.leftSamples.count))
-                                    .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.leftSamples.count)) - 2))
-                                    .frame(height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.9))
+                                    .frame(
+                                        width: max(1, (totalWaveformWidth / CGFloat(waveformData.leftSamples.count)) - 2),
+                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
+                                    )
                             }
                         }
+                        .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(height: geometry.size.height / 2)
                     
-                    // Center line
+                    // Center line separator
                     Rectangle()
-                        .fill(Color.secondary.opacity(0.3))
-                        .frame(height: 1)
+                        .fill(Color.secondary.opacity(0.5))
+                        .frame(height: 2)
                     
-                    // Right channel (bottom half)
-                    HStack(spacing: 2) {
-                        ForEach(Array(waveformData.rightSamples.enumerated()), id: \.offset) { index, sample in
-                            VStack {
+                    // Right channel (bottom half) - extends up from center
+                    ZStack(alignment: .top) {
+                        Color.clear
+                        HStack(spacing: 2) {
+                            ForEach(Array(waveformData.rightSamples.enumerated()), id: \.offset) { index, sample in
                                 RoundedRectangle(cornerRadius: 1)
                                     .fill(waveformBarColor(for: index, totalBars: waveformData.rightSamples.count))
-                                    .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.rightSamples.count)) - 2))
-                                    .frame(height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.9))
-                                Spacer()
+                                    .frame(
+                                        width: max(1, (totalWaveformWidth / CGFloat(waveformData.rightSamples.count)) - 2),
+                                        height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.85)
+                                    )
                             }
                         }
+                        .frame(maxHeight: .infinity, alignment: .top)
                     }
                     .frame(height: geometry.size.height / 2)
                 }
