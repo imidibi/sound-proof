@@ -27,6 +27,8 @@ final class AudioPlayerService {
         audioPlayer?.prepareToPlay()
         duration = audioPlayer?.duration ?? 0
         currentTime = 0
+        
+        print("🎵 Audio loaded: duration=\(duration)s, url=\(url.lastPathComponent)")
     }
     
     func play() {

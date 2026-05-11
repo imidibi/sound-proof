@@ -39,8 +39,7 @@ final class WaveformService {
         reader.startReading()
         
         var samples: [Float] = []
-        let naturalTimeScale = try await track.load(.naturalTimeScale)
-        let sampleRate = Double(naturalTimeScale)
+        var totalSamplesRead = 0
         
         while reader.status == .reading {
             guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
@@ -61,11 +60,22 @@ final class WaveformService {
                 
                 let floatSamples = int16Samples.map { Float($0) / Float(Int16.max) }
                 samples.append(contentsOf: floatSamples)
+                totalSamplesRead += int16Samples.count
             }
         }
         
+        let naturalTimeScale = try await track.load(.naturalTimeScale)
+        let sampleRate = Double(naturalTimeScale)
+        
+        print("📊 Read \(totalSamplesRead) total samples at \(sampleRate)Hz")
+        print("   Expected samples for \(duration)s: \(Int(duration * sampleRate))")
+        
         // Downsample to target number of samples
         let downsampledSamples = downsample(samples, to: targetSamples)
+        
+        print("🎵 Waveform generated: \(samples.count) raw samples → \(downsampledSamples.count) display samples")
+        print("   Duration: \(duration)s, Sample rate: \(sampleRate)Hz")
+        print("   Samples per display bar: \(Double(samples.count) / Double(targetSamples))")
         
         return WaveformData(samples: downsampledSamples, duration: duration, sampleRate: sampleRate)
     }
@@ -73,12 +83,22 @@ final class WaveformService {
     private static func downsample(_ samples: [Float], to targetCount: Int) -> [Float] {
         guard samples.count > targetCount else { return samples }
         
-        let stride = samples.count / targetCount
         var result: [Float] = []
+        let ratio = Double(samples.count) / Double(targetCount)
         
         for i in 0..<targetCount {
-            let start = i * stride
-            let end = min(start + stride, samples.count)
+            // Use precise floating-point positioning to avoid drift
+            let startFloat = Double(i) * ratio
+            let endFloat = Double(i + 1) * ratio
+            
+            let start = Int(startFloat)
+            let end = min(Int(endFloat), samples.count)
+            
+            guard start < end else {
+                result.append(0)
+                continue
+            }
+            
             let chunk = samples[start..<end]
             
             // Use RMS for better visual representation
