@@ -494,13 +494,17 @@ struct MixRow: View {
 
 struct MixStatusBadge: View {
     let status: MixStatus
-    
+
     var body: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
+        HStack(spacing: 4) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(statusEmoji)
+                .font(.caption)
+        }
     }
-    
+
     private var statusColor: Color {
         switch status {
         case .draft: return .gray
@@ -508,6 +512,16 @@ struct MixStatusBadge: View {
         case .inReview: return .orange
         case .approved: return .green
         case .superseded: return .secondary
+        }
+    }
+
+    private var statusEmoji: String {
+        switch status {
+        case .draft: return "📝"
+        case .shared: return "📤"
+        case .inReview: return "👀"
+        case .approved: return "✅"
+        case .superseded: return "⏭️"
         }
     }
 }

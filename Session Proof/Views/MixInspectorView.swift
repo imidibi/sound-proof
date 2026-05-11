@@ -148,17 +148,35 @@ struct SongStatusBadge: View {
 }
 
 struct MixInfoSection: View {
-    let mix: Mix
+    @Bindable var mix: Mix
+    @Environment(\.modelContext) private var modelContext
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Mix Info")
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Mix Status")
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
+            Picker("Status", selection: $mix.approvalStatus) {
+                ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
+                    HStack {
+                        MixStatusBadge(status: status)
+                        Text(status.rawValue)
+                    }
+                    .tag(status)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: mix.approvalStatus) { oldValue, newValue in
+                if newValue == .approved {
+                    markOtherMixesAsSuperseded()
+                }
+            }
+            
+            Divider()
+            
             LabeledContent("Name", value: mix.name)
             LabeledContent("Version", value: "V\(mix.versionNumber)")
-            LabeledContent("Status", value: mix.approvalStatus.rawValue)
             
             if let notes = mix.notes, !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -171,6 +189,15 @@ struct MixInfoSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private func markOtherMixesAsSuperseded() {
+        // When a mix is approved, mark all other mixes in the same song as superseded
+        guard let song = mix.song else { return }
+        
+        for otherMix in song.mixes where otherMix.id != mix.id && otherMix.approvalStatus == .approved {
+            otherMix.approvalStatus = .superseded
+        }
     }
 }
 
