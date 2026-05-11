@@ -167,12 +167,21 @@ struct WaveformPlayerView: View {
         do {
             try audioPlayerService.loadAudio(from: url)
             
-            // Check if we have a cached waveform
+            // Check if we have a cached waveform with stereo data
+            var needsRegeneration = true
             if let cachedData = mix.waveformCache,
                let cached = try? JSONDecoder().decode(WaveformData.self, from: cachedData) {
-                // Use cached waveform
-                waveformData = cached
-            } else {
+                // Only use cache if it has stereo data (rightSamples not empty)
+                if !cached.rightSamples.isEmpty {
+                    waveformData = cached
+                    needsRegeneration = false
+                    print("✅ Using cached stereo waveform")
+                } else {
+                    print("⚠️ Cached waveform is old mono format, regenerating...")
+                }
+            }
+            
+            if needsRegeneration {
                 // Generate new waveform
                 isLoadingWaveform = true
                 let generated = try await WaveformService.generateWaveform(from: url)
