@@ -83,7 +83,11 @@ struct NewSongSheet: View {
                             .frame(height: 100)
                             .scrollContentBackground(.hidden)
                             .padding(8)
-                            .background(Color(.systemGray6))
+                            #if os(iOS)
+                            .background(Color(uiColor: .systemGray6))
+                            #else
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            #endif
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)

@@ -77,7 +77,11 @@ struct WaveformPlayerView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(.systemGray6).opacity(0.5))
+            #if os(iOS)
+            .background(Color(uiColor: .systemGray6).opacity(0.5))
+            #else
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            #endif
             
             // Zoom control
             HStack(spacing: 12) {
