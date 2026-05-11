@@ -15,6 +15,7 @@ struct QuickImportSheet: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProjectSyncService.self) private var syncService
     
     @State private var songName = ""
     @State private var artist = ""
@@ -24,6 +25,7 @@ struct QuickImportSheet: View {
     @State private var selectedFileURL: URL?
     @State private var isImporting = false
     @State private var errorMessage: String?
+    @State private var uploadProgress: String?
     
     var body: some View {
         NavigationStack {
@@ -274,6 +276,42 @@ struct QuickImportSheet: View {
             modelContext.insert(mix)
             
             try modelContext.save()
+            
+            // Sync to cloud if project is synced
+            if let projectId = project.firestoreId {
+                await MainActor.run {
+                    uploadProgress = "Syncing to cloud..."
+                }
+                
+                do {
+                    // First sync the song
+                    try await syncService.syncSong(
+                        song: song,
+                        projectId: projectId,
+                        modelContext: modelContext
+                    )
+                    
+                    // Then upload the mix
+                    if let songId = song.firestoreId {
+                        await MainActor.run {
+                            uploadProgress = "Uploading audio..."
+                        }
+                        
+                        try await syncService.uploadMix(
+                            mix: mix,
+                            projectId: projectId,
+                            songId: songId,
+                            modelContext: modelContext
+                        )
+                    }
+                } catch {
+                    // Don't fail the whole import if cloud sync fails
+                    print("Cloud sync failed: \(error)")
+                    await MainActor.run {
+                        uploadProgress = "Cloud sync failed (saved locally)"
+                    }
+                }
+            }
             
             await MainActor.run {
                 dismiss()

@@ -56,6 +56,39 @@ class FirestoreService {
         return (document.documentID, document.data())
     }
     
+    func getUserProjects(userId: String) async throws -> [(id: String, data: [String: Any])] {
+        let query = db.collection("projects").whereField("ownerUserId", isEqualTo: userId)
+        let snapshot = try await query.getDocuments()
+        
+        return snapshot.documents.map { document in
+            (document.documentID, document.data())
+        }
+    }
+    
+    func getProjectSongs(projectId: String) async throws -> [(id: String, data: [String: Any])] {
+        let snapshot = try await db.collection("projects")
+            .document(projectId)
+            .collection("songs")
+            .getDocuments()
+        
+        return snapshot.documents.map { document in
+            (document.documentID, document.data())
+        }
+    }
+    
+    func getSongMixes(projectId: String, songId: String) async throws -> [(id: String, data: [String: Any])] {
+        let snapshot = try await db.collection("projects")
+            .document(projectId)
+            .collection("songs")
+            .document(songId)
+            .collection("mixes")
+            .getDocuments()
+        
+        return snapshot.documents.map { document in
+            (document.documentID, document.data())
+        }
+    }
+    
     // MARK: - Song Sync
     
     func createSong(
