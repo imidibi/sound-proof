@@ -73,7 +73,7 @@ struct QuickImportSheet: View {
                                 .frame(height: 80)
                                 .scrollContentBackground(.hidden)
                                 .padding(8)
-                                .background(Color(nsColor: .controlBackgroundColor))
+                                .background(Color(.systemGray6))
                                 .cornerRadius(6)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 6)

@@ -77,7 +77,7 @@ struct WaveformPlayerView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            .background(Color(.systemGray6).opacity(0.5))
             
             // Zoom control
             HStack(spacing: 12) {
