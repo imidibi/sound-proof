@@ -12,7 +12,7 @@ struct MixDetailView: View {
     @Bindable var mix: Mix
     @State private var audioPlayerService = AudioPlayerService()
     @State private var showingCommentSheet = false
-    @State private var showingInspector = false
+    @State private var showingInspector = true
     
     var body: some View {
         #if os(macOS)
@@ -35,18 +35,21 @@ struct MixDetailView: View {
                     Spacer()
                     
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             showingInspector.toggle()
                         }
                     } label: {
                         Image(systemName: showingInspector ? "sidebar.right.fill" : "sidebar.right")
                             .font(.title3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(showingInspector ? .blue : .secondary)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help(showingInspector ? "Hide Inspector" : "Show Inspector")
+                    .help(showingInspector ? "Hide Inspector (Cmd+I)" : "Show Inspector (Cmd+I)")
+                    .keyboardShortcut("i", modifiers: .command)
                     .padding()
                 }
+                .zIndex(10)
                 
                 Divider()
                 

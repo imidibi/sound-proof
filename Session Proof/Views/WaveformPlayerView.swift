@@ -198,7 +198,7 @@ struct WaveformView: View {
                 HStack(spacing: 2) {
                     ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.white.opacity(0.8))
+                            .fill(Color.gray.opacity(0.7))
                             .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
                             .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
                     }
