@@ -76,7 +76,7 @@ struct WaveformPlayerView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.8))
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
             
             // Zoom control
             HStack(spacing: 12) {
@@ -190,21 +190,21 @@ struct WaveformView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            let centerX = geometry.size.width / 2
+            let playheadX: CGFloat = 40 // Fixed position from left edge
             let totalWaveformWidth = geometry.size.width * zoomLevel
             
-            ZStack {
+            ZStack(alignment: .leading) {
                 // Waveform content that scrolls
                 HStack(spacing: 2) {
                     ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.primary.opacity(0.6))
+                            .fill(Color.white.opacity(0.8))
                             .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
                             .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
                     }
                 }
                 .frame(width: totalWaveformWidth, height: geometry.size.height, alignment: .leading)
-                .offset(x: -waveformOffset(centerX: centerX, totalWidth: totalWaveformWidth))
+                .offset(x: playheadX - waveformScrollOffset(playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width))
                 
                 // Comment markers
                 ForEach(comments) { comment in
@@ -213,28 +213,29 @@ struct WaveformView: View {
                         duration: duration,
                         isSelected: selectedComment?.id == comment.id
                     )
-                    .offset(x: commentXPosition(for: comment.timestamp, centerX: centerX, totalWidth: totalWaveformWidth))
+                    .offset(x: commentXPosition(for: comment.timestamp, playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width))
                     .onTapGesture {
                         selectedComment = comment
                         onSeek(comment.timestamp)
                     }
                 }
                 
-                // Fixed center playhead (always in the middle)
+                // Fixed playhead at left edge
                 Rectangle()
                     .fill(Color.blue)
                     .frame(width: 3)
                     .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 0)
-                    .position(x: centerX, y: geometry.size.height / 2)
+                    .position(x: playheadX, y: geometry.size.height / 2)
                     .zIndex(100)
             }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        // Convert tap/drag position to time
-                        let relativeX = value.location.x - centerX
-                        let pixelOffset = waveformOffset(centerX: centerX, totalWidth: totalWaveformWidth) + relativeX
+                        // Convert tap/drag position to time relative to playhead
+                        let relativeX = value.location.x - playheadX
+                        let scrollOffset = waveformScrollOffset(playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width)
+                        let pixelOffset = scrollOffset + relativeX
                         let position = pixelOffset / totalWaveformWidth
                         let time = max(0, min(duration, duration * position))
                         onSeek(time)
@@ -243,32 +244,18 @@ struct WaveformView: View {
         }
     }
     
-    // Calculate how much to offset the waveform to keep playhead centered
-    private func waveformOffset(centerX: CGFloat, totalWidth: CGFloat) -> CGFloat {
+    // Calculate how much to scroll the waveform to keep current position at playhead
+    private func waveformScrollOffset(playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
         guard duration > 0 else { return 0 }
         let playbackPosition = currentTime / duration
-        let targetOffset = playbackPosition * totalWidth
-        
-        // Clamp offset so waveform doesn't scroll past its bounds
-        let maxOffset = totalWidth - centerX
-        
-        if targetOffset < centerX {
-            // At beginning, waveform starts at left edge
-            return 0
-        } else if targetOffset > maxOffset {
-            // At end, waveform stops at right edge
-            return maxOffset - centerX
-        } else {
-            // Middle, keep playhead centered
-            return targetOffset - centerX
-        }
+        return playbackPosition * totalWidth
     }
     
-    private func commentXPosition(for timestamp: TimeInterval, centerX: CGFloat, totalWidth: CGFloat) -> CGFloat {
-        guard duration > 0 else { return centerX }
+    private func commentXPosition(for timestamp: TimeInterval, playheadX: CGFloat, totalWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
+        guard duration > 0 else { return playheadX }
         let commentPosition = (timestamp / duration) * totalWidth
-        let waveformScroll = waveformOffset(centerX: centerX, totalWidth: totalWidth)
-        return commentPosition - waveformScroll
+        let scrollOffset = waveformScrollOffset(playheadX: playheadX, totalWidth: totalWidth, viewWidth: viewWidth)
+        return playheadX + (commentPosition - scrollOffset)
     }
 }
 
@@ -341,17 +328,30 @@ struct PlayerControlsView: View {
             }
             
             // Transport controls
-            HStack(spacing: 24) {
+            HStack(spacing: 20) {
+                // Return to Zero
+                Button {
+                    audioPlayerService.seek(to: 0)
+                } label: {
+                    Image(systemName: "backward.end.fill")
+                        .font(.title3)
+                }
+                .help("Return to Zero (RTZ)")
+                .keyboardShortcut(.return, modifiers: [])
+                
+                // Rewind
                 Button {
                     audioPlayerService.skipBackward()
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.title2)
                 }
+                .help("Skip Backward 15s")
                 .keyboardShortcut(.leftArrow, modifiers: [])
                 
                 Spacer()
                 
+                // Play/Pause
                 Button {
                     if audioPlayerService.isPlaying {
                         audioPlayerService.pause()
@@ -362,17 +362,30 @@ struct PlayerControlsView: View {
                     Image(systemName: audioPlayerService.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 48))
                 }
+                .help(audioPlayerService.isPlaying ? "Pause (Space)" : "Play (Space)")
                 .keyboardShortcut(.space, modifiers: [])
                 
                 Spacer()
                 
+                // Fast Forward
                 Button {
                     audioPlayerService.skipForward()
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.title2)
                 }
+                .help("Skip Forward 15s")
                 .keyboardShortcut(.rightArrow, modifiers: [])
+                
+                // Skip to End
+                Button {
+                    audioPlayerService.seek(to: max(0, audioPlayerService.duration - 0.1))
+                } label: {
+                    Image(systemName: "forward.end.fill")
+                        .font(.title3)
+                }
+                .help("Skip to End")
+                .keyboardShortcut(.return, modifiers: [.shift])
             }
             .buttonStyle(.plain)
         }

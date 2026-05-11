@@ -27,9 +27,26 @@ struct MixDetailView: View {
         HStack(spacing: 0) {
             // Main waveform area
             VStack(spacing: 0) {
-                // Mix info header
-                MixHeaderView(mix: mix)
+                // Mix info header with inspector toggle
+                HStack {
+                    MixHeaderView(mix: mix)
+                        .padding()
+                    
+                    Spacer()
+                    
+                    Button {
+                        withAnimation {
+                            showingInspector.toggle()
+                        }
+                    } label: {
+                        Image(systemName: showingInspector ? "sidebar.right.fill" : "sidebar.right")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(showingInspector ? "Hide Inspector" : "Show Inspector")
                     .padding()
+                }
                 
                 Divider()
                 
@@ -41,11 +58,14 @@ struct MixDetailView: View {
             }
             .frame(maxWidth: .infinity)
             
-            Divider()
-            
-            // Right inspector
-            MixInspectorView(mix: mix, audioPlayerService: audioPlayerService)
-                .frame(width: 300)
+            if showingInspector {
+                Divider()
+                
+                // Right inspector
+                MixInspectorView(mix: mix, audioPlayerService: audioPlayerService)
+                    .frame(width: 300)
+                    .transition(.move(edge: .trailing))
+            }
         }
     }
     #endif
