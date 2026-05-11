@@ -10,9 +10,19 @@ import AVFoundation
 import Accelerate
 
 struct WaveformData: Codable {
-    let samples: [Float]
+    let leftSamples: [Float]
+    let rightSamples: [Float]
     let duration: TimeInterval
     let sampleRate: Double
+    
+    // Legacy support for mono files
+    var samples: [Float] {
+        leftSamples
+    }
+    
+    var isStereo: Bool {
+        !rightSamples.isEmpty
+    }
 }
 
 final class WaveformService {
@@ -37,22 +47,22 @@ final class WaveformService {
         print("🎵 Audio has \(channelCount) channel(s)")
         
         let reader = try AVAssetReader(asset: asset)
-        // Force mono output for consistent waveform generation
+        // Keep original channel count for proper L/R separation
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-            AVNumberOfChannelsKey: 1  // Convert to mono
+            AVLinearPCMIsNonInterleaved: false
         ]
         
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
         reader.add(output)
         reader.startReading()
         
-        var samples: [Float] = []
-        var totalSamplesRead = 0
+        var leftSamples: [Float] = []
+        var rightSamples: [Float] = []
+        var totalFramesRead = 0
         
         while reader.status == .reading {
             guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
@@ -71,26 +81,45 @@ final class WaveformService {
                     Array(UnsafeBufferPointer<Int16>(start: $0.baseAddress?.assumingMemoryBound(to: Int16.self), count: length / MemoryLayout<Int16>.size))
                 }
                 
-                let floatSamples = int16Samples.map { Float($0) / Float(Int16.max) }
-                samples.append(contentsOf: floatSamples)
-                totalSamplesRead += int16Samples.count
+                // Separate interleaved stereo samples (L,R,L,R...) or handle mono
+                if channelCount == 2 {
+                    for i in stride(from: 0, to: int16Samples.count, by: 2) {
+                        leftSamples.append(Float(int16Samples[i]) / Float(Int16.max))
+                        if i + 1 < int16Samples.count {
+                            rightSamples.append(Float(int16Samples[i + 1]) / Float(Int16.max))
+                        }
+                    }
+                    totalFramesRead += int16Samples.count / 2
+                } else {
+                    // Mono - use same samples for both channels
+                    let floatSamples = int16Samples.map { Float($0) / Float(Int16.max) }
+                    leftSamples.append(contentsOf: floatSamples)
+                    rightSamples.append(contentsOf: floatSamples)
+                    totalFramesRead += int16Samples.count
+                }
             }
         }
         
         let naturalTimeScale = try await track.load(.naturalTimeScale)
         let sampleRate = Double(naturalTimeScale)
         
-        print("📊 Read \(totalSamplesRead) total samples at \(sampleRate)Hz")
-        print("   Expected samples for \(duration)s: \(Int(duration * sampleRate))")
+        print("📊 Read \(totalFramesRead) audio frames (\(channelCount) channel(s)) at \(sampleRate)Hz")
+        print("   Expected frames for \(duration)s: \(Int(duration * sampleRate))")
+        print("   L: \(leftSamples.count) samples, R: \(rightSamples.count) samples")
         
-        // Downsample to target number of samples
-        let downsampledSamples = downsample(samples, to: targetSamples)
+        // Downsample each channel to target number of samples
+        let downsampledLeft = downsample(leftSamples, to: targetSamples)
+        let downsampledRight = downsample(rightSamples, to: targetSamples)
         
-        print("🎵 Waveform generated: \(samples.count) raw samples → \(downsampledSamples.count) display samples")
-        print("   Duration: \(duration)s, Sample rate: \(sampleRate)Hz")
-        print("   Samples per display bar: \(Double(samples.count) / Double(targetSamples))")
+        print("🎵 Waveform generated: \(leftSamples.count) raw → \(downsampledLeft.count) display samples per channel")
+        print("   Samples per display bar: \(Double(leftSamples.count) / Double(targetSamples))")
         
-        return WaveformData(samples: downsampledSamples, duration: duration, sampleRate: sampleRate)
+        return WaveformData(
+            leftSamples: downsampledLeft,
+            rightSamples: downsampledRight,
+            duration: duration,
+            sampleRate: sampleRate
+        )
     }
     
     private static func downsample(_ samples: [Float], to targetCount: Int) -> [Float] {

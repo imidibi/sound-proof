@@ -228,14 +228,40 @@ struct WaveformView: View {
             let totalWaveformWidth = geometry.size.width * zoomLevel
             
             ZStack(alignment: .leading) {
-                // Waveform content that scrolls
-                HStack(spacing: 2) {
-                    ForEach(Array(waveformData.samples.enumerated()), id: \.offset) { index, sample in
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(waveformBarColor(for: index, totalBars: waveformData.samples.count))
-                            .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.samples.count)) - 2))
-                            .frame(height: max(2, CGFloat(sample) * geometry.size.height * 0.8))
+                // Dual waveform display (L/R channels)
+                VStack(spacing: 0) {
+                    // Left channel (top half)
+                    HStack(spacing: 2) {
+                        ForEach(Array(waveformData.leftSamples.enumerated()), id: \.offset) { index, sample in
+                            VStack {
+                                Spacer()
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(waveformBarColor(for: index, totalBars: waveformData.leftSamples.count))
+                                    .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.leftSamples.count)) - 2))
+                                    .frame(height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.9))
+                            }
+                        }
                     }
+                    .frame(height: geometry.size.height / 2)
+                    
+                    // Center line
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(height: 1)
+                    
+                    // Right channel (bottom half)
+                    HStack(spacing: 2) {
+                        ForEach(Array(waveformData.rightSamples.enumerated()), id: \.offset) { index, sample in
+                            VStack {
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(waveformBarColor(for: index, totalBars: waveformData.rightSamples.count))
+                                    .frame(width: max(1, (totalWaveformWidth / CGFloat(waveformData.rightSamples.count)) - 2))
+                                    .frame(height: max(2, CGFloat(sample) * (geometry.size.height / 2) * 0.9))
+                                Spacer()
+                            }
+                        }
+                    }
+                    .frame(height: geometry.size.height / 2)
                 }
                 .frame(width: totalWaveformWidth, height: geometry.size.height, alignment: .leading)
                 .offset(x: playheadX - waveformScrollOffset(playheadX: playheadX, totalWidth: totalWaveformWidth, viewWidth: geometry.size.width))
