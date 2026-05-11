@@ -56,7 +56,8 @@ struct MixDetailView: View {
                 // Waveform and player
                 WaveformPlayerView(
                     mix: mix,
-                    audioPlayerService: audioPlayerService
+                    audioPlayerService: audioPlayerService,
+                    inspectorWidth: showingInspector ? 300 : 0
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

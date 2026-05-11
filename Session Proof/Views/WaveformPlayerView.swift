@@ -11,6 +11,7 @@ import SwiftData
 struct WaveformPlayerView: View {
     @Bindable var mix: Mix
     let audioPlayerService: AudioPlayerService
+    var inspectorWidth: CGFloat = 0  // Width of inspector overlay if visible
     
     @Environment(\.modelContext) private var modelContext
     @Environment(ProjectSyncService.self) private var syncService
@@ -93,15 +94,31 @@ struct WaveformPlayerView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 30)
+                
+                // Spacer to account for inspector overlay
+                if inspectorWidth > 0 {
+                    Spacer()
+                        .frame(width: inspectorWidth)
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(.ultraThinMaterial)
             
             // Player controls
-            PlayerControlsView(audioPlayerService: audioPlayerService)
-                .padding()
-                .background(.ultraThinMaterial)
+            HStack {
+                Spacer()
+                PlayerControlsView(audioPlayerService: audioPlayerService)
+                Spacer()
+                
+                // Spacer to account for inspector overlay
+                if inspectorWidth > 0 {
+                    Spacer()
+                        .frame(width: inspectorWidth)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
         }
         .task(id: mix.id) {
             await loadAudioAndWaveform()
