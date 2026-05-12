@@ -203,10 +203,18 @@ struct ProjectFolderRow: View {
     @Binding var selectedSongForMenu: Song?
     let onToggleExpand: () -> Void
     
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
+    
     @State private var showingNewSongSheet = false
     @State private var showingShareSheet = false
     @State private var isEditingName = false
+    @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
+    
+    var canDelete: Bool {
+        authService.currentUser?.role == .producer
+    }
     
     var sortedSongs: [Song] {
         project.songs.sorted { $0.sortOrder < $1.sortOrder }
@@ -317,6 +325,16 @@ struct ProjectFolderRow: View {
                 } label: {
                     Label("Add Song", systemImage: "music.note")
                 }
+                
+                if canDelete {
+                    Divider()
+                    
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Project", systemImage: "trash")
+                    }
+                }
             }
             
             // Expanded songs
@@ -346,6 +364,28 @@ struct ProjectFolderRow: View {
         .sheet(isPresented: $showingShareSheet) {
             ShareProjectSheet(project: project)
         }
+        .confirmationDialog(
+            "Delete Project",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                deleteProject()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \"\(project.name)\"? This will also delete all songs and mixes in this project. This action cannot be undone.")
+        }
+    }
+    
+    private func deleteProject() {
+        modelContext.delete(project)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting project: \(error)")
+        }
     }
 }
 
@@ -357,9 +397,17 @@ struct SongFolderRow: View {
     @Binding var selectedSongForMenu: Song?
     let onToggleExpand: () -> Void
     
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
+    
     @State private var showingImportSheet = false
     @State private var isEditingName = false
+    @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
+    
+    var canDelete: Bool {
+        authService.currentUser?.role == .producer
+    }
     
     var sortedMixes: [Mix] {
         song.mixes.sorted { $0.versionNumber < $1.versionNumber }
@@ -430,6 +478,16 @@ struct SongFolderRow: View {
                 } label: {
                     Label("Import Mix", systemImage: "square.and.arrow.down")
                 }
+                
+                if canDelete {
+                    Divider()
+                    
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Song", systemImage: "trash")
+                    }
+                }
             }
             
             // Expanded mixes
@@ -445,6 +503,28 @@ struct SongFolderRow: View {
         .sheet(isPresented: $showingImportSheet) {
             ImportMixSheet(song: song)
         }
+        .confirmationDialog(
+            "Delete Song",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                deleteSong()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \"\(song.name)\"? This will also delete all mixes in this song. This action cannot be undone.")
+        }
+    }
+    
+    private func deleteSong() {
+        modelContext.delete(song)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting song: \(error)")
+        }
     }
 }
 
@@ -453,8 +533,16 @@ struct MixRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
+    
     @State private var isEditingName = false
+    @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
+    
+    var canDelete: Bool {
+        authService.currentUser?.role == .producer
+    }
     
     var body: some View {
         HStack {
@@ -500,6 +588,38 @@ struct MixRow: View {
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
+            
+            if canDelete {
+                Divider()
+                
+                Button(role: .destructive) {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Label("Delete Mix", systemImage: "trash")
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete Mix",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                deleteMix()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \"\(mix.name)\"? This action cannot be undone.")
+        }
+    }
+    
+    private func deleteMix() {
+        modelContext.delete(mix)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting mix: \(error)")
         }
     }
 }

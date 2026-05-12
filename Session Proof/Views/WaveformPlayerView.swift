@@ -251,6 +251,7 @@ struct WaveformView: View {
     let onSeek: (TimeInterval) -> Void
     
     @State private var selectedComment: Comment?
+    @State private var commentToEdit: Comment?
     
     // Pre-calculate expensive values to avoid recalculating in body
     private var playbackPosition: Double {
@@ -338,9 +339,34 @@ struct WaveformView: View {
                     )
                     .offset(x: playheadX + (commentPosition - scrollOffset))
                     .onTapGesture {
+                        #if os(iOS)
+                        // On iOS, single tap opens the comment
+                        commentToEdit = comment
+                        #else
+                        // On macOS, single click just selects and seeks
                         selectedComment = comment
                         onSeek(comment.timestamp)
+                        #endif
                     }
+                    #if os(macOS)
+                    .onTapGesture(count: 2) {
+                        // On macOS, double-click opens the comment
+                        commentToEdit = comment
+                    }
+                    .contextMenu {
+                        Button {
+                            commentToEdit = comment
+                        } label: {
+                            Label("Edit Comment", systemImage: "pencil")
+                        }
+                        
+                        Button {
+                            onSeek(comment.timestamp)
+                        } label: {
+                            Label("Jump to Time", systemImage: "play.circle")
+                        }
+                    }
+                    #endif
                 }
                 
                 // Fixed playhead at left edge
@@ -363,6 +389,9 @@ struct WaveformView: View {
                         onSeek(time)
                     }
             )
+        }
+        .sheet(item: $commentToEdit) { comment in
+            CommentDetailSheet(comment: comment, onSeek: onSeek)
         }
     }
     
@@ -435,7 +464,8 @@ struct CommentMarkerView: View {
     private func formatTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        let centiseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
+        return String(format: "%d:%02d.%02d", minutes, seconds, centiseconds)
     }
 }
 
