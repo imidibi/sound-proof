@@ -26,6 +26,8 @@ final class Mix {
     var duration: TimeInterval
     var sampleRate: Double
     var channels: Int
+    var bitrate: Int? // Bitrate in kbps
+    var format: String? // Audio format (MP3, WAV, AIFF, etc.)
     var approvalStatus: MixStatus
     var createdAt: Date
     var notes: String?
@@ -63,6 +65,8 @@ final class Mix {
         duration: TimeInterval = 0,
         sampleRate: Double = 44100,
         channels: Int = 2,
+        bitrate: Int? = nil,
+        format: String? = nil,
         approvalStatus: MixStatus = .draft,
         createdAt: Date = Date(),
         notes: String? = nil,
@@ -80,6 +84,8 @@ final class Mix {
         self.duration = duration
         self.sampleRate = sampleRate
         self.channels = channels
+        self.bitrate = bitrate
+        self.format = format
         self.approvalStatus = approvalStatus
         self.createdAt = createdAt
         self.notes = notes

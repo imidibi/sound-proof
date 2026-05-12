@@ -244,11 +244,21 @@ struct ImportMixSheet: View {
             let duration = try await asset.load(.duration).seconds
             mix.duration = duration
             
+            // Extract format from file extension
+            let fileExtension = destinationURL.pathExtension.uppercased()
+            mix.format = fileExtension.isEmpty ? "Unknown" : fileExtension
+            
             if let track = try await asset.loadTracks(withMediaType: .audio).first {
                 let sampleRate = try await track.load(.naturalTimeScale)
                 let formatDescriptions = try await track.load(.formatDescriptions)
+                let estimatedDataRate = try await track.load(.estimatedDataRate)
                 
                 mix.sampleRate = Double(sampleRate)
+                
+                // Convert bitrate from bits per second to kilobits per second
+                if estimatedDataRate > 0 {
+                    mix.bitrate = Int(estimatedDataRate / 1000)
+                }
                 
                 if let formatDescription = formatDescriptions.first {
                     let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)

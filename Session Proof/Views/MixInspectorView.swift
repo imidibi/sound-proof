@@ -184,7 +184,79 @@ struct MixInfoSection: View {
             LabeledContent("Name", value: mix.name)
             LabeledContent("Version", value: "V\(mix.versionNumber)")
             
+            Divider()
+            
+            // Format section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Format")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    if let format = mix.format {
+                        HStack {
+                            Text("Type:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(format)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                    }
+                    
+                    HStack {
+                        Text("Duration:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(formatDuration(mix.duration))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .monospacedDigit()
+                    }
+                    
+                    if let bitrate = mix.bitrate {
+                        HStack {
+                            Text("Bitrate:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(bitrate) kbps")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                    }
+                    
+                    HStack {
+                        Text("Sample Rate:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(formatSampleRate(mix.sampleRate))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    
+                    HStack {
+                        Text("Channels:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(formatChannels(mix.channels))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(8)
+            }
+            
             if let notes = mix.notes, !notes.isEmpty {
+                Divider()
+                
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Notes")
                         .font(.caption)
@@ -213,6 +285,25 @@ struct MixInfoSection: View {
         case .inReview: return "👀"
         case .approved: return "✅"
         case .superseded: return "⏭️"
+        }
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    private func formatSampleRate(_ sampleRate: Double) -> String {
+        let kHz = sampleRate / 1000.0
+        return String(format: "%.1f kHz", kHz)
+    }
+    
+    private func formatChannels(_ channels: Int) -> String {
+        switch channels {
+        case 1: return "Mono"
+        case 2: return "Stereo"
+        default: return "\(channels) channels"
         }
     }
 }

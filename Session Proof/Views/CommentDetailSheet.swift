@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct CommentDetailSheet: View {
     @Bindable var comment: Comment
@@ -19,6 +20,10 @@ struct CommentDetailSheet: View {
     @State private var isEditing = false
     @State private var editedText: String
     @State private var showingDeleteConfirmation = false
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var isPlayingVoiceNote = false
+    @State private var voiceNoteTimer: Timer?
+    @State private var voiceNoteProgress: Double = 0
     
     init(comment: Comment, onSeek: @escaping (TimeInterval) -> Void) {
         self.comment = comment
@@ -33,72 +38,66 @@ struct CommentDetailSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Timestamp") {
-                    HStack {
-                        Image(systemName: "clock.fill")
-                            .foregroundStyle(.blue)
-                        
-                        Text(formatTime(comment.timestamp))
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                        
-                        Spacer()
-                        
-                        Button {
-                            onSeek(comment.timestamp)
-                        } label: {
-                            Label("Jump to Time", systemImage: "play.circle")
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .padding(.vertical, 4)
-                    
-                    if let endTimestamp = comment.endTimestamp {
-                        HStack {
-                            Image(systemName: "arrow.left.and.right")
-                                .foregroundStyle(.secondary)
-                            Text("End: \(formatTime(endTimestamp))")
-                                .monospacedDigit()
-                        }
-                    }
+                Section {
+                    timestampCard
+                } header: {
+                    Text("Timestamp")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
-                Section("Comment") {
-                    if isEditing {
-                        TextEditor(text: $editedText)
-                            .frame(minHeight: 120)
-                    } else {
-                        Text(comment.text.isEmpty ? "No text" : comment.text)
-                            .foregroundStyle(comment.text.isEmpty ? .secondary : .primary)
-                    }
+                Section {
+                    commentContent
+                } header: {
+                    Text("Comment")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
                 if comment.voiceNoteURL != nil {
-                    Section("Voice Note") {
-                        HStack {
-                            Image(systemName: "waveform.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.green)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Voice Note Attached")
-                                    .font(.headline)
-                                Text("Tap to play")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        .padding(.vertical, 4)
+                    Section {
+                        voiceNoteCard
+                    } header: {
+                        Text("Voice Note")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
                     }
                 }
                 
-                Section("Details") {
-                    LabeledContent("Author", value: comment.authorName)
-                    LabeledContent("Created", value: formatDate(comment.createdAt))
-                    LabeledContent("Status", value: comment.status.rawValue)
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Author")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(comment.authorName)
+                        }
+                        .font(.subheadline)
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("Created")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(formatDate(comment.createdAt))
+                        }
+                        .font(.subheadline)
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("Status")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            CommentStatusIndicator(status: comment.status)
+                        }
+                        .font(.subheadline)
+                    }
+                } header: {
+                    Text("Details")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
                 if canEdit {
@@ -107,11 +106,13 @@ struct CommentDetailSheet: View {
                             showingDeleteConfirmation = true
                         } label: {
                             Label("Delete Comment", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
                         }
                     }
                 }
             }
-            .navigationTitle("Comment Details")
+            .formStyle(.grouped)
+            .navigationTitle(isEditing ? "Edit Comment" : "Comment")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -122,23 +123,24 @@ struct CommentDetailSheet: View {
                             editedText = comment.text
                             isEditing = false
                         } else {
+                            stopVoiceNote()
                             dismiss()
                         }
                     }
                 }
                 
-                if canEdit {
+                if canEdit && !isEditing {
                     ToolbarItem(placement: .primaryAction) {
-                        if isEditing {
-                            Button("Save") {
-                                saveChanges()
-                            }
-                            .disabled(editedText.isEmpty)
-                        } else {
-                            Button("Edit") {
-                                isEditing = true
-                            }
+                        Button("Edit") {
+                            isEditing = true
                         }
+                    }
+                } else if isEditing {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Save") {
+                            saveChanges()
+                        }
+                        .disabled(editedText.isEmpty)
                     }
                 }
             }
@@ -156,8 +158,187 @@ struct CommentDetailSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 500, minHeight: 500)
         #endif
+        .onDisappear {
+            stopVoiceNote()
+        }
+    }
+    
+    private var timestampCard: some View {
+        VStack(spacing: 12) {
+            Button {
+                onSeek(comment.timestamp)
+                dismiss()
+            } label: {
+                HStack {
+                    Image(systemName: "clock.fill")
+                        .foregroundStyle(.blue)
+                    
+                    Text(formatTime(comment.timestamp))
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                    
+                    Spacer()
+                    
+                    Image(systemName: "play.circle.fill")
+                        .foregroundStyle(.blue)
+                        .font(.title3)
+                }
+                .padding()
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(12)
+            }
+            .buttonStyle(.plain)
+            
+            if let endTimestamp = comment.endTimestamp {
+                HStack {
+                    Image(systemName: "arrow.left.and.right")
+                        .foregroundStyle(.secondary)
+                    Text("End time:")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(formatTime(endTimestamp))
+                        .font(.headline)
+                        .monospacedDigit()
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(8)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var commentContent: some View {
+        if isEditing {
+            VStack(alignment: .leading, spacing: 12) {
+                TextEditor(text: $editedText)
+                    .frame(height: 120)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    #if os(iOS)
+                    .background(Color(uiColor: .systemGray6))
+                    #else
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    #endif
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+                
+                if editedText.isEmpty {
+                    Text("Comment text is required")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(.vertical, 4)
+        } else {
+            if comment.text.isEmpty {
+                Text("No comment text")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            } else {
+                Text(comment.text)
+                    .font(.subheadline)
+                    .padding(.vertical, 4)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var voiceNoteCard: some View {
+        if let url = comment.voiceNoteURL {
+            VStack(spacing: 12) {
+                HStack(spacing: 16) {
+                    Button {
+                        if isPlayingVoiceNote {
+                            pauseVoiceNote()
+                        } else {
+                            playVoiceNote(url: url)
+                        }
+                    } label: {
+                        Image(systemName: isPlayingVoiceNote ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 44))
+                            .foregroundStyle(.green)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Voice Note")
+                            .font(.headline)
+                        
+                        if let player = audioPlayer {
+                            Text(formatVoiceNoteTime(player.currentTime, duration: player.duration))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        } else {
+                            Text("Tap to play")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                
+                if let player = audioPlayer, player.duration > 0 {
+                    ProgressView(value: voiceNoteProgress)
+                        .tint(.green)
+                }
+            }
+            .padding()
+            .background(Color.green.opacity(0.05))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.green.opacity(0.3), lineWidth: isPlayingVoiceNote ? 2 : 1)
+            )
+        }
+    }
+    
+    private func playVoiceNote(url: URL) {
+        do {
+            audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer?.delegate = VoiceNotePlayerDelegate(onFinish: {
+                isPlayingVoiceNote = false
+                voiceNoteProgress = 0
+                voiceNoteTimer?.invalidate()
+                voiceNoteTimer = nil
+            })
+            audioPlayer?.play()
+            isPlayingVoiceNote = true
+            
+            // Start progress timer
+            voiceNoteTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                if let player = audioPlayer, player.duration > 0 {
+                    voiceNoteProgress = player.currentTime / player.duration
+                }
+            }
+        } catch {
+            print("Error playing voice note: \(error)")
+        }
+    }
+    
+    private func pauseVoiceNote() {
+        audioPlayer?.pause()
+        isPlayingVoiceNote = false
+        voiceNoteTimer?.invalidate()
+        voiceNoteTimer = nil
+    }
+    
+    private func stopVoiceNote() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isPlayingVoiceNote = false
+        voiceNoteProgress = 0
+        voiceNoteTimer?.invalidate()
+        voiceNoteTimer = nil
     }
     
     private func saveChanges() {
@@ -172,6 +353,7 @@ struct CommentDetailSheet: View {
     }
     
     private func deleteComment() {
+        stopVoiceNote()
         modelContext.delete(comment)
         
         do {
@@ -189,11 +371,32 @@ struct CommentDetailSheet: View {
         return String(format: "%d:%02d.%02d", minutes, seconds, centiseconds)
     }
     
+    private func formatVoiceNoteTime(_ current: TimeInterval, duration: TimeInterval) -> String {
+        let currentMin = Int(current) / 60
+        let currentSec = Int(current) % 60
+        let durationMin = Int(duration) / 60
+        let durationSec = Int(duration) % 60
+        return String(format: "%d:%02d / %d:%02d", currentMin, currentSec, durationMin, durationSec)
+    }
+    
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+// Helper delegate for AVAudioPlayer
+private class VoiceNotePlayerDelegate: NSObject, AVAudioPlayerDelegate {
+    let onFinish: () -> Void
+    
+    init(onFinish: @escaping () -> Void) {
+        self.onFinish = onFinish
+    }
+    
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        onFinish()
     }
 }
 
