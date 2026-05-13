@@ -45,7 +45,7 @@ struct WaveformPlayerView: View {
                     WaveformView(
                         waveformData: waveformData,
                         currentTime: audioPlayerService.currentTime,
-                        duration: audioPlayerService.duration,
+                        duration: mix.duration,
                         zoomLevel: zoomLevel,
                         verticalScale: verticalScale,
                         comments: mix.song?.comments.filter { $0.mix?.id == mix.id } ?? [],
@@ -334,14 +334,16 @@ struct WaveformView: View {
                 .offset(x: playheadX - scrollOffset)
                 
                 // Comment markers
-                ForEach(comments) { comment in
+                ForEach(Array(comments.enumerated()), id: \.element.id) { index, comment in
                     let commentPosition = (comment.timestamp / max(duration, 0.001)) * totalWaveformWidth
+                    let (verticalOffset, colorIndex) = calculateCommentOffset(for: comment, at: index, in: comments)
                     CommentMarkerView(
                         comment: comment,
                         duration: duration,
-                        isSelected: selectedComment?.id == comment.id
+                        isSelected: selectedComment?.id == comment.id,
+                        colorIndex: colorIndex
                     )
-                    .offset(x: playheadX + (commentPosition - scrollOffset))
+                    .offset(x: playheadX + (commentPosition - scrollOffset), y: verticalOffset)
                     .onTapGesture {
                         #if os(iOS)
                         // On iOS, single tap opens the comment
@@ -475,18 +477,69 @@ struct WaveformView: View {
         let centiseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
         return String(format: "%d:%02d.%02d", minutes, seconds, centiseconds)
     }
+    
+    /// Calculate vertical offset and color index for overlapping comments
+    private func calculateCommentOffset(for comment: Comment, at index: Int, in comments: [Comment]) -> (verticalOffset: CGFloat, colorIndex: Int) {
+        // Find comments that are within 2 seconds of this comment
+        let nearbyComments = comments.filter { otherComment in
+            guard otherComment.id != comment.id else { return false }
+            return abs(otherComment.timestamp - comment.timestamp) < 2.0
+        }
+        
+        if nearbyComments.isEmpty {
+            return (0, 0) // No offset needed, use default color
+        }
+        
+        // Sort all nearby comments (including this one) by timestamp, then by ID for stability
+        var allNearby = nearbyComments + [comment]
+        allNearby.sort { first, second in
+            if first.timestamp == second.timestamp {
+                return first.id.uuidString < second.id.uuidString
+            }
+            return first.timestamp < second.timestamp
+        }
+        
+        // Find this comment's index in the nearby group
+        guard let position = allNearby.firstIndex(where: { $0.id == comment.id }) else {
+            return (0, 0)
+        }
+        
+        // Stagger vertically and assign different colors
+        let verticalOffset = CGFloat(position) * 25.0 // Offset by 25 points each
+        let colorIndex = position % 6 // Cycle through 6 colors
+        
+        return (verticalOffset, colorIndex)
+    }
 }
 
 struct CommentMarkerView: View {
     let comment: Comment
     let duration: TimeInterval
     let isSelected: Bool
+    let colorIndex: Int
+    
+    private var markerColor: Color {
+        if isSelected {
+            return .orange
+        }
+        
+        // Color palette for overlapping comments
+        switch colorIndex {
+        case 0: return .yellow
+        case 1: return .green
+        case 2: return .cyan
+        case 3: return .pink
+        case 4: return .purple
+        case 5: return .mint
+        default: return .yellow
+        }
+    }
     
     var body: some View {
         VStack(spacing: 2) {
             // Marker line
             Rectangle()
-                .fill(isSelected ? Color.orange : Color.yellow)
+                .fill(markerColor)
                 .frame(width: 3)
                 .opacity(0.8)
             
@@ -512,7 +565,7 @@ struct CommentMarkerView: View {
             .padding(6)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.orange.opacity(0.9) : Color.yellow.opacity(0.9))
+                    .fill(markerColor.opacity(0.9))
             )
             .frame(width: 120)
             .shadow(radius: 2)
