@@ -26,8 +26,8 @@ struct ProjectListView: View {
     @State private var expandedSongs: Set<UUID> = []
     
     var body: some View {
-        NavigationSplitView {
-            List {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            List(selection: $selectedMix) {
                 Section("Active Projects") {
                     ForEach(projects.filter { $0.status != .archived }) { project in
                         ProjectFolderRow(
@@ -610,6 +610,7 @@ struct MixRow: View {
         .onTapGesture {
             onSelect()
         }
+        .tag(mix)
         .contextMenu {
             Button {
                 isEditingName = true
