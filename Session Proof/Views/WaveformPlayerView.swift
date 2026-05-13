@@ -540,50 +540,42 @@ struct CommentMarkerView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .top) {
-            // Marker line - positioned at x=0 (the exact timestamp)
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(markerColor)
-                    .frame(width: 3)
-                    .opacity(0.8)
-            }
-            .frame(height: 100, alignment: .top)
+        ZStack(alignment: .topLeading) {
+            // Marker line - this is positioned at the exact timestamp (x=0 of this view)
+            Rectangle()
+                .fill(markerColor)
+                .frame(width: 3)
+                .opacity(0.8)
             
-            // Comment preview card - offset to left so it's centered above the line
-            VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
-                            .font(.caption2)
-                        
-                        Text(formatTime(comment.timestamp))
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                    }
+            // Comment preview card - offset left by half its width to center over the line
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
+                        .font(.caption2)
                     
-                    if !comment.text.isEmpty {
-                        Text(comment.text)
-                            .font(.caption2)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
+                    Text(formatTime(comment.timestamp))
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
                 }
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(markerColor.opacity(0.9))
-                )
-                .frame(width: 120)
-                .shadow(radius: 2)
                 
-                Spacer()
+                if !comment.text.isEmpty {
+                    Text(comment.text)
+                        .font(.caption2)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
             }
-            .frame(height: 100, alignment: .top)
-            .offset(x: -60) // Center the 120px card over the 3px line
+            .padding(6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(markerColor.opacity(0.9))
+            )
+            .frame(width: 120)
+            .shadow(radius: 2)
+            .offset(x: -60, y: 0) // Shift left by half the card width to center it
         }
-        .frame(width: 120, height: 100)
+        .frame(height: 100, alignment: .top)
     }
     
     private func formatTime(_ time: TimeInterval) -> String {
