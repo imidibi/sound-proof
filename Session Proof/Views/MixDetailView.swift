@@ -13,7 +13,7 @@ struct MixDetailView: View {
     @Bindable var mix: Mix
     @State private var audioPlayerService = AudioPlayerService()
     @State private var showingCommentSheet = false
-    @State private var showingInspector = true
+    @State private var showingInspector = false
     @State private var commentListener: ListenerRegistration?
     
     @Environment(\.modelContext) private var modelContext
@@ -129,19 +129,17 @@ struct MixDetailView: View {
                     Spacer()
                     
                     VStack(spacing: 12) {
-                        // Inspector button (iPad only)
-                        if UIDevice.current.userInterfaceIdiom == .pad {
-                            Button {
-                                showingInspector = true
-                            } label: {
-                                Image(systemName: "sidebar.right")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 56, height: 56)
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 4)
-                            }
+                        // Inspector button (iPhone and iPad)
+                        Button {
+                            showingInspector = true
+                        } label: {
+                            Image(systemName: "info.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.white)
+                                .frame(width: 56, height: 56)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                                .shadow(radius: 4)
                         }
                         
                         // Add comment button
