@@ -14,6 +14,7 @@ struct NewCommentSheet: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProjectSyncService.self) private var syncService
     
     @State private var commentText = ""
     @State private var selectedTimestamp: TimeInterval
@@ -21,6 +22,8 @@ struct NewCommentSheet: View {
     @State private var useTimeRange = false
     @State private var voiceNoteRecorder = VoiceNoteRecorder()
     @State private var recordedVoiceNoteURL: URL?
+    @State private var isSyncing = false
+    @State private var syncError: String?
     
     init(mix: Mix, timestamp: TimeInterval) {
         self.mix = mix
@@ -309,9 +312,54 @@ struct NewCommentSheet: View {
         
         do {
             try modelContext.save()
+            
+            // Sync to cloud if the mix is part of a synced project
+            Task {
+                await syncCommentToCloud(comment: comment)
+            }
+            
             dismiss()
         } catch {
             print("Error creating comment: \(error)")
+        }
+    }
+    
+    private func syncCommentToCloud(comment: Comment) async {
+        // Check if we have all the required IDs for syncing
+        guard let song = mix.song,
+              let project = song.project,
+              let projectId = project.firestoreId,
+              let songId = song.firestoreId,
+              let mixId = mix.firestoreId else {
+            print("⚠️ Comment not synced - mix is not part of a cloud-synced project")
+            return
+        }
+        
+        await MainActor.run {
+            isSyncing = true
+            syncError = nil
+        }
+        
+        do {
+            try await syncService.syncComment(
+                comment: comment,
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId,
+                voiceNoteURL: recordedVoiceNoteURL
+            )
+            
+            print("✅ Comment synced to cloud successfully")
+            
+            await MainActor.run {
+                isSyncing = false
+            }
+        } catch {
+            print("❌ Failed to sync comment: \(error.localizedDescription)")
+            await MainActor.run {
+                syncError = error.localizedDescription
+                isSyncing = false
+            }
         }
     }
     
