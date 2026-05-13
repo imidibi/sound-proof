@@ -17,12 +17,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Account") {
+                Section {
                     if let user = authService.currentUser {
                         LabeledContent("Email", value: user.email)
                         LabeledContent("Name", value: user.displayName)
                         LabeledContent("Role", value: user.role.rawValue.capitalized)
                     }
+                } header: {
+                    Text("Account")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
                 Section {
@@ -41,11 +45,16 @@ struct SettingsView: View {
                     .disabled(isLoggingOut)
                 }
                 
-                Section("About") {
+                Section {
                     LabeledContent("Version", value: appVersion)
                     LabeledContent("Build", value: buildNumber)
+                } header: {
+                    Text("About")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("Settings")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -73,7 +82,7 @@ struct SettingsView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 400, minHeight: 300)
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 400)
         #endif
     }
     
