@@ -337,16 +337,20 @@ struct WaveformView: View {
                 ForEach(Array(comments.enumerated()), id: \.element.id) { index, comment in
                     let commentPosition = (comment.timestamp / max(duration, 0.001)) * totalWaveformWidth
                     let (verticalOffset, colorIndex) = calculateCommentOffset(for: comment, at: index, in: comments)
+                    let isSelected = selectedComment?.id == comment.id
                     CommentMarkerView(
                         comment: comment,
                         duration: duration,
-                        isSelected: selectedComment?.id == comment.id,
+                        isSelected: isSelected,
                         colorIndex: colorIndex
                     )
                     .offset(x: playheadX + (commentPosition - scrollOffset), y: verticalOffset)
+                    .zIndex(isSelected ? 1000 : Double(index)) // Selected comments on top
                     .onTapGesture {
                         #if os(iOS)
-                        // On iOS, single tap opens the comment
+                        // On iOS, select first, then open
+                        selectedComment = comment
+                        onSeek(comment.timestamp)
                         commentToEdit = comment
                         #else
                         // On macOS, single click just selects and seeks
@@ -505,7 +509,7 @@ struct WaveformView: View {
         }
         
         // Stagger vertically and assign different colors
-        let verticalOffset = CGFloat(position) * 25.0 // Offset by 25 points each
+        let verticalOffset = CGFloat(position) * 40.0 // Offset by 40 points each for easier selection
         let colorIndex = position % 6 // Cycle through 6 colors
         
         return (verticalOffset, colorIndex)
@@ -536,42 +540,50 @@ struct CommentMarkerView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Comment preview card (positioned above the line)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
-                        .font(.caption2)
-                    
-                    Text(formatTime(comment.timestamp))
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                }
-                
-                if !comment.text.isEmpty {
-                    Text(comment.text)
-                        .font(.caption2)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
+        ZStack(alignment: .top) {
+            // Marker line - positioned at x=0 (the exact timestamp)
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(markerColor)
+                    .frame(width: 3)
+                    .opacity(0.8)
             }
-            .padding(6)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(markerColor.opacity(0.9))
-            )
-            .frame(width: 120)
-            .shadow(radius: 2)
-            .offset(x: -60) // Center the card so the line below is at the exact position
+            .frame(height: 100, alignment: .top)
             
-            // Marker line (this is at the exact timestamp position)
-            Rectangle()
-                .fill(markerColor)
-                .frame(width: 3)
-                .opacity(0.8)
+            // Comment preview card - offset to left so it's centered above the line
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
+                            .font(.caption2)
+                        
+                        Text(formatTime(comment.timestamp))
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
+                    
+                    if !comment.text.isEmpty {
+                        Text(comment.text)
+                            .font(.caption2)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(markerColor.opacity(0.9))
+                )
+                .frame(width: 120)
+                .shadow(radius: 2)
+                
+                Spacer()
+            }
+            .frame(height: 100, alignment: .top)
+            .offset(x: -60) // Center the 120px card over the 3px line
         }
-        .frame(height: 100, alignment: .top)
+        .frame(width: 120, height: 100)
     }
     
     private func formatTime(_ time: TimeInterval) -> String {
