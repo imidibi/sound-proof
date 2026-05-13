@@ -365,6 +365,15 @@ struct ProjectFolderRow: View {
                     }
                 }
             }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if canDelete {
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
             
             // Expanded songs
             if isExpanded {
@@ -518,6 +527,15 @@ struct SongFolderRow: View {
                     }
                 }
             }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if canDelete {
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
             
             // Expanded mixes
             if isExpanded {
@@ -626,6 +644,15 @@ struct MixRow: View {
                     showingDeleteConfirmation = true
                 } label: {
                     Label("Delete Mix", systemImage: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if canDelete {
+                Button(role: .destructive) {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
         }
