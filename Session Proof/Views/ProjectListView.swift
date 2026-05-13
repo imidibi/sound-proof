@@ -266,24 +266,27 @@ struct ProjectFolderRow: View {
                 
                 Image(systemName: "folder.fill")
                     .foregroundStyle(.blue)
+                    .font(.title3)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     if isEditingName {
                         TextField("Project Name", text: $project.name)
                             .textFieldStyle(.plain)
-                            .font(.headline)
+                            .font(.title3)
+                            .fontWeight(.semibold)
                             .focused($isNameFieldFocused)
                             .onSubmit {
                                 isEditingName = false
                             }
                     } else {
                         Text(project.name)
-                            .font(.headline)
+                            .font(.title3)
+                            .fontWeight(.semibold)
                     }
                     
                     if let clientName = project.clientName {
                         Text(clientName)
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -316,7 +319,7 @@ struct ProjectFolderRow: View {
                     StatusBadge(status: project.status)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 8)
             .padding(.horizontal, 8)
             .background(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
             .cornerRadius(6)
@@ -326,6 +329,15 @@ struct ProjectFolderRow: View {
                 selectedProjectForMenu = project
                 selectedSongForMenu = nil
                 onToggleExpand()
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if canDelete {
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
             .contextMenu {
                 if project.shareCode != nil {
@@ -362,15 +374,6 @@ struct ProjectFolderRow: View {
                         showingDeleteConfirmation = true
                     } label: {
                         Label("Delete Project", systemImage: "trash")
-                    }
-                }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if canDelete {
-                    Button(role: .destructive) {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
                     }
                 }
             }
@@ -468,27 +471,30 @@ struct SongFolderRow: View {
                 
                 Image(systemName: "music.note")
                     .foregroundStyle(.green)
+                    .font(.title3)
                 
                 if isEditingName {
                     TextField("Song Name", text: $song.name)
                         .textFieldStyle(.plain)
-                        .font(.subheadline)
+                        .font(.body)
+                        .fontWeight(.medium)
                         .focused($isNameFieldFocused)
                         .onSubmit {
                             isEditingName = false
                         }
                 } else {
                     Text(song.name)
-                        .font(.subheadline)
+                        .font(.body)
+                        .fontWeight(.medium)
                 }
                 
                 Spacer()
                 
                 Text("\(song.mixes.count)")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
             .padding(.horizontal, 8)
             .background(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
             .cornerRadius(6)
@@ -498,6 +504,15 @@ struct SongFolderRow: View {
                 selectedSongForMenu = song
                 selectedProjectForMenu = nil
                 onToggleExpand()
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if canDelete {
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
             .contextMenu {
                 Button {
@@ -524,15 +539,6 @@ struct SongFolderRow: View {
                         showingDeleteConfirmation = true
                     } label: {
                         Label("Delete Song", systemImage: "trash")
-                    }
-                }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if canDelete {
-                    Button(role: .destructive) {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
                     }
                 }
             }
@@ -595,25 +601,26 @@ struct MixRow: View {
         HStack {
             Image(systemName: "waveform")
                 .foregroundStyle(isSelected ? .blue : .secondary)
+                .font(.body)
             
             VStack(alignment: .leading, spacing: 2) {
                 if isEditingName {
                     TextField("Mix Name", text: $mix.name)
                         .textFieldStyle(.plain)
-                        .font(.caption)
+                        .font(.callout)
                         .focused($isNameFieldFocused)
                         .onSubmit {
                             isEditingName = false
                         }
                 } else {
                     Text(mix.name)
-                        .font(.caption)
+                        .font(.callout)
                         .fontWeight(isSelected ? .semibold : .regular)
                 }
                 
                 if let notes = mix.notes, !notes.isEmpty {
                     Text(notes)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -623,7 +630,7 @@ struct MixRow: View {
             
             MixStatusBadge(status: mix.approvalStatus)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect()
