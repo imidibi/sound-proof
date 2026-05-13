@@ -272,8 +272,11 @@ class ProjectSyncService {
         mix: Mix,
         modelContext: ModelContext
     ) -> FirebaseFirestore.ListenerRegistration {
+        print("👂 Setting up comment listener for project: \(projectId), mix: \(mixId)")
         return firestoreService.listenToComments(projectId: projectId, mixId: mixId) { [weak self] documents in
             guard let self = self else { return }
+            
+            print("📬 Received \(documents.count) comment documents from Firestore")
             
             Task { @MainActor in
                 for document in documents {
