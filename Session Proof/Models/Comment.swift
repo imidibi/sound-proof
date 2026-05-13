@@ -33,9 +33,33 @@ final class Comment {
     var resolvedVoiceNoteURL: URL? {
         if let fileName = voiceNoteFileName {
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            return documentsPath.appendingPathComponent(fileName)
+            let resolvedURL = documentsPath.appendingPathComponent(fileName)
+            
+            // Debug: check if file exists
+            let exists = FileManager.default.fileExists(atPath: resolvedURL.path)
+            if !exists {
+                print("⚠️ Voice note file not found for comment:")
+                print("   Comment ID: \(id)")
+                print("   Filename: \(fileName)")
+                print("   Resolved path: \(resolvedURL.path)")
+                print("   Documents directory: \(documentsPath.path)")
+            }
+            
+            return resolvedURL
         }
-        return voiceNoteURL // Fallback to legacy full URL
+        
+        // Fallback to legacy full URL
+        if let legacyURL = voiceNoteURL {
+            let exists = FileManager.default.fileExists(atPath: legacyURL.path)
+            if !exists {
+                print("⚠️ Legacy voice note URL file not found:")
+                print("   Comment ID: \(id)")
+                print("   Legacy URL: \(legacyURL)")
+            }
+            return legacyURL
+        }
+        
+        return nil
     }
     
     var song: Song?

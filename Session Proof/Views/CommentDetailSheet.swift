@@ -303,6 +303,29 @@ struct CommentDetailSheet: View {
     }
     
     private func playVoiceNote(url: URL) {
+        // Debug: Check if file exists
+        let fileExists = FileManager.default.fileExists(atPath: url.path)
+        print("🎵 Attempting to play voice note:")
+        print("   URL: \(url)")
+        print("   Path: \(url.path)")
+        print("   File exists: \(fileExists)")
+        
+        if !fileExists {
+            print("❌ Voice note file does not exist at path")
+            return
+        }
+        
+        // Check file size
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let fileSize = attributes[.size] as? Int64 {
+            print("   File size: \(fileSize) bytes")
+            
+            if fileSize == 0 {
+                print("❌ Voice note file is empty (0 bytes)")
+                return
+            }
+        }
+        
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.delegate = VoiceNotePlayerDelegate(onFinish: {
@@ -311,6 +334,8 @@ struct CommentDetailSheet: View {
                 voiceNoteTimer?.invalidate()
                 voiceNoteTimer = nil
             })
+            
+            print("✅ Audio player created, duration: \(audioPlayer?.duration ?? 0)s")
             audioPlayer?.play()
             isPlayingVoiceNote = true
             
@@ -321,7 +346,10 @@ struct CommentDetailSheet: View {
                 }
             }
         } catch {
-            print("Error playing voice note: \(error)")
+            print("❌ Error creating/playing voice note:")
+            print("   Error: \(error)")
+            print("   Error code: \((error as NSError).code)")
+            print("   Error domain: \((error as NSError).domain)")
         }
     }
     
