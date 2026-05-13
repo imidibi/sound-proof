@@ -365,7 +365,7 @@ struct CommentRowView: View {
                     .font(.caption)
             }
             
-            if comment.voiceNoteURL != nil {
+            if comment.resolvedVoiceNoteURL != nil {
                 HStack(spacing: 4) {
                     Image(systemName: "waveform")
                     Text("Voice note")

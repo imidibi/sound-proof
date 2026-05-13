@@ -54,7 +54,7 @@ struct CommentDetailSheet: View {
                         .fontWeight(.semibold)
                 }
                 
-                if comment.voiceNoteURL != nil {
+                if comment.resolvedVoiceNoteURL != nil {
                     Section {
                         voiceNoteCard
                     } header: {
@@ -252,7 +252,7 @@ struct CommentDetailSheet: View {
     
     @ViewBuilder
     private var voiceNoteCard: some View {
-        if let url = comment.voiceNoteURL {
+        if let url = comment.resolvedVoiceNoteURL {
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     Button {

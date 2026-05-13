@@ -21,12 +21,22 @@ final class Comment {
     var timestamp: TimeInterval
     var endTimestamp: TimeInterval?
     var text: String
-    var voiceNoteURL: URL?
+    var voiceNoteURL: URL? // Legacy - for backward compatibility
+    var voiceNoteFileName: String? // Relative filename in documents directory
     var drawingData: Data?
     var status: CommentStatus
     var createdAt: Date
     var authorID: String
     var authorName: String
+    
+    // Computed property to get the current full URL from the relative filename
+    var resolvedVoiceNoteURL: URL? {
+        if let fileName = voiceNoteFileName {
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            return documentsPath.appendingPathComponent(fileName)
+        }
+        return voiceNoteURL // Fallback to legacy full URL
+    }
     
     var song: Song?
     var mix: Mix?
@@ -37,6 +47,7 @@ final class Comment {
         endTimestamp: TimeInterval? = nil,
         text: String = "",
         voiceNoteURL: URL? = nil,
+        voiceNoteFileName: String? = nil,
         drawingData: Data? = nil,
         status: CommentStatus = .open,
         createdAt: Date = Date(),
@@ -48,6 +59,7 @@ final class Comment {
         self.endTimestamp = endTimestamp
         self.text = text
         self.voiceNoteURL = voiceNoteURL
+        self.voiceNoteFileName = voiceNoteFileName
         self.drawingData = drawingData
         self.status = status
         self.createdAt = createdAt

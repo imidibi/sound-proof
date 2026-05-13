@@ -284,11 +284,18 @@ struct NewCommentSheet: View {
     }
     
     private func createComment() {
+        // Extract filename from URL if present
+        var fileName: String?
+        if let url = recordedVoiceNoteURL {
+            fileName = url.lastPathComponent
+        }
+        
         let comment = Comment(
             timestamp: selectedTimestamp,
             endTimestamp: useTimeRange ? endTimestamp : nil,
             text: commentText,
             voiceNoteURL: recordedVoiceNoteURL,
+            voiceNoteFileName: fileName,
             authorID: "current-user",
             authorName: "You"
         )

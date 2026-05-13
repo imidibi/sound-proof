@@ -493,7 +493,7 @@ struct CommentMarkerView: View {
             // Comment preview card
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: comment.voiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
+                    Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
                         .font(.caption2)
                     
                     Text(formatTime(comment.timestamp))
