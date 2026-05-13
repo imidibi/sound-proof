@@ -137,6 +137,16 @@ struct ProjectListView: View {
             #endif
             .navigationTitle("Sound Proof")
             .toolbar {
+                #if os(macOS)
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+                    } label: {
+                        Label("Toggle Sidebar", systemImage: "sidebar.left")
+                    }
+                }
+                #endif
+                
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         // Always show New Project
@@ -178,6 +188,15 @@ struct ProjectListView: View {
                     }
                 }
                 
+                #if os(macOS)
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+                #else
                 ToolbarItem(placement: .automatic) {
                     Button {
                         showingSettings = true
@@ -185,6 +204,7 @@ struct ProjectListView: View {
                         Label("Settings", systemImage: "gear")
                     }
                 }
+                #endif
                 
                 // Sync status indicator
                 ToolbarItem(placement: .status) {
