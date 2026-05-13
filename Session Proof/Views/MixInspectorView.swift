@@ -355,6 +355,17 @@ struct CommentRowView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(.blue)
                 
+                // Sync status badge
+                if comment.needsSync {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                            .font(.caption2)
+                        Text("Syncing")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.orange)
+                }
+                
                 Spacer()
                 
                 CommentStatusIndicator(status: comment.status)

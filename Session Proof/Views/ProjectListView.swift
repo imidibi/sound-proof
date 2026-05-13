@@ -11,6 +11,8 @@ import SwiftData
 struct ProjectListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(NetworkMonitor.self) private var networkMonitor
+    @Environment(SyncQueueService.self) private var syncQueueService
     @Query(sort: \Project.updatedAt, order: .reverse) private var projects: [Project]
     @State private var selectedMix: Mix?
     @State private var selectedSongForMenu: Song?
@@ -119,6 +121,33 @@ struct ProjectListView: View {
                         showingSettings = true
                     } label: {
                         Label("Settings", systemImage: "gear")
+                    }
+                }
+                
+                // Sync status indicator
+                ToolbarItem(placement: .status) {
+                    HStack(spacing: 8) {
+                        // Network status
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(networkMonitor.isConnected ? Color.green : Color.red)
+                                .frame(width: 6, height: 6)
+                            Text(networkMonitor.isConnected ? "Online" : "Offline")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        // Pending sync count
+                        if syncQueueService.pendingSyncCount > 0 {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                                Text("\(syncQueueService.pendingSyncCount) pending")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }

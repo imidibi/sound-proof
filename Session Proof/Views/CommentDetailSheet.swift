@@ -16,6 +16,7 @@ struct CommentDetailSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationService.self) private var authService
+    @Environment(ProjectSyncService.self) private var syncService
     
     @State private var isEditing = false
     @State private var editedText: String
@@ -24,6 +25,7 @@ struct CommentDetailSheet: View {
     @State private var isPlayingVoiceNote = false
     @State private var voiceNoteTimer: Timer?
     @State private var voiceNoteProgress: Double = 0
+    @State private var isDownloadingVoiceNote = false
     
     init(comment: Comment, onSeek: @escaping (TimeInterval) -> Void) {
         self.comment = comment
@@ -252,7 +254,17 @@ struct CommentDetailSheet: View {
     
     @ViewBuilder
     private var voiceNoteCard: some View {
-        if let url = comment.resolvedVoiceNoteURL {
+        if comment.voiceNoteURL != nil || comment.voiceNoteFileName != nil {
+            // Show voice note UI even if file doesn't exist locally yet
+            voiceNoteCardContent
+        }
+    }
+    
+    @ViewBuilder
+    private var voiceNoteCardContent: some View {
+        if let url = comment.resolvedVoiceNoteURL,
+           FileManager.default.fileExists(atPath: url.path) {
+            // File exists locally - show playback controls
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     Button {
@@ -298,6 +310,53 @@ struct CommentDetailSheet: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.green.opacity(0.3), lineWidth: isPlayingVoiceNote ? 2 : 1)
+            )
+        } else {
+            // Voice note file doesn't exist locally
+            VStack(spacing: 12) {
+                HStack(spacing: 16) {
+                    if isDownloadingVoiceNote {
+                        ProgressView()
+                            .controlSize(.large)
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 44))
+                            .foregroundStyle(.orange)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(isDownloadingVoiceNote ? "Downloading..." : "Voice Note Unavailable")
+                            .font(.headline)
+                        
+                        Text(isDownloadingVoiceNote ? "Fetching from cloud" : "File not found locally")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // Show download button if we have a cloud URL
+                    if !isDownloadingVoiceNote, comment.voiceNoteCloudURL != nil {
+                        Button {
+                            Task {
+                                await downloadVoiceNote()
+                            }
+                        } label: {
+                            Label("Download", systemImage: "arrow.down.circle.fill")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.05))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
             )
         }
     }
@@ -367,6 +426,27 @@ struct CommentDetailSheet: View {
         voiceNoteProgress = 0
         voiceNoteTimer?.invalidate()
         voiceNoteTimer = nil
+    }
+    
+    private func downloadVoiceNote() async {
+        isDownloadingVoiceNote = true
+        
+        let success = await syncService.downloadMissingVoiceNote(for: comment)
+        
+        await MainActor.run {
+            isDownloadingVoiceNote = false
+            
+            if success {
+                print("✅ Voice note successfully re-downloaded")
+                // Trigger view update by checking the file exists
+                if let url = comment.resolvedVoiceNoteURL,
+                   FileManager.default.fileExists(atPath: url.path) {
+                    print("✅ Voice note now available for playback")
+                }
+            } else {
+                print("❌ Failed to download voice note")
+            }
+        }
     }
     
     private func saveChanges() {

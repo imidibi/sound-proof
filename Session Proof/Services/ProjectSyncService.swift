@@ -322,8 +322,10 @@ class ProjectSyncService {
                     text: text,
                     voiceNoteURL: nil,
                     voiceNoteFileName: nil,
+                    voiceNoteCloudURL: data["voiceNoteURL"] as? String,
                     authorID: authorID,
-                    authorName: authorName
+                    authorName: authorName,
+                    needsSync: false  // Already synced from cloud
                 )
                 
                 if let statusString = data["status"] as? String,
@@ -360,6 +362,26 @@ class ProjectSyncService {
         } catch {
             print("❌ Error checking for existing comment: \(error)")
         }
+    }
+    
+    // Public method for downloading voice notes on demand
+    func downloadMissingVoiceNote(for comment: Comment) async -> Bool {
+        guard let cloudURL = comment.voiceNoteCloudURL else {
+            print("⚠️ No cloud URL available for voice note")
+            return false
+        }
+        
+        let commentId = comment.id.uuidString
+        await downloadVoiceNote(cloudURL: cloudURL, commentId: commentId, comment: comment)
+        
+        // Check if download was successful
+        if let fileName = comment.voiceNoteFileName {
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let localURL = documentsPath.appendingPathComponent(fileName)
+            return FileManager.default.fileExists(atPath: localURL.path)
+        }
+        
+        return false
     }
     
     private func downloadVoiceNote(

@@ -15,6 +15,8 @@ struct Session_ProofApp: App {
     @State private var firestoreService: FirestoreService
     @State private var cloudStorageService: CloudStorageService
     @State private var syncService: ProjectSyncService
+    @State private var networkMonitor: NetworkMonitor
+    @State private var syncQueueService: SyncQueueService
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -47,11 +49,15 @@ struct Session_ProofApp: App {
             cloudStorageService: cloudStorage,
             authService: auth
         )
+        let network = NetworkMonitor()
+        let syncQueue = SyncQueueService(syncService: sync)
         
         _authService = State(initialValue: auth)
         _firestoreService = State(initialValue: firestore)
         _cloudStorageService = State(initialValue: cloudStorage)
         _syncService = State(initialValue: sync)
+        _networkMonitor = State(initialValue: network)
+        _syncQueueService = State(initialValue: syncQueue)
     }
 
     var body: some Scene {
@@ -65,6 +71,8 @@ struct Session_ProofApp: App {
                     .environment(firestoreService)
                     .environment(cloudStorageService)
                     .environment(syncService)
+                    .environment(networkMonitor)
+                    .environment(syncQueueService)
             } else {
                 AuthenticationView()
                     .environment(authService)

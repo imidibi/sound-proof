@@ -332,6 +332,12 @@ struct NewCommentSheet: View {
               let songId = song.firestoreId,
               let mixId = mix.firestoreId else {
             print("⚠️ Comment not synced - mix is not part of a cloud-synced project")
+            
+            // Mark as not needing sync since it's local-only
+            await MainActor.run {
+                comment.needsSync = false
+                comment.syncError = "Not part of synced project"
+            }
             return
         }
         
@@ -352,11 +358,18 @@ struct NewCommentSheet: View {
             print("✅ Comment synced to cloud successfully")
             
             await MainActor.run {
+                comment.needsSync = false
+                comment.syncError = nil
                 isSyncing = false
             }
         } catch {
             print("❌ Failed to sync comment: \(error.localizedDescription)")
+            print("💾 Comment saved locally - will retry when online")
+            
             await MainActor.run {
+                comment.needsSync = true
+                comment.syncError = error.localizedDescription
+                comment.lastSyncAttempt = Date()
                 syncError = error.localizedDescription
                 isSyncing = false
             }

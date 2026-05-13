@@ -12,6 +12,8 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
     @Environment(ProjectSyncService.self) private var syncService
+    @Environment(NetworkMonitor.self) private var networkMonitor
+    @Environment(SyncQueueService.self) private var syncQueueService
     
     @State private var hasSyncedOnce = false
     
@@ -35,6 +37,17 @@ struct ContentView: View {
                         }
                     }
                 }
+                
+                // Setup network monitoring for automatic sync on reconnect
+                networkMonitor.onConnectionRestored = {
+                    Task {
+                        print("🔄 Network restored - processing pending syncs")
+                        await syncQueueService.processPendingSyncs(modelContext: modelContext)
+                    }
+                }
+                
+                // Update pending sync count on app start
+                await syncQueueService.updatePendingCount(modelContext: modelContext)
             }
     }
 }

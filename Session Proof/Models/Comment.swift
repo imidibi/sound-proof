@@ -23,11 +23,17 @@ final class Comment {
     var text: String
     var voiceNoteURL: URL? // Legacy - for backward compatibility
     var voiceNoteFileName: String? // Relative filename in documents directory
+    var voiceNoteCloudURL: String? // Cloud storage URL for re-downloading if needed
     var drawingData: Data?
     var status: CommentStatus
     var createdAt: Date
     var authorID: String
     var authorName: String
+    
+    // Sync tracking
+    var needsSync: Bool = true // True if not yet synced to cloud
+    var lastSyncAttempt: Date? // Last time we tried to sync
+    var syncError: String? // Last sync error message if any
     
     // Computed property to get the current full URL from the relative filename
     var resolvedVoiceNoteURL: URL? {
@@ -72,11 +78,13 @@ final class Comment {
         text: String = "",
         voiceNoteURL: URL? = nil,
         voiceNoteFileName: String? = nil,
+        voiceNoteCloudURL: String? = nil,
         drawingData: Data? = nil,
         status: CommentStatus = .open,
         createdAt: Date = Date(),
         authorID: String,
-        authorName: String
+        authorName: String,
+        needsSync: Bool = true
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -84,10 +92,12 @@ final class Comment {
         self.text = text
         self.voiceNoteURL = voiceNoteURL
         self.voiceNoteFileName = voiceNoteFileName
+        self.voiceNoteCloudURL = voiceNoteCloudURL
         self.drawingData = drawingData
         self.status = status
         self.createdAt = createdAt
         self.authorID = authorID
         self.authorName = authorName
+        self.needsSync = needsSync
     }
 }
