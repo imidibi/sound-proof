@@ -45,6 +45,37 @@ struct ProjectListView: View {
                                 }
                             }
                         )
+                        
+                        // Expanded songs as direct List children for swipe actions
+                        if expandedProjects.contains(project.id) {
+                            ForEach(project.songs.sorted { $0.sortOrder < $1.sortOrder }) { song in
+                                SongFolderRow(
+                                    song: song,
+                                    isExpanded: expandedSongs.contains(song.id),
+                                    selectedMix: $selectedMix,
+                                    selectedProjectForMenu: $selectedProjectForMenu,
+                                    selectedSongForMenu: $selectedSongForMenu,
+                                    onToggleExpand: {
+                                        if expandedSongs.contains(song.id) {
+                                            expandedSongs.remove(song.id)
+                                        } else {
+                                            expandedSongs.insert(song.id)
+                                        }
+                                    }
+                                )
+                                .padding(.leading, 32)
+                                
+                                // Expanded mixes as direct List children for swipe actions
+                                if expandedSongs.contains(song.id) {
+                                    ForEach(song.mixes.sorted { $0.versionNumber < $1.versionNumber }) { mix in
+                                        MixRow(mix: mix, isSelected: selectedMix?.id == mix.id, onSelect: {
+                                            selectedMix = mix
+                                        })
+                                        .padding(.leading, 64)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -66,6 +97,37 @@ struct ProjectListView: View {
                                     }
                                 }
                             )
+                            
+                            // Expanded songs as direct List children for swipe actions
+                            if expandedProjects.contains(project.id) {
+                                ForEach(project.songs.sorted { $0.sortOrder < $1.sortOrder }) { song in
+                                    SongFolderRow(
+                                        song: song,
+                                        isExpanded: expandedSongs.contains(song.id),
+                                        selectedMix: $selectedMix,
+                                        selectedProjectForMenu: $selectedProjectForMenu,
+                                        selectedSongForMenu: $selectedSongForMenu,
+                                        onToggleExpand: {
+                                            if expandedSongs.contains(song.id) {
+                                                expandedSongs.remove(song.id)
+                                            } else {
+                                                expandedSongs.insert(song.id)
+                                            }
+                                        }
+                                    )
+                                    .padding(.leading, 32)
+                                    
+                                    // Expanded mixes as direct List children for swipe actions
+                                    if expandedSongs.contains(song.id) {
+                                        ForEach(song.mixes.sorted { $0.versionNumber < $1.versionNumber }) { mix in
+                                            MixRow(mix: mix, isSelected: selectedMix?.id == mix.id, onSelect: {
+                                                selectedMix = mix
+                                            })
+                                            .padding(.leading, 64)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -377,27 +439,6 @@ struct ProjectFolderRow: View {
                     }
                 }
             }
-            
-            // Expanded songs
-            if isExpanded {
-                ForEach(sortedSongs) { song in
-                    SongFolderRow(
-                        song: song,
-                        isExpanded: expandedSongs.contains(song.id),
-                        selectedMix: $selectedMix,
-                        selectedProjectForMenu: $selectedProjectForMenu,
-                        selectedSongForMenu: $selectedSongForMenu,
-                        onToggleExpand: {
-                            if expandedSongs.contains(song.id) {
-                                expandedSongs.remove(song.id)
-                            } else {
-                                expandedSongs.insert(song.id)
-                            }
-                        }
-                    )
-                    .padding(.leading, 32)
-                }
-            }
         }
         .sheet(isPresented: $showingNewSongSheet) {
             NewSongSheet(project: project)
@@ -540,16 +581,6 @@ struct SongFolderRow: View {
                     } label: {
                         Label("Delete Song", systemImage: "trash")
                     }
-                }
-            }
-            
-            // Expanded mixes
-            if isExpanded {
-                ForEach(sortedMixes) { mix in
-                    MixRow(mix: mix, isSelected: selectedMix?.id == mix.id, onSelect: {
-                        selectedMix = mix
-                    })
-                    .padding(.leading, 32)
                 }
             }
         }
