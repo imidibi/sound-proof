@@ -252,11 +252,15 @@ struct WaveformView: View {
     
     @State private var selectedComment: Comment?
     @State private var commentToEdit: Comment?
+    @State private var isScrubbing = false
+    @State private var scrubbingTime: TimeInterval?
+    @State private var dragStartTime: TimeInterval?
     
     // Pre-calculate expensive values to avoid recalculating in body
     private var playbackPosition: Double {
         guard duration > 0 else { return 0 }
-        return currentTime / duration
+        let timeToUse = isScrubbing ? (scrubbingTime ?? currentTime) : currentTime
+        return timeToUse / duration
     }
     
     var body: some View {
@@ -371,22 +375,70 @@ struct WaveformView: View {
                 
                 // Fixed playhead at left edge
                 Rectangle()
-                    .fill(Color.blue)
-                    .frame(width: 3)
-                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 0)
+                    .fill(isScrubbing ? Color.orange : Color.blue)
+                    .frame(width: isScrubbing ? 4 : 3)
+                    .shadow(color: .black.opacity(0.5), radius: isScrubbing ? 6 : 4, x: 0, y: 0)
                     .position(x: playheadX, y: geometry.size.height / 2)
+                    .animation(.easeInOut(duration: 0.15), value: isScrubbing)
                     .zIndex(100)
+                
+                // Scrubbing time indicator
+                if isScrubbing, let scrubTime = scrubbingTime {
+                    VStack {
+                        Text(formatTime(scrubTime))
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.orange)
+                                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                            )
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 8)
+                    .zIndex(101)
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 0)
+                DragGesture(minimumDistance: 5)
                     .onChanged { value in
-                        // Convert tap/drag position to time relative to playhead
-                        let relativeX = value.location.x - playheadX
-                        let pixelOffset = scrollOffset + relativeX
-                        let position = pixelOffset / totalWaveformWidth
-                        let time = max(0, min(duration, duration * position))
-                        onSeek(time)
+                        if !isScrubbing {
+                            // Starting new drag
+                            isScrubbing = true
+                            dragStartTime = currentTime
+                        }
+                        
+                        guard let startTime = dragStartTime else { return }
+                        
+                        // Simple approach: drag distance directly maps to time
+                        // Dragging right = moving forward in time
+                        // Dragging left = moving backward in time
+                        let dragDistance = value.translation.width
+                        
+                        // Scale factor: how much time per pixel of drag
+                        // At 1x zoom, totalWaveformWidth represents the full duration
+                        let timePerPixel = duration / totalWaveformWidth
+                        let timeChange = dragDistance * timePerPixel
+                        
+                        let newTime = startTime + timeChange
+                        let clampedTime = max(0, min(duration, newTime))
+                        
+                        scrubbingTime = clampedTime
+                    }
+                    .onEnded { _ in
+                        // Seek to the scrubbed position
+                        if let time = scrubbingTime {
+                            onSeek(time)
+                        }
+                        isScrubbing = false
+                        scrubbingTime = nil
+                        dragStartTime = nil
                     }
             )
         }
@@ -415,6 +467,13 @@ struct WaveformView: View {
         // Simple linear interpolation between colors
         // In practice, SwiftUI will blend them
         return amount < 0.5 ? from : to
+    }
+    
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        let centiseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
+        return String(format: "%d:%02d.%02d", minutes, seconds, centiseconds)
     }
 }
 
