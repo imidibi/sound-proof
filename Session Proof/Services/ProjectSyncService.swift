@@ -295,10 +295,16 @@ class ProjectSyncService {
         let data = document.data()
         let commentId = document.documentID
         
+        // Convert commentId string to UUID for comparison
+        guard let commentUUID = UUID(uuidString: commentId) else {
+            print("⚠️ Invalid comment UUID: \(commentId)")
+            return
+        }
+        
         // Check if comment already exists locally
         let descriptor = FetchDescriptor<Comment>(
             predicate: #Predicate { comment in
-                comment.id.uuidString == commentId
+                comment.id == commentUUID
             }
         )
         
@@ -316,7 +322,7 @@ class ProjectSyncService {
                 }
                 
                 let comment = Comment(
-                    id: UUID(uuidString: commentId) ?? UUID(),
+                    id: commentUUID,
                     timestamp: timestamp,
                     endTimestamp: data["endTimestamp"] as? TimeInterval,
                     text: text,
