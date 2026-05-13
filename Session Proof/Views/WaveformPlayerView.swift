@@ -536,14 +536,8 @@ struct CommentMarkerView: View {
     }
     
     var body: some View {
-        VStack(spacing: 2) {
-            // Marker line
-            Rectangle()
-                .fill(markerColor)
-                .frame(width: 3)
-                .opacity(0.8)
-            
-            // Comment preview card
+        VStack(spacing: 0) {
+            // Comment preview card (positioned above the line)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Image(systemName: comment.resolvedVoiceNoteURL != nil ? "mic.fill" : "text.bubble.fill")
@@ -569,6 +563,13 @@ struct CommentMarkerView: View {
             )
             .frame(width: 120)
             .shadow(radius: 2)
+            .offset(x: -60) // Center the card so the line below is at the exact position
+            
+            // Marker line (this is at the exact timestamp position)
+            Rectangle()
+                .fill(markerColor)
+                .frame(width: 3)
+                .opacity(0.8)
         }
         .frame(height: 100, alignment: .top)
     }
