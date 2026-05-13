@@ -7,19 +7,32 @@
 
 import SwiftUI
 import SwiftData
+import FirebaseFirestore
 
 struct MixDetailView: View {
     @Bindable var mix: Mix
     @State private var audioPlayerService = AudioPlayerService()
     @State private var showingCommentSheet = false
     @State private var showingInspector = true
+    @State private var commentListener: ListenerRegistration?
+    
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProjectSyncService.self) private var syncService
     
     var body: some View {
-        #if os(macOS)
-        macOSLayout
-        #else
-        iOSLayout
-        #endif
+        Group {
+            #if os(macOS)
+            macOSLayout
+            #else
+            iOSLayout
+            #endif
+        }
+        .task(id: mix.id) {
+            await startCommentSync()
+        }
+        .onDisappear {
+            stopCommentSync()
+        }
     }
     
     #if os(macOS)
@@ -169,6 +182,34 @@ struct MixDetailView: View {
         }
     }
     #endif
+    
+    private func startCommentSync() async {
+        // Only start syncing if this mix is part of a synced project
+        guard let song = mix.song,
+              let project = song.project,
+              let projectId = project.firestoreId,
+              let mixId = mix.firestoreId else {
+            print("📝 Mix not part of synced project - comment sync disabled")
+            return
+        }
+        
+        print("🔄 Starting real-time comment sync for mix: \(mix.name)")
+        
+        await MainActor.run {
+            commentListener = syncService.startListeningToComments(
+                projectId: projectId,
+                mixId: mixId,
+                mix: mix,
+                modelContext: modelContext
+            )
+        }
+    }
+    
+    private func stopCommentSync() {
+        commentListener?.remove()
+        commentListener = nil
+        print("⏹️ Stopped comment sync")
+    }
 }
 
 struct MixHeaderView: View {

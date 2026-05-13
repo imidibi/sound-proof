@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import FirebaseFirestore
 
 @Observable
 class ProjectSyncService {
@@ -260,6 +261,139 @@ class ProjectSyncService {
         } catch {
             syncError = error.localizedDescription
             throw error
+        }
+    }
+    
+    // MARK: - Listen to Comments
+    
+    func startListeningToComments(
+        projectId: String,
+        mixId: String,
+        mix: Mix,
+        modelContext: ModelContext
+    ) -> FirebaseFirestore.ListenerRegistration {
+        return firestoreService.listenToComments(projectId: projectId, mixId: mixId) { [weak self] documents in
+            guard let self = self else { return }
+            
+            Task { @MainActor in
+                for document in documents {
+                    await self.processCommentFromCloud(
+                        document: document,
+                        mix: mix,
+                        modelContext: modelContext
+                    )
+                }
+            }
+        }
+    }
+    
+    private func processCommentFromCloud(
+        document: FirebaseFirestore.QueryDocumentSnapshot,
+        mix: Mix,
+        modelContext: ModelContext
+    ) async {
+        let data = document.data()
+        let commentId = document.documentID
+        
+        // Check if comment already exists locally
+        let descriptor = FetchDescriptor<Comment>(
+            predicate: #Predicate { comment in
+                comment.id.uuidString == commentId
+            }
+        )
+        
+        do {
+            let existingComments = try modelContext.fetch(descriptor)
+            
+            if existingComments.isEmpty {
+                // Create new local comment
+                guard let timestamp = data["timestamp"] as? TimeInterval,
+                      let text = data["text"] as? String,
+                      let authorID = data["authorID"] as? String,
+                      let authorName = data["authorName"] as? String else {
+                    print("⚠️ Invalid comment data")
+                    return
+                }
+                
+                let comment = Comment(
+                    id: UUID(uuidString: commentId) ?? UUID(),
+                    timestamp: timestamp,
+                    endTimestamp: data["endTimestamp"] as? TimeInterval,
+                    text: text,
+                    voiceNoteURL: nil,
+                    voiceNoteFileName: nil,
+                    authorID: authorID,
+                    authorName: authorName
+                )
+                
+                if let statusString = data["status"] as? String,
+                   let status = CommentStatus(rawValue: statusString) {
+                    comment.status = status
+                }
+                
+                // Handle voice note if present
+                if let voiceNoteCloudURL = data["voiceNoteURL"] as? String {
+                    // Download voice note in background
+                    Task {
+                        await downloadVoiceNote(
+                            cloudURL: voiceNoteCloudURL,
+                            commentId: commentId,
+                            comment: comment
+                        )
+                    }
+                }
+                
+                comment.mix = mix
+                if let song = mix.song {
+                    comment.song = song
+                }
+                
+                modelContext.insert(comment)
+                
+                do {
+                    try modelContext.save()
+                    print("✅ Comment synced from cloud: \(text.prefix(30))...")
+                } catch {
+                    print("❌ Failed to save comment: \(error)")
+                }
+            }
+        } catch {
+            print("❌ Error checking for existing comment: \(error)")
+        }
+    }
+    
+    private func downloadVoiceNote(
+        cloudURL: String,
+        commentId: String,
+        comment: Comment
+    ) async {
+        do {
+            // Download to documents directory
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileName = "voice_note_\(commentId).m4a"
+            let localURL = documentsPath.appendingPathComponent(fileName)
+            
+            // Check if file already exists
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                comment.voiceNoteFileName = fileName
+                return
+            }
+            
+            // Download from cloud storage
+            guard let url = URL(string: cloudURL) else {
+                print("⚠️ Invalid voice note URL")
+                return
+            }
+            
+            let (tempURL, _) = try await URLSession.shared.download(from: url)
+            try FileManager.default.moveItem(at: tempURL, to: localURL)
+            
+            await MainActor.run {
+                comment.voiceNoteFileName = fileName
+                print("✅ Voice note downloaded: \(fileName)")
+            }
+        } catch {
+            print("❌ Failed to download voice note: \(error)")
         }
     }
     
