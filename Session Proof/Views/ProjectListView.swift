@@ -24,9 +24,10 @@ struct ProjectListView: View {
     @State private var showingSettings = false
     @State private var expandedProjects: Set<UUID> = []
     @State private var expandedSongs: Set<UUID> = []
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $selectedMix) {
                 Section("Active Projects") {
                     ForEach(projects.filter { $0.status != .archived }) { project in
@@ -137,16 +138,6 @@ struct ProjectListView: View {
             #endif
             .navigationTitle("Sound Proof")
             .toolbar {
-                #if os(macOS)
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
-                    } label: {
-                        Label("Toggle Sidebar", systemImage: "sidebar.left")
-                    }
-                }
-                #endif
-                
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         // Always show New Project
