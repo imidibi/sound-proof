@@ -169,7 +169,7 @@ class FirestoreService {
         voiceNoteURL: String? = nil
     ) async throws -> String {
         let commentRef = db.collection("projects").document(projectId)
-            .collection("comments").document()
+            .collection("comments").document(comment.id.uuidString)
         
         var data: [String: Any] = [
             "songId": songId,

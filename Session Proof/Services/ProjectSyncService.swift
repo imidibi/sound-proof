@@ -295,11 +295,13 @@ class ProjectSyncService {
         let data = document.data()
         let commentId = document.documentID
         
-        // Convert commentId string to UUID for comparison
+        // Convert commentId string to UUID
         guard let commentUUID = UUID(uuidString: commentId) else {
-            print("⚠️ Invalid comment UUID: \(commentId)")
+            print("⚠️ Skipping comment with invalid UUID format: \(commentId)")
             return
         }
+        
+        print("📥 Processing comment from cloud: \(commentId)")
         
         // Check if comment already exists locally
         let descriptor = FetchDescriptor<Comment>(
