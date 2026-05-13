@@ -320,9 +320,14 @@ class ProjectSyncService {
                 // Create new local comment
                 guard let timestamp = data["timestamp"] as? TimeInterval,
                       let text = data["text"] as? String,
-                      let authorID = data["authorID"] as? String,
+                      let authorID = data["authorId"] as? String,
                       let authorName = data["authorName"] as? String else {
-                    print("⚠️ Invalid comment data")
+                    print("⚠️ Invalid comment data for \(commentId)")
+                    print("   - timestamp: \(data["timestamp"] ?? "missing")")
+                    print("   - text: \(data["text"] ?? "missing")")
+                    print("   - authorId: \(data["authorId"] ?? "missing")")
+                    print("   - authorName: \(data["authorName"] ?? "missing")")
+                    print("   - Available keys: \(data.keys.joined(separator: ", "))")
                     return
                 }
                 
