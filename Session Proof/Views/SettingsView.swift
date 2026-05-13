@@ -40,6 +40,11 @@ struct SettingsView: View {
                     }
                     .disabled(isLoggingOut)
                 }
+                
+                Section("About") {
+                    LabeledContent("Version", value: appVersion)
+                    LabeledContent("Build", value: buildNumber)
+                }
             }
             .navigationTitle("Settings")
             #if os(iOS)
@@ -70,6 +75,14 @@ struct SettingsView: View {
         #if os(macOS)
         .frame(minWidth: 400, minHeight: 300)
         #endif
+    }
+    
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+    }
+    
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
     }
     
     private func signOut() async {
