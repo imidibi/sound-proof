@@ -142,9 +142,11 @@ struct NewOrganizationSheet: View {
         
         do {
             try modelContext.save()
+            print("✅ Organization created: \(organization.name)")
+            print("   Member IDs: \(organization.memberIds)")
             dismiss()
         } catch {
-            print("Error creating organization: \(error)")
+            print("❌ Error creating organization: \(error)")
         }
     }
 }

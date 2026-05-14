@@ -25,7 +25,8 @@ struct Session_ProofApp: App {
             Mix.self,
             Comment.self,
             Reviewer.self,
-            Approval.self
+            Approval.self,
+            Organization.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
