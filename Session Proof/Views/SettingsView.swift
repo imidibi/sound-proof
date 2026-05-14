@@ -13,6 +13,7 @@ struct SettingsView: View {
     
     @State private var isLoggingOut = false
     @State private var showingLogoutConfirmation = false
+    @State private var showingOrganizationManagement = false
     
     var body: some View {
         NavigationStack {
@@ -22,11 +23,30 @@ struct SettingsView: View {
                         LabeledContent("Email", value: user.email)
                         LabeledContent("Name", value: user.displayName)
                         LabeledContent("Role", value: user.role.rawValue.capitalized)
+                        
+                        if let orgName = user.organizationName {
+                            LabeledContent("Organization", value: orgName)
+                        }
                     }
                 } header: {
                     Text("Account")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                }
+                
+                // Organization management (for studio owners and producers)
+                if let user = authService.currentUser, user.isProducer {
+                    Section {
+                        Button {
+                            showingOrganizationManagement = true
+                        } label: {
+                            Label("Manage Organization", systemImage: "building.2")
+                        }
+                    } header: {
+                        Text("Organization")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
                 }
                 
                 Section {
@@ -79,6 +99,9 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Are you sure you want to sign out?")
+            }
+            .sheet(isPresented: $showingOrganizationManagement) {
+                OrganizationManagementView()
             }
         }
         #if os(macOS)

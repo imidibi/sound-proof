@@ -138,6 +138,58 @@ struct ProjectListView: View {
             #endif
             .navigationTitle("Sound Proof")
             .toolbar {
+                #if os(macOS)
+                // Mac-specific toolbar layout
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+                
+                ToolbarItemGroup(placement: .automatic) {
+                    Menu {
+                        // Always show New Project
+                        Button {
+                            showingNewProjectSheet = true
+                        } label: {
+                            Label("New Project", systemImage: "folder.badge.plus")
+                        }
+                        
+                        // Show Join Project for artists
+                        if authService.currentUser?.role == .artist {
+                            Button {
+                                showingJoinProjectSheet = true
+                            } label: {
+                                Label("Join Project", systemImage: "link")
+                            }
+                        }
+                        
+                        // Context-aware options based on selection
+                        if let selectedProject = selectedProjectForMenu {
+                            Divider()
+                            Button {
+                                showingNewSongSheet = true
+                            } label: {
+                                Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
+                            }
+                        }
+                        
+                        if let selectedSong = selectedSongForMenu {
+                            Divider()
+                            Button {
+                                showingImportMixSheet = true
+                            } label: {
+                                Label("Import Mix to \(selectedSong.name)", systemImage: "square.and.arrow.down")
+                            }
+                        }
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                }
+                #else
+                // iOS toolbar layout
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         // Always show New Project
@@ -179,15 +231,6 @@ struct ProjectListView: View {
                     }
                 }
                 
-                #if os(macOS)
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Label("Settings", systemImage: "gear")
-                    }
-                }
-                #else
                 ToolbarItem(placement: .automatic) {
                     Button {
                         showingSettings = true
