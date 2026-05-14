@@ -27,9 +27,11 @@ final class Reviewer {
     var id: UUID
     var displayName: String
     var email: String
+    var userId: String? // Firebase user ID (populated when they join)
     var role: ReviewerRole
     var inviteStatus: ReviewerInviteStatus
     var createdAt: Date
+    var acceptedAt: Date? // When they accepted the invitation
     
     var project: Project?
     
@@ -40,15 +42,19 @@ final class Reviewer {
         id: UUID = UUID(),
         displayName: String,
         email: String,
+        userId: String? = nil,
         role: ReviewerRole = .reviewer,
         inviteStatus: ReviewerInviteStatus = .notSent,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        acceptedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
         self.email = email
+        self.userId = userId
         self.role = role
         self.inviteStatus = inviteStatus
         self.createdAt = createdAt
+        self.acceptedAt = acceptedAt
     }
 }

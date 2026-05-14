@@ -353,6 +353,8 @@ struct ProjectFolderRow: View {
     
     @State private var showingNewSongSheet = false
     @State private var showingShareSheet = false
+    @State private var showingEditProjectSheet = false
+    @State private var showingReviewersSheet = false
     @State private var isEditingName = false
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
@@ -467,10 +469,16 @@ struct ProjectFolderRow: View {
                 }
                 
                 Button {
+                    showingEditProjectSheet = true
+                } label: {
+                    Label("Edit Project", systemImage: "pencil")
+                }
+                
+                Button {
                     isEditingName = true
                     isNameFieldFocused = true
                 } label: {
-                    Label("Rename", systemImage: "pencil")
+                    Label("Rename", systemImage: "text.cursor")
                 }
                 
                 Divider()
@@ -481,6 +489,12 @@ struct ProjectFolderRow: View {
                     showingNewSongSheet = true
                 } label: {
                     Label("Add Song", systemImage: "music.note")
+                }
+                
+                Button {
+                    showingReviewersSheet = true
+                } label: {
+                    Label("Manage Reviewers", systemImage: "person.2")
                 }
                 
                 if canDelete {
@@ -499,6 +513,12 @@ struct ProjectFolderRow: View {
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareProjectSheet(project: project)
+        }
+        .sheet(isPresented: $showingEditProjectSheet) {
+            ProjectEditSheet(project: project)
+        }
+        .sheet(isPresented: $showingReviewersSheet) {
+            ProjectReviewersView(project: project)
         }
         .confirmationDialog(
             "Delete Project",

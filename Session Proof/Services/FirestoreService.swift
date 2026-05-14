@@ -221,6 +221,57 @@ class FirestoreService {
             }
     }
     
+    // MARK: - Reviewer Management
+    
+    func addReviewer(
+        projectId: String,
+        reviewer: Reviewer
+    ) async throws {
+        let reviewerRef = db.collection("projects").document(projectId).collection("reviewers").document(reviewer.id.uuidString)
+        
+        let data: [String: Any] = [
+            "displayName": reviewer.displayName,
+            "email": reviewer.email,
+            "userId": reviewer.userId as Any,
+            "role": reviewer.role.rawValue,
+            "inviteStatus": reviewer.inviteStatus.rawValue,
+            "createdAt": Timestamp(date: reviewer.createdAt),
+            "acceptedAt": reviewer.acceptedAt != nil ? Timestamp(date: reviewer.acceptedAt!) : NSNull()
+        ]
+        
+        try await reviewerRef.setData(data)
+    }
+    
+    func updateReviewer(
+        projectId: String,
+        reviewerId: String,
+        data: [String: Any]
+    ) async throws {
+        try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .updateData(data)
+    }
+    
+    func removeReviewer(
+        projectId: String,
+        reviewerId: String
+    ) async throws {
+        try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .delete()
+    }
+    
+    func getProjectReviewers(projectId: String) async throws -> [(id: String, data: [String: Any])] {
+        let snapshot = try await db.collection("projects")
+            .document(projectId)
+            .collection("reviewers")
+            .getDocuments()
+        
+        return snapshot.documents.map { document in
+            (document.documentID, document.data())
+        }
+    }
+    
     // MARK: - Share Code
     
     private func generateShareCode() -> String {

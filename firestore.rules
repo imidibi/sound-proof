@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the project
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+    }
+
+    // Helper function to check if user is a reviewer on the project
+    function isProjectReviewer(projectId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/projects/$(projectId)/reviewers/$(request.auth.uid));
+    }
+
+    // Helper function to check if user is producer or studio
+    function isProducer() {
+      return isSignedIn() &&
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'producer' ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'studio');
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Projects collection
+    match /projects/{projectId} {
+      allow read: if isSignedIn() &&
+                     (isProjectOwner(projectId) || isProjectReviewer(projectId));
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && isProjectOwner(projectId);
+      allow delete: if isSignedIn() && isProjectOwner(projectId);
+
+      // Reviewers subcollection
+      match /reviewers/{reviewerId} {
+        allow read: if isSignedIn() &&
+                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
+        allow create: if isSignedIn() && isProjectOwner(projectId);
+        allow update: if isSignedIn() && isProjectOwner(projectId);
+        allow delete: if isSignedIn() && isProjectOwner(projectId);
+      }
+
+      // Songs subcollection
+      match /songs/{songId} {
+        allow read: if isSignedIn() &&
+                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
+        allow write: if isSignedIn() && isProjectOwner(projectId);
+
+        // Mixes subcollection
+        match /mixes/{mixId} {
+          allow read: if isSignedIn() &&
+                         (isProjectOwner(projectId) || isProjectReviewer(projectId));
+          allow write: if isSignedIn() && isProjectOwner(projectId);
+        }
+      }
+
+      // Comments subcollection
+      match /comments/{commentId} {
+        allow read: if isSignedIn() &&
+                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
+        allow create: if isSignedIn() &&
+                         (isProjectOwner(projectId) || isProjectReviewer(projectId));
+        allow update: if isSignedIn() &&
+                         (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+        allow delete: if isSignedIn() &&
+                         (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+      }
+    }
+  }
+}

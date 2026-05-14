@@ -212,10 +212,32 @@ class ProjectSyncService {
                 lastSyncedAt: Date()
             )
             
+            // Create reviewer entry for the joining user
+            guard let currentUser = authService.currentUser else {
+                throw NSError(domain: "ProjectSync", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+            }
+            
+            let reviewer = Reviewer(
+                displayName: currentUser.displayName,
+                email: currentUser.email,
+                userId: currentUser.id,
+                role: .reviewer,
+                inviteStatus: .accepted,
+                acceptedAt: Date()
+            )
+            reviewer.project = project
+            
             await MainActor.run {
                 modelContext.insert(project)
+                modelContext.insert(reviewer)
                 try? modelContext.save()
             }
+            
+            // Add reviewer to Firestore
+            try await firestoreService.addReviewer(
+                projectId: firestoreId,
+                reviewer: reviewer
+            )
             
             return project
             
@@ -614,5 +636,21 @@ class ProjectSyncService {
                 print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
             }
         }
+    }
+    
+    // MARK: - Reviewer Management
+    
+    func addReviewer(
+        projectId: String,
+        reviewer: Reviewer
+    ) async throws {
+        try await firestoreService.addReviewer(projectId: projectId, reviewer: reviewer)
+    }
+    
+    func removeReviewer(
+        projectId: String,
+        reviewerId: String
+    ) async throws {
+        try await firestoreService.removeReviewer(projectId: projectId, reviewerId: reviewerId)
     }
 }
