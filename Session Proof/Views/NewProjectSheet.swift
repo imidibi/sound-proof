@@ -23,16 +23,33 @@ struct NewProjectSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Project Details") {
+                Section {
                     TextField("Project Name", text: $projectName)
                     TextField("Client Name (Optional)", text: $clientName)
+                } header: {
+                    Text("Project Details")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
-                Section("Notes") {
+                Section {
                     TextEditor(text: $notes)
                         .frame(minHeight: 100)
+                } header: {
+                    Text("Notes")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                    }
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("New Project")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -62,7 +79,7 @@ struct NewProjectSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 400, minHeight: 350)
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 400)
         #endif
     }
     

@@ -131,7 +131,7 @@ struct NewSongSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 500, minHeight: 500)
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 500)
         #endif
     }
     
