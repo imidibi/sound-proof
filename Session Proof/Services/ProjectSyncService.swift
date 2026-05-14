@@ -239,6 +239,20 @@ class ProjectSyncService {
                 reviewer: reviewer
             )
             
+            // Sync existing reviewers from Firestore
+            try await syncProjectReviewers(
+                projectId: firestoreId,
+                project: project,
+                modelContext: modelContext
+            )
+            
+            // Sync songs and mixes from Firestore
+            try await syncProjectSongsFromCloud(
+                projectId: firestoreId,
+                project: project,
+                modelContext: modelContext
+            )
+            
             return project
             
         } catch {
@@ -652,5 +666,57 @@ class ProjectSyncService {
         reviewerId: String
     ) async throws {
         try await firestoreService.removeReviewer(projectId: projectId, reviewerId: reviewerId)
+    }
+    
+    private func syncProjectReviewers(
+        projectId: String,
+        project: Project,
+        modelContext: ModelContext
+    ) async throws {
+        let cloudReviewers = try await firestoreService.getProjectReviewers(projectId: projectId)
+        print("👥 Found \(cloudReviewers.count) reviewers for project")
+        
+        for (reviewerId, reviewerData) in cloudReviewers {
+            // Check if reviewer already exists locally
+            let descriptor = FetchDescriptor<Reviewer>(
+                predicate: #Predicate { $0.id.uuidString == reviewerId }
+            )
+            let existingReviewers = try modelContext.fetch(descriptor)
+            
+            if existingReviewers.isEmpty {
+                print("✨ Creating new local reviewer: \(reviewerData["displayName"] ?? "Unknown")")
+                
+                guard let displayName = reviewerData["displayName"] as? String,
+                      let email = reviewerData["email"] as? String,
+                      let roleString = reviewerData["role"] as? String,
+                      let role = ReviewerRole(rawValue: roleString),
+                      let statusString = reviewerData["inviteStatus"] as? String,
+                      let status = ReviewerInviteStatus(rawValue: statusString) else {
+                    print("⚠️ Invalid reviewer data for \(reviewerId)")
+                    continue
+                }
+                
+                let reviewer = Reviewer(
+                    id: UUID(uuidString: reviewerId) ?? UUID(),
+                    displayName: displayName,
+                    email: email,
+                    userId: reviewerData["userId"] as? String,
+                    role: role,
+                    inviteStatus: status
+                )
+                
+                if let acceptedTimestamp = reviewerData["acceptedAt"] as? Timestamp {
+                    reviewer.acceptedAt = acceptedTimestamp.dateValue()
+                }
+                
+                reviewer.project = project
+                modelContext.insert(reviewer)
+                try modelContext.save()
+                
+                print("📥 Reviewer synced: \(displayName)")
+            } else {
+                print("✓ Reviewer already exists locally: \(reviewerData["displayName"] ?? "Unknown")")
+            }
+        }
     }
 }

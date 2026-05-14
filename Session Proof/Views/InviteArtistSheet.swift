@@ -125,8 +125,6 @@ struct InviteArtistSheet: View {
         errorMessage = nil
         isSaving = true
         
-        defer { isSaving = false }
-        
         // Create reviewer
         let reviewer = Reviewer(
             displayName: artistName,
@@ -156,18 +154,16 @@ struct InviteArtistSheet: View {
                 // Log the error but don't block the UI
                 print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")
                 
-                // Only show error if it's not a permissions issue
-                // Permissions issues will be resolved when Firestore rules are updated
+                // Show error only for non-permission issues, but still dismiss
                 if !error.localizedDescription.contains("PERMISSION_DENIED") {
-                    await MainActor.run {
-                        errorMessage = "Reviewer added locally, but cloud sync failed. They may not appear for other users until you have proper permissions."
-                    }
-                    return
+                    print("❌ Unexpected error: \(error)")
                 }
             }
         }
         
+        // Always dismiss and reset state
         await MainActor.run {
+            isSaving = false
             dismiss()
         }
     }
