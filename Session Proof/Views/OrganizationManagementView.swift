@@ -15,71 +15,19 @@ struct OrganizationManagementView: View {
     
     @Query private var organizations: [Organization]
     
-    @State private var showingNewOrganization = false
-    @State private var selectedOrganization: Organization?
+    private var userOrganization: Organization? {
+        guard let userId = authService.currentUser?.id else { return nil }
+        return organizations.first { $0.memberIds.contains(userId) }
+    }
     
     var body: some View {
-        NavigationStack {
-            List {
-                if organizations.isEmpty {
-                    ContentUnavailableView(
-                        "No Organization",
-                        systemImage: "building.2",
-                        description: Text("Create an organization to manage your studio and team members")
-                    )
-                } else {
-                    ForEach(organizations) { organization in
-                        Button {
-                            selectedOrganization = organization
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(organization.name)
-                                    .font(.headline)
-                                
-                                HStack {
-                                    Label(organization.type.rawValue.capitalized, systemImage: "building.2")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    if !organization.isActive {
-                                        Text("Inactive")
-                                            .font(.caption)
-                                            .foregroundStyle(.red)
-                                    } else {
-                                        Text("\(organization.memberIds.count) members")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .navigationTitle("Organizations")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingNewOrganization = true
-                    } label: {
-                        Label("New Organization", systemImage: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingNewOrganization) {
+        Group {
+            if let organization = userOrganization {
+                // Edit existing organization
+                OrganizationEditView(organization: organization)
+            } else {
+                // Create new organization
                 NewOrganizationSheet()
-            }
-            .sheet(item: $selectedOrganization) { organization in
-                OrganizationDetailView(organization: organization)
             }
         }
     }
@@ -165,6 +113,9 @@ struct NewOrganizationSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 600)
+        #endif
     }
     
     private func createOrganization() {
@@ -198,7 +149,7 @@ struct NewOrganizationSheet: View {
     }
 }
 
-struct OrganizationDetailView: View {
+struct OrganizationEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
@@ -212,47 +163,60 @@ struct OrganizationDetailView: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("Name", value: organization.name)
-                    LabeledContent("Type", value: organization.type.rawValue.capitalized)
-                    LabeledContent("Status", value: organization.isActive ? "Active" : "Inactive")
+                    TextField("Name", text: $organization.name)
+                    
+                    Picker("Type", selection: $organization.type) {
+                        Text("Studio").tag(OrganizationType.studio)
+                        Text("Independent").tag(OrganizationType.independent)
+                    }
+                    
+                    Toggle("Active", isOn: $organization.isActive)
                 } header: {
                     Text("Information")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
                 
-                if let address = organization.address, !address.isEmpty {
-                    Section {
-                        LabeledContent("Address", value: address)
-                        if let city = organization.city {
-                            LabeledContent("City", value: city)
-                        }
-                        if let state = organization.state {
-                            LabeledContent("State", value: state)
-                        }
-                        if let zip = organization.zipCode {
-                            LabeledContent("Zip", value: zip)
-                        }
-                        if let country = organization.country {
-                            LabeledContent("Country", value: country)
-                        }
-                    } header: {
-                        Text("Address")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
+                Section {
+                    TextField("Address", text: Binding(
+                        get: { organization.address ?? "" },
+                        set: { organization.address = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("City", text: Binding(
+                        get: { organization.city ?? "" },
+                        set: { organization.city = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("State", text: Binding(
+                        get: { organization.state ?? "" },
+                        set: { organization.state = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("Zip Code", text: Binding(
+                        get: { organization.zipCode ?? "" },
+                        set: { organization.zipCode = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("Country", text: Binding(
+                        get: { organization.country ?? "" },
+                        set: { organization.country = $0.isEmpty ? nil : $0 }
+                    ))
+                } header: {
+                    Text("Address")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
                 
                 Section {
-                    if let phone = organization.phone {
-                        LabeledContent("Phone", value: phone)
-                    }
-                    if let email = organization.email {
-                        LabeledContent("Email", value: email)
-                    }
-                    if let website = organization.website {
-                        LabeledContent("Website", value: website)
-                    }
+                    TextField("Phone", text: Binding(
+                        get: { organization.phone ?? "" },
+                        set: { organization.phone = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("Email", text: Binding(
+                        get: { organization.email ?? "" },
+                        set: { organization.email = $0.isEmpty ? nil : $0 }
+                    ))
+                    TextField("Website", text: Binding(
+                        get: { organization.website ?? "" },
+                        set: { organization.website = $0.isEmpty ? nil : $0 }
+                    ))
                 } header: {
                     Text("Contact")
                         .font(.subheadline)
@@ -260,7 +224,7 @@ struct OrganizationDetailView: View {
                 }
                 
                 Section {
-                    LabeledContent("Max Producers", value: "\(organization.maxProducers)")
+                    Stepper("Max Producers: \(organization.maxProducers)", value: $organization.maxProducers, in: 1...50)
                     LabeledContent("Current Members", value: "\(organization.memberIds.count)")
                 } header: {
                     Text("License")
@@ -295,12 +259,19 @@ struct OrganizationDetailView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(organization.name)
+            .navigationTitle("Edit Organization")
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
                         dismiss()
                     }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveOrganization()
+                    }
+                    .disabled(organization.name.isEmpty)
                 }
             }
             .confirmationDialog(
@@ -315,6 +286,20 @@ struct OrganizationDetailView: View {
             } message: {
                 Text("This will permanently delete the organization. This action cannot be undone.")
             }
+        }
+        #if os(macOS)
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 600)
+        #endif
+    }
+    
+    private func saveOrganization() {
+        organization.updatedAt = Date()
+        
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            print("Error saving organization: \(error)")
         }
     }
     

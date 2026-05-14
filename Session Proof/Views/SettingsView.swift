@@ -6,14 +6,23 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    
+    @Query private var organizations: [Organization]
     
     @State private var isLoggingOut = false
     @State private var showingLogoutConfirmation = false
     @State private var showingOrganizationManagement = false
+    
+    private var userOrganization: Organization? {
+        guard let userId = authService.currentUser?.id else { return nil }
+        return organizations.first { $0.memberIds.contains(userId) }
+    }
     
     var body: some View {
         NavigationStack {
@@ -37,10 +46,21 @@ struct SettingsView: View {
                 // Organization management (for studio owners and producers)
                 if let user = authService.currentUser, user.isProducer {
                     Section {
+                        // Show organization name if it exists
+                        if let organization = userOrganization {
+                            Text(organization.name)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                        }
+                        
                         Button {
                             showingOrganizationManagement = true
                         } label: {
-                            Label("Manage Organization", systemImage: "building.2")
+                            if userOrganization != nil {
+                                Label("Edit Organization", systemImage: "building.2")
+                            } else {
+                                Label("Add Organization", systemImage: "building.2")
+                            }
                         }
                     } header: {
                         Text("Organization")
