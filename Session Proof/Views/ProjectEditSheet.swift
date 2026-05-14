@@ -71,7 +71,10 @@ struct ProjectEditSheet: View {
                 }
                 
                 Section {
-                    Picker("Workflow Stage", selection: $project.workflowStage) {
+                    Picker("Workflow Stage", selection: Binding(
+                        get: { project.workflowStage ?? .tracking },
+                        set: { project.workflowStage = $0 }
+                    )) {
                         Text("Tracking").tag(ProjectWorkflowStage.tracking)
                         Text("Editing").tag(ProjectWorkflowStage.editing)
                         Text("Mixing").tag(ProjectWorkflowStage.mixing)

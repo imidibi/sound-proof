@@ -56,7 +56,7 @@ final class Project {
     var managerPhone: String?
     
     // Workflow
-    var workflowStage: ProjectWorkflowStage
+    var workflowStage: ProjectWorkflowStage?
     
     // Legacy status (keep for backwards compatibility)
     var status: ProjectStatus
@@ -92,7 +92,7 @@ final class Project {
         ownerUserID: String,
         organizationId: String? = nil,
         assignedProducerId: String? = nil,
-        workflowStage: ProjectWorkflowStage = .tracking,
+        workflowStage: ProjectWorkflowStage? = .tracking,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         status: ProjectStatus = .draft,
