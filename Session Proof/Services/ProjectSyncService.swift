@@ -807,4 +807,135 @@ class ProjectSyncService {
             }
         }
     }
+    
+    // MARK: - Organization Sync
+    
+    func syncUserOrganization(
+        userId: String,
+        modelContext: ModelContext
+    ) async throws {
+        print("🏢 Starting organization sync for user: \(userId)")
+        
+        // Fetch organization from Firestore
+        guard let (firestoreId, data) = try await firestoreService.getUserOrganization(userId: userId) else {
+            print("ℹ️ No organization found in Firestore for user")
+            return
+        }
+        
+        print("☁️ Found organization in Firestore: \(firestoreId)")
+        
+        // Check if organization already exists locally
+        let descriptor = FetchDescriptor<Organization>(
+            predicate: #Predicate { org in
+                org.id.uuidString == firestoreId || org.memberIds.contains(userId)
+            }
+        )
+        let existingOrganizations = try modelContext.fetch(descriptor)
+        
+        if let existingOrg = existingOrganizations.first {
+            // Update existing organization
+            print("📝 Updating existing organization: \(existingOrg.name)")
+            
+            if let name = data["name"] as? String {
+                existingOrg.name = name
+            }
+            if let typeString = data["type"] as? String,
+               let type = OrganizationType(rawValue: typeString) {
+                existingOrg.type = type
+            }
+            if let maxProducers = data["maxProducers"] as? Int {
+                existingOrg.maxProducers = maxProducers
+            }
+            if let isActive = data["isActive"] as? Bool {
+                existingOrg.isActive = isActive
+            }
+            if let memberIds = data["memberIds"] as? [String] {
+                existingOrg.memberIds = memberIds
+            }
+            
+            // Update optional fields
+            existingOrg.address = data["address"] as? String
+            existingOrg.city = data["city"] as? String
+            existingOrg.state = data["state"] as? String
+            existingOrg.zipCode = data["zipCode"] as? String
+            existingOrg.country = data["country"] as? String
+            existingOrg.phone = data["phone"] as? String
+            existingOrg.email = data["email"] as? String
+            existingOrg.website = data["website"] as? String
+            existingOrg.taxId = data["taxId"] as? String
+            existingOrg.notes = data["notes"] as? String
+            existingOrg.licenseType = data["licenseType"] as? String
+            
+            if let licenseStartTimestamp = data["licenseStartDate"] as? Timestamp {
+                existingOrg.licenseStartDate = licenseStartTimestamp.dateValue()
+            }
+            if let licenseExpiryTimestamp = data["licenseExpiryDate"] as? Timestamp {
+                existingOrg.licenseExpiryDate = licenseExpiryTimestamp.dateValue()
+            }
+            if let updatedTimestamp = data["updatedAt"] as? Timestamp {
+                existingOrg.updatedAt = updatedTimestamp.dateValue()
+            }
+            
+            existingOrg.firestoreId = firestoreId
+            
+            try modelContext.save()
+            print("✅ Organization updated from Firestore")
+        } else {
+            // Create new organization
+            print("✨ Creating new organization from Firestore")
+            
+            guard let name = data["name"] as? String,
+                  let typeString = data["type"] as? String,
+                  let type = OrganizationType(rawValue: typeString) else {
+                print("⚠️ Missing required organization data")
+                return
+            }
+            
+            let organization = Organization(
+                name: name,
+                type: type,
+                address: data["address"] as? String,
+                city: data["city"] as? String,
+                state: data["state"] as? String,
+                zipCode: data["zipCode"] as? String,
+                country: data["country"] as? String,
+                phone: data["phone"] as? String,
+                email: data["email"] as? String,
+                website: data["website"] as? String,
+                licenseType: data["licenseType"] as? String,
+                maxProducers: data["maxProducers"] as? Int ?? 1
+            )
+            
+            // Set the ID to match Firestore
+            organization.id = UUID(uuidString: firestoreId) ?? UUID()
+            organization.firestoreId = firestoreId
+            
+            // Set member IDs
+            if let memberIds = data["memberIds"] as? [String] {
+                organization.memberIds = memberIds
+            }
+            
+            // Set other optional fields
+            organization.taxId = data["taxId"] as? String
+            organization.notes = data["notes"] as? String
+            organization.isActive = data["isActive"] as? Bool ?? true
+            
+            if let licenseStartTimestamp = data["licenseStartDate"] as? Timestamp {
+                organization.licenseStartDate = licenseStartTimestamp.dateValue()
+            }
+            if let licenseExpiryTimestamp = data["licenseExpiryDate"] as? Timestamp {
+                organization.licenseExpiryDate = licenseExpiryTimestamp.dateValue()
+            }
+            if let createdTimestamp = data["createdAt"] as? Timestamp {
+                organization.createdAt = createdTimestamp.dateValue()
+            }
+            if let updatedTimestamp = data["updatedAt"] as? Timestamp {
+                organization.updatedAt = updatedTimestamp.dateValue()
+            }
+            
+            modelContext.insert(organization)
+            try modelContext.save()
+            print("✅ Organization created from Firestore: \(organization.name)")
+        }
+    }
 }

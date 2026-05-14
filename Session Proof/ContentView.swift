@@ -31,7 +31,14 @@ struct ContentView: View {
                                 userId: userId,
                                 modelContext: modelContext
                             )
-                            print("✅ Initial sync completed")
+                            print("✅ Initial project sync completed")
+                            
+                            // Sync user's organization
+                            try await syncService.syncUserOrganization(
+                                userId: userId,
+                                modelContext: modelContext
+                            )
+                            print("✅ Initial organization sync completed")
                         } catch {
                             print("❌ Initial sync failed: \(error)")
                         }

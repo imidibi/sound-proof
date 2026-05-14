@@ -287,6 +287,95 @@ class FirestoreService {
         }
     }
     
+    // MARK: - Organization Management
+    
+    func createOrganization(
+        organization: Organization,
+        userId: String
+    ) async throws -> String {
+        let orgRef = db.collection("organizations").document(organization.id.uuidString)
+        
+        var data: [String: Any] = [
+            "name": organization.name,
+            "type": organization.type.rawValue,
+            "maxProducers": organization.maxProducers,
+            "isActive": organization.isActive,
+            "createdAt": Timestamp(date: organization.createdAt),
+            "updatedAt": Timestamp(date: organization.updatedAt),
+            "memberIds": organization.memberIds
+        ]
+        
+        // Add optional fields if they have values
+        if let address = organization.address {
+            data["address"] = address
+        }
+        if let city = organization.city {
+            data["city"] = city
+        }
+        if let state = organization.state {
+            data["state"] = state
+        }
+        if let zipCode = organization.zipCode {
+            data["zipCode"] = zipCode
+        }
+        if let country = organization.country {
+            data["country"] = country
+        }
+        if let phone = organization.phone {
+            data["phone"] = phone
+        }
+        if let email = organization.email {
+            data["email"] = email
+        }
+        if let website = organization.website {
+            data["website"] = website
+        }
+        if let taxId = organization.taxId {
+            data["taxId"] = taxId
+        }
+        if let notes = organization.notes {
+            data["notes"] = notes
+        }
+        if let licenseType = organization.licenseType {
+            data["licenseType"] = licenseType
+        }
+        if let licenseStartDate = organization.licenseStartDate {
+            data["licenseStartDate"] = Timestamp(date: licenseStartDate)
+        }
+        if let licenseExpiryDate = organization.licenseExpiryDate {
+            data["licenseExpiryDate"] = Timestamp(date: licenseExpiryDate)
+        }
+        
+        try await orgRef.setData(data)
+        return orgRef.documentID
+    }
+    
+    func updateOrganization(organizationId: String, data: [String: Any]) async throws {
+        var updateData = data
+        updateData["updatedAt"] = Timestamp(date: Date())
+        try await db.collection("organizations").document(organizationId).updateData(updateData)
+    }
+    
+    func getOrganization(organizationId: String) async throws -> [String: Any]? {
+        let document = try await db.collection("organizations").document(organizationId).getDocument()
+        return document.data()
+    }
+    
+    func getUserOrganization(userId: String) async throws -> (id: String, data: [String: Any])? {
+        let query = db.collection("organizations").whereField("memberIds", arrayContains: userId)
+        let snapshot = try await query.getDocuments()
+        
+        guard let document = snapshot.documents.first else {
+            return nil
+        }
+        
+        return (document.documentID, document.data())
+    }
+    
+    func deleteOrganization(organizationId: String) async throws {
+        try await db.collection("organizations").document(organizationId).delete()
+    }
+    
     // MARK: - Share Code
     
     private func generateShareCode() -> String {

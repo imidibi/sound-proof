@@ -37,6 +37,7 @@ struct NewOrganizationSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @State private var name = ""
     @State private var type: OrganizationType = .studio
@@ -49,6 +50,7 @@ struct NewOrganizationSheet: View {
     @State private var email = ""
     @State private var website = ""
     @State private var maxProducers = 5
+    @State private var isSaving = false
     
     var body: some View {
         NavigationStack {
@@ -107,9 +109,11 @@ struct NewOrganizationSheet: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        createOrganization()
+                        Task {
+                            await createOrganization()
+                        }
                     }
-                    .disabled(name.isEmpty)
+                    .disabled(name.isEmpty || isSaving)
                 }
             }
         }
@@ -118,7 +122,14 @@ struct NewOrganizationSheet: View {
         #endif
     }
     
-    private func createOrganization() {
+    private func createOrganization() async {
+        guard let userId = authService.currentUser?.id else {
+            print("❌ No authenticated user")
+            return
+        }
+        
+        isSaving = true
+        
         let organization = Organization(
             name: name,
             type: type,
@@ -134,19 +145,41 @@ struct NewOrganizationSheet: View {
         )
         
         // Add current user as a member
-        if let userId = authService.currentUser?.id {
-            organization.memberIds.append(userId)
-        }
+        organization.memberIds.append(userId)
         
+        // Save locally first
         modelContext.insert(organization)
         
         do {
             try modelContext.save()
-            print("✅ Organization created: \(organization.name)")
+            print("✅ Organization created locally: \(organization.name)")
             print("   Member IDs: \(organization.memberIds)")
-            dismiss()
+            
+            // Sync to Firestore
+            do {
+                let firestoreId = try await firestoreService.createOrganization(
+                    organization: organization,
+                    userId: userId
+                )
+                
+                await MainActor.run {
+                    organization.firestoreId = firestoreId
+                    print("☁️ Organization synced to Firestore: \(firestoreId)")
+                }
+            } catch {
+                print("⚠️ Error syncing organization to Firestore: \(error)")
+                // Continue anyway - organization is saved locally
+            }
+            
+            await MainActor.run {
+                isSaving = false
+                dismiss()
+            }
         } catch {
             print("❌ Error creating organization: \(error)")
+            await MainActor.run {
+                isSaving = false
+            }
         }
     }
 }
@@ -155,11 +188,13 @@ struct OrganizationEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @Bindable var organization: Organization
     
     @State private var showingAddMember = false
     @State private var showingDeleteConfirmation = false
+    @State private var isSaving = false
     
     var body: some View {
         NavigationStack {
@@ -271,9 +306,11 @@ struct OrganizationEditView: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        saveOrganization()
+                        Task {
+                            await saveOrganization()
+                        }
                     }
-                    .disabled(organization.name.isEmpty)
+                    .disabled(organization.name.isEmpty || isSaving)
                 }
             }
             .confirmationDialog(
@@ -294,14 +331,71 @@ struct OrganizationEditView: View {
         #endif
     }
     
-    private func saveOrganization() {
+    private func saveOrganization() async {
+        isSaving = true
         organization.updatedAt = Date()
         
         do {
             try modelContext.save()
-            dismiss()
+            print("✅ Organization saved locally: \(organization.name)")
+            
+            // Sync to Firestore if it has a Firestore ID
+            if let firestoreId = organization.firestoreId {
+                do {
+                    var updateData: [String: Any] = [
+                        "name": organization.name,
+                        "type": organization.type.rawValue,
+                        "maxProducers": organization.maxProducers,
+                        "isActive": organization.isActive,
+                        "memberIds": organization.memberIds
+                    ]
+                    
+                    // Add optional fields if they have values
+                    if let address = organization.address {
+                        updateData["address"] = address
+                    }
+                    if let city = organization.city {
+                        updateData["city"] = city
+                    }
+                    if let state = organization.state {
+                        updateData["state"] = state
+                    }
+                    if let zipCode = organization.zipCode {
+                        updateData["zipCode"] = zipCode
+                    }
+                    if let country = organization.country {
+                        updateData["country"] = country
+                    }
+                    if let phone = organization.phone {
+                        updateData["phone"] = phone
+                    }
+                    if let email = organization.email {
+                        updateData["email"] = email
+                    }
+                    if let website = organization.website {
+                        updateData["website"] = website
+                    }
+                    
+                    try await firestoreService.updateOrganization(
+                        organizationId: firestoreId,
+                        data: updateData
+                    )
+                    print("☁️ Organization synced to Firestore")
+                } catch {
+                    print("⚠️ Error syncing organization to Firestore: \(error)")
+                    // Continue anyway - organization is saved locally
+                }
+            }
+            
+            await MainActor.run {
+                isSaving = false
+                dismiss()
+            }
         } catch {
-            print("Error saving organization: \(error)")
+            print("❌ Error saving organization: \(error)")
+            await MainActor.run {
+                isSaving = false
+            }
         }
     }
     

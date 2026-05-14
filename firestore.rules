@@ -26,6 +26,12 @@ service cloud.firestore {
               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'studio');
     }
 
+    // Helper function to check if user is a member of the organization
+    function isOrganizationMember(organizationId) {
+      return isSignedIn() &&
+             request.auth.uid in get(/databases/$(database)/documents/organizations/$(organizationId)).data.memberIds;
+    }
+
     // Users collection
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -74,6 +80,14 @@ service cloud.firestore {
         allow delete: if isSignedIn() &&
                          (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
       }
+    }
+
+    // Organizations collection
+    match /organizations/{organizationId} {
+      allow read: if isSignedIn() && isOrganizationMember(organizationId);
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && isOrganizationMember(organizationId);
+      allow delete: if isSignedIn() && isOrganizationMember(organizationId);
     }
   }
 }

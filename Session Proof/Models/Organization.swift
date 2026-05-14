@@ -16,6 +16,7 @@ enum OrganizationType: String, Codable {
 @Model
 final class Organization {
     var id: UUID
+    var firestoreId: String? // Firestore document ID
     var name: String
     var type: OrganizationType
     
