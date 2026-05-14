@@ -221,6 +221,21 @@ class FirestoreService {
             }
     }
     
+    func listenToReviewers(
+        projectId: String,
+        onChange: @escaping ([QueryDocumentSnapshot]) -> Void
+    ) -> ListenerRegistration {
+        return db.collection("projects").document(projectId)
+            .collection("reviewers")
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    print("Error fetching reviewers: \(error?.localizedDescription ?? "Unknown error")")
+                    return
+                }
+                onChange(documents)
+            }
+    }
+    
     // MARK: - Reviewer Management
     
     func addReviewer(

@@ -668,6 +668,94 @@ class ProjectSyncService {
         try await firestoreService.removeReviewer(projectId: projectId, reviewerId: reviewerId)
     }
     
+    // MARK: - Listen to Reviewers
+    
+    func startListeningToReviewers(
+        projectId: String,
+        project: Project,
+        modelContext: ModelContext
+    ) -> FirebaseFirestore.ListenerRegistration {
+        print("👂 Setting up reviewer listener for project: \(projectId)")
+        return firestoreService.listenToReviewers(projectId: projectId) { [weak self] documents in
+            guard let self = self else { return }
+            
+            print("📬 Received \(documents.count) reviewer documents from Firestore")
+            
+            Task { @MainActor in
+                for document in documents {
+                    await self.processReviewerFromCloud(
+                        document: document,
+                        project: project,
+                        modelContext: modelContext
+                    )
+                }
+            }
+        }
+    }
+    
+    private func processReviewerFromCloud(
+        document: FirebaseFirestore.QueryDocumentSnapshot,
+        project: Project,
+        modelContext: ModelContext
+    ) async {
+        let data = document.data()
+        let reviewerId = document.documentID
+        
+        guard let reviewerUUID = UUID(uuidString: reviewerId) else {
+            print("⚠️ Skipping reviewer with invalid UUID format: \(reviewerId)")
+            return
+        }
+        
+        print("📥 Processing reviewer from cloud: \(reviewerId)")
+        
+        // Check if reviewer already exists locally
+        let descriptor = FetchDescriptor<Reviewer>(
+            predicate: #Predicate { reviewer in
+                reviewer.id == reviewerUUID
+            }
+        )
+        
+        do {
+            let existingReviewers = try modelContext.fetch(descriptor)
+            
+            if existingReviewers.isEmpty {
+                // Create new local reviewer
+                guard let displayName = data["displayName"] as? String,
+                      let email = data["email"] as? String,
+                      let roleString = data["role"] as? String,
+                      let role = ReviewerRole(rawValue: roleString),
+                      let statusString = data["inviteStatus"] as? String,
+                      let status = ReviewerInviteStatus(rawValue: statusString) else {
+                    print("⚠️ Invalid reviewer data for \(reviewerId)")
+                    return
+                }
+                
+                let reviewer = Reviewer(
+                    id: reviewerUUID,
+                    displayName: displayName,
+                    email: email,
+                    userId: data["userId"] as? String,
+                    role: role,
+                    inviteStatus: status
+                )
+                
+                if let acceptedTimestamp = data["acceptedAt"] as? Timestamp {
+                    reviewer.acceptedAt = acceptedTimestamp.dateValue()
+                }
+                
+                reviewer.project = project
+                modelContext.insert(reviewer)
+                try modelContext.save()
+                
+                print("✨ Created new reviewer from cloud: \(displayName)")
+            } else {
+                print("✓ Reviewer already exists locally: \(data["displayName"] ?? "Unknown")")
+            }
+        } catch {
+            print("❌ Error processing reviewer: \(error)")
+        }
+    }
+    
     private func syncProjectReviewers(
         projectId: String,
         project: Project,
