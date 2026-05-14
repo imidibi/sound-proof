@@ -159,7 +159,7 @@ struct SettingsView: View {
         isLoggingOut = true
         
         do {
-            try await authService.signOut()
+            try authService.signOut()
             await MainActor.run {
                 isLoggingOut = false
                 dismiss()

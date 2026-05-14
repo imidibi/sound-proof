@@ -22,6 +22,7 @@ struct CommentDetailSheet: View {
     @State private var editedText: String
     @State private var showingDeleteConfirmation = false
     @State private var audioPlayer: AVAudioPlayer?
+    @State private var audioPlayerDelegate: VoiceNotePlayerDelegate?
     @State private var isPlayingVoiceNote = false
     @State private var voiceNoteTimer: Timer?
     @State private var voiceNoteProgress: Double = 0
@@ -387,12 +388,14 @@ struct CommentDetailSheet: View {
         
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = VoiceNotePlayerDelegate(onFinish: {
+            let delegate = VoiceNotePlayerDelegate(onFinish: {
                 isPlayingVoiceNote = false
                 voiceNoteProgress = 0
                 voiceNoteTimer?.invalidate()
                 voiceNoteTimer = nil
             })
+            audioPlayerDelegate = delegate
+            audioPlayer?.delegate = delegate
             
             print("✅ Audio player created, duration: \(audioPlayer?.duration ?? 0)s")
             audioPlayer?.play()

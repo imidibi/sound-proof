@@ -129,56 +129,48 @@ struct InviteArtistSheet: View {
             isSaving = true
         }
         
-        do {
-            // Create reviewer
-            let reviewer = Reviewer(
-                displayName: artistName,
-                email: artistEmail.lowercased().trimmingCharacters(in: .whitespaces),
-                role: role,
-                inviteStatus: .sent
-            )
-            
-            print("📝 Created reviewer object: \(reviewer.displayName)")
-            
-            // Set project relationship
-            reviewer.project = project
-            
-            print("🔗 Set project relationship")
-            
-            // Save to local database
-            await MainActor.run {
-                do {
-                    modelContext.insert(reviewer)
-                    try modelContext.save()
-                    print("💾 Reviewer saved to local database")
-                } catch {
-                    print("❌ Failed to save reviewer locally: \(error)")
-                    errorMessage = "Failed to save: \(error.localizedDescription)"
-                }
+        // Create reviewer
+        let reviewer = Reviewer(
+            displayName: artistName,
+            email: artistEmail.lowercased().trimmingCharacters(in: .whitespaces),
+            role: role,
+            inviteStatus: .sent
+        )
+        
+        print("📝 Created reviewer object: \(reviewer.displayName)")
+        
+        // Set project relationship
+        reviewer.project = project
+        
+        print("🔗 Set project relationship")
+        
+        // Save to local database
+        await MainActor.run {
+            do {
+                modelContext.insert(reviewer)
+                try modelContext.save()
+                print("💾 Reviewer saved to local database")
+            } catch {
+                print("❌ Failed to save reviewer locally: \(error)")
+                errorMessage = "Failed to save: \(error.localizedDescription)"
             }
-            
-            // Sync to Firestore (non-blocking - continue even if it fails)
-            if let firestoreId = project.firestoreId {
-                print("☁️ Attempting Firestore sync...")
-                do {
-                    try await syncService.addReviewer(
-                        projectId: firestoreId,
-                        reviewer: reviewer
-                    )
-                    print("✓ Reviewer synced to Firestore successfully")
-                } catch {
-                    // Log the error but don't block the UI
-                    print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")
-                }
-            } else {
-                print("⚠️ No Firestore ID, skipping cloud sync")
+        }
+        
+        // Sync to Firestore (non-blocking - continue even if it fails)
+        if let firestoreId = project.firestoreId {
+            print("☁️ Attempting Firestore sync...")
+            do {
+                try await syncService.addReviewer(
+                    projectId: firestoreId,
+                    reviewer: reviewer
+                )
+                print("✓ Reviewer synced to Firestore successfully")
+            } catch {
+                // Log the error but don't block the UI
+                print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")
             }
-            
-        } catch {
-            print("❌ Unexpected error in invite flow: \(error)")
-            await MainActor.run {
-                errorMessage = "Error: \(error.localizedDescription)"
-            }
+        } else {
+            print("⚠️ No Firestore ID, skipping cloud sync")
         }
         
         // Always dismiss and reset state

@@ -22,7 +22,7 @@ class FirestoreService {
         
         let data: [String: Any] = [
             "name": project.name,
-            "clientName": project.clientName,
+            "clientName": project.clientName as Any,
             "ownerUserId": ownerUserId,
             "status": project.status.rawValue,
             "createdAt": Timestamp(date: project.createdAt),

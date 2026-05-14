@@ -169,7 +169,7 @@ struct NewCommentSheet: View {
     
     private var recordButton: some View {
         Button {
-            voiceNoteRecorder.startRecording()
+            _ = voiceNoteRecorder.startRecording()
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "mic.circle.fill")

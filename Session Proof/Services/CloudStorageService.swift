@@ -93,7 +93,7 @@ class CloudStorageService {
         downloadURL: String,
         destinationURL: URL
     ) async throws {
-        guard let url = URL(string: downloadURL) else {
+        guard URL(string: downloadURL) != nil else {
             throw UploadError.downloadFailed("Invalid download URL")
         }
         

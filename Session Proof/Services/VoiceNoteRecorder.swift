@@ -31,9 +31,17 @@ final class VoiceNoteRecorder: NSObject {
             try recordingSession.setActive(true)
             
             // Request permission
-            recordingSession.requestRecordPermission { allowed in
-                if !allowed {
-                    print("Recording permission denied")
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { allowed in
+                    if !allowed {
+                        print("Recording permission denied")
+                    }
+                }
+            } else {
+                recordingSession.requestRecordPermission { allowed in
+                    if !allowed {
+                        print("Recording permission denied")
+                    }
                 }
             }
         } catch {
