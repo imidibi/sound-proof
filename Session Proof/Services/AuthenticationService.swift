@@ -10,8 +10,9 @@ import FirebaseAuth
 import FirebaseFirestore
 
 enum UserRole: String, Codable {
-    case producer
-    case client
+    case studio        // Studio owner/admin
+    case producer      // Producer (can be independent or part of studio)
+    case artist        // Artist/Approver (free user)
 }
 
 struct User: Codable, Identifiable {
@@ -21,8 +22,27 @@ struct User: Codable, Identifiable {
     let role: UserRole
     let createdAt: Date
     
+    // Organization membership
+    var organizationId: String?     // Firestore ID of Organization
+    var organizationName: String?   // Cached for display
+    
+    // Producer-specific fields
+    var phone: String?
+    var title: String? // e.g., "Senior Producer", "Lead Engineer"
+    
+    // Studio-specific fields (when role == .studio)
+    var isOrganizationAdmin: Bool?
+    
     var isProducer: Bool {
-        role == .producer
+        role == .producer || role == .studio
+    }
+    
+    var isStudio: Bool {
+        role == .studio
+    }
+    
+    var isArtist: Bool {
+        role == .artist
     }
 }
 

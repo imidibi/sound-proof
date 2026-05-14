@@ -147,8 +147,8 @@ struct ProjectListView: View {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
                         
-                        // Show Join Project for clients
-                        if authService.currentUser?.role == .client {
+                        // Show Join Project for artists
+                        if authService.currentUser?.role == .artist {
                             Button {
                                 showingJoinProjectSheet = true
                             } label: {

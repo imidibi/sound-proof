@@ -357,8 +357,8 @@ struct SignUpView: View {
                         Picker("Role", selection: $selectedRole) {
                             Label("Producer/Engineer", systemImage: "music.note.list")
                                 .tag(UserRole.producer)
-                            Label("Client/Reviewer", systemImage: "person.fill")
-                                .tag(UserRole.client)
+                            Label("Artist/Approver", systemImage: "person.fill")
+                                .tag(UserRole.artist)
                         }
                         .pickerStyle(.segmented)
                     }
