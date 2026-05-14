@@ -15,6 +15,7 @@ struct MixDetailView: View {
     @State private var showingCommentSheet = false
     @State private var showingInspector = false
     @State private var commentListener: ListenerRegistration?
+    @State private var reviewerListener: ListenerRegistration?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(ProjectSyncService.self) private var syncService
@@ -200,13 +201,23 @@ struct MixDetailView: View {
                 mix: mix,
                 modelContext: modelContext
             )
+            
+            // Also start listening for reviewer changes
+            print("🔄 Starting real-time reviewer sync for project: \(project.name)")
+            reviewerListener = syncService.startListeningToReviewers(
+                projectId: projectId,
+                project: project,
+                modelContext: modelContext
+            )
         }
     }
     
     private func stopCommentSync() {
         commentListener?.remove()
         commentListener = nil
-        print("⏹️ Stopped comment sync")
+        reviewerListener?.remove()
+        reviewerListener = nil
+        print("⏹️ Stopped comment and reviewer sync")
     }
 }
 
