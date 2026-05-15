@@ -51,7 +51,10 @@ service cloud.firestore {
         allow read: if isSignedIn() &&
                        (isProjectOwner(projectId) || isProjectReviewer(projectId));
         allow create: if isSignedIn() && isProjectOwner(projectId);
-        allow update: if isSignedIn() && isProjectOwner(projectId);
+        allow update: if isSignedIn() &&
+                         (isProjectOwner(projectId) ||
+                          (resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email &&
+                           request.resource.data.userId == request.auth.uid));
         allow delete: if isSignedIn() && isProjectOwner(projectId);
       }
 

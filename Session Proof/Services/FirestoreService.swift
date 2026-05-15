@@ -244,15 +244,24 @@ class FirestoreService {
     ) async throws {
         let reviewerRef = db.collection("projects").document(projectId).collection("reviewers").document(reviewer.id.uuidString)
         
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "displayName": reviewer.displayName,
-            "email": reviewer.email,
+            "email": reviewer.email.lowercased(),
             "userId": reviewer.userId as Any,
             "role": reviewer.role.rawValue,
             "inviteStatus": reviewer.inviteStatus.rawValue,
-            "createdAt": Timestamp(date: reviewer.createdAt),
-            "acceptedAt": reviewer.acceptedAt != nil ? Timestamp(date: reviewer.acceptedAt!) : NSNull()
+            "createdAt": Timestamp(date: reviewer.createdAt)
         ]
+        
+        if let invitationToken = reviewer.invitationToken {
+            data["invitationToken"] = invitationToken
+        }
+        if let acceptedAt = reviewer.acceptedAt {
+            data["acceptedAt"] = Timestamp(date: acceptedAt)
+        }
+        if let invitedAt = reviewer.invitedAt {
+            data["invitedAt"] = Timestamp(date: invitedAt)
+        }
         
         try await reviewerRef.setData(data)
     }
@@ -285,6 +294,68 @@ class FirestoreService {
         return snapshot.documents.map { document in
             (document.documentID, document.data())
         }
+    }
+    
+    func findReviewerByToken(invitationToken: String) async throws -> (projectId: String, reviewerId: String, data: [String: Any])? {
+        // Query across all projects to find the reviewer with this token
+        let projectsSnapshot = try await db.collection("projects").getDocuments()
+        
+        for projectDoc in projectsSnapshot.documents {
+            let reviewersSnapshot = try await db.collection("projects")
+                .document(projectDoc.documentID)
+                .collection("reviewers")
+                .whereField("invitationToken", isEqualTo: invitationToken)
+                .getDocuments()
+            
+            if let reviewerDoc = reviewersSnapshot.documents.first {
+                return (projectDoc.documentID, reviewerDoc.documentID, reviewerDoc.data())
+            }
+        }
+        
+        return nil
+    }
+    
+    func findReviewerByEmail(email: String, projectId: String) async throws -> (id: String, data: [String: Any])? {
+        let snapshot = try await db.collection("projects")
+            .document(projectId)
+            .collection("reviewers")
+            .whereField("email", isEqualTo: email.lowercased())
+            .getDocuments()
+        
+        guard let document = snapshot.documents.first else {
+            return nil
+        }
+        
+        return (document.documentID, document.data())
+    }
+    
+    func getAllReviewersForProducer(userId: String) async throws -> [(email: String, name: String, projectCount: Int)] {
+        // Get all projects owned by this user
+        let projects = try await getUserProjects(userId: userId)
+        
+        var reviewerMap: [String: (name: String, count: Int)] = [:]
+        
+        for (projectId, _) in projects {
+            let reviewers = try await getProjectReviewers(projectId: projectId)
+            
+            for (_, reviewerData) in reviewers {
+                if let email = reviewerData["email"] as? String,
+                   let name = reviewerData["displayName"] as? String {
+                    // Don't include owner themselves
+                    if reviewerData["role"] as? String != "Owner" {
+                        if var existing = reviewerMap[email] {
+                            existing.count += 1
+                            reviewerMap[email] = existing
+                        } else {
+                            reviewerMap[email] = (name, 1)
+                        }
+                    }
+                }
+            }
+        }
+        
+        return reviewerMap.map { (email: $0.key, name: $0.value.name, projectCount: $0.value.count) }
+            .sorted { $0.projectCount > $1.projectCount } // Most frequent first
     }
     
     // MARK: - Organization Management

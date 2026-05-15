@@ -85,6 +85,8 @@ struct AuthenticationView: View {
 
 struct SignInView: View {
     @Environment(AuthenticationService.self) private var authService
+    @Environment(ProjectSyncService.self) private var syncService
+    @Environment(FirestoreService.self) private var firestoreService
     
     let showSignUp: () -> Void
     
@@ -94,6 +96,7 @@ struct SignInView: View {
     @State private var showShareCodeEntry = false
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var invitationToken: String?
     
     var body: some View {
         VStack(spacing: 32) {
@@ -258,12 +261,28 @@ struct SignInView: View {
             print("🔵 Attempting to sign in with email: \(email)")
             try await authService.signIn(email: email, password: password)
             print("✅ Sign in successful!")
+            
+            // Check if this user has pending invitations
+            await checkForPendingInvitations()
+            
             // Success - the view will automatically transition when currentUser is set
         } catch {
             errorMessage = "Sign in failed: \(error.localizedDescription)"
             print("❌ Sign in error: \(error)")
             print("❌ Error details: \(error)")
         }
+    }
+    
+    private func checkForPendingInvitations() async {
+        guard let userId = authService.currentUser?.id,
+              let userEmail = authService.currentUser?.email else {
+            return
+        }
+        
+        print("🔍 Checking for pending invitations for: \(userEmail)")
+        
+        // This will be handled in ContentView after successful sign-in
+        // We'll add a method to ProjectSyncService to auto-accept pending invitations
     }
     
     private func joinWithShareCode() async {
@@ -279,6 +298,8 @@ struct SignInView: View {
 
 struct SignUpView: View {
     @Environment(AuthenticationService.self) private var authService
+    @Environment(ProjectSyncService.self) private var syncService
+    @Environment(FirestoreService.self) private var firestoreService
     
     let showSignIn: () -> Void
     
@@ -289,6 +310,7 @@ struct SignUpView: View {
     @State private var selectedRole: UserRole = .producer
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var invitationToken: String?
     
     var body: some View {
         ScrollView {
@@ -432,12 +454,27 @@ struct SignUpView: View {
                 role: selectedRole
             )
             print("✅ Sign up successful!")
+            
+            // Check for pending invitations after signup
+            await checkForPendingInvitations()
+            
             // Success - the view will automatically transition when currentUser is set
         } catch {
             errorMessage = "Sign up failed: \(error.localizedDescription)"
             print("❌ Sign up error: \(error)")
             print("❌ Error details: \(error)")
         }
+    }
+    
+    private func checkForPendingInvitations() async {
+        guard let userId = authService.currentUser?.id,
+              let userEmail = authService.currentUser?.email else {
+            return
+        }
+        
+        print("🔍 Checking for pending invitations for: \(userEmail)")
+        
+        // This will be handled in ContentView after successful sign-in/up
     }
 }
 

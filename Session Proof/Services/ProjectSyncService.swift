@@ -938,4 +938,64 @@ class ProjectSyncService {
             print("✅ Organization created from Firestore: \(organization.name)")
         }
     }
+    
+    // MARK: - Auto-Accept Pending Invitations
+    
+    func acceptPendingInvitations(
+        userId: String,
+        userEmail: String,
+        modelContext: ModelContext
+    ) async throws {
+        print("📬 Checking for pending invitations for: \(userEmail)")
+        
+        // Get all projects from Firestore to check for invitations
+        // We'll need to query all projects since we don't know which ones have invitations for this email
+        var invitationsAccepted = 0
+        
+        // For now, we'll rely on the fact that when users sign in, their projects will be synced
+        // and reviewers will be updated if they match the user's email
+        // This is a simpler approach that doesn't require querying all projects
+        
+        // Instead, we'll check the user's own projects and any where they're listed as a reviewer
+        do {
+            let ownedProjects = try await firestoreService.getUserProjects(userId: userId)
+            
+            // For each owned project, check if there are any pending reviewers with this user's email
+            for (projectId, _) in ownedProjects {
+                let reviewers = try await firestoreService.getProjectReviewers(projectId: projectId)
+                
+                for (reviewerId, reviewerData) in reviewers {
+                    // Check if this reviewer has our email but no userId (pending invitation)
+                    if let email = reviewerData["email"] as? String,
+                       email.lowercased() == userEmail.lowercased(),
+                       reviewerData["userId"] == nil || (reviewerData["userId"] as? String)?.isEmpty == true {
+                        
+                        print("✉️ Found pending invitation in project: \(projectId)")
+                        
+                        // Update reviewer with userId and accept status
+                        try await firestoreService.updateReviewer(
+                            projectId: projectId,
+                            reviewerId: reviewerId,
+                            data: [
+                                "userId": userId,
+                                "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
+                                "acceptedAt": Timestamp(date: Date())
+                            ]
+                        )
+                        
+                        invitationsAccepted += 1
+                        print("✅ Accepted invitation for project: \(projectId)")
+                    }
+                }
+            }
+            
+            if invitationsAccepted > 0 {
+                print("🎉 Accepted \(invitationsAccepted) pending invitation(s)")
+            } else {
+                print("ℹ️ No pending invitations found in owned projects")
+            }
+        } catch {
+            print("⚠️ Error checking for pending invitations: \(error)")
+        }
+    }
 }

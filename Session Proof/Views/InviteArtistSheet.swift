@@ -14,12 +14,17 @@ struct InviteArtistSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(ProjectSyncService.self) private var syncService
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @State private var artistName = ""
     @State private var artistEmail = ""
     @State private var role: ReviewerRole = .reviewer
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var existingUserFound: User?
+    @State private var previousReviewers: [(email: String, name: String, projectCount: Int)] = []
+    @State private var showingSuggestions = false
     
     var canSave: Bool {
         !artistName.isEmpty && !artistEmail.isEmpty && isValidEmail(artistEmail)
@@ -28,20 +33,67 @@ struct InviteArtistSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+Section {
                     VStack(alignment: .leading, spacing: 12) {
                         TextField("Name", text: $artistName, prompt: Text("Artist or client name"))
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.name)
                         
-                        TextField("Email", text: $artistEmail, prompt: Text("email@example.com"))
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.emailAddress)
-                            #if os(iOS)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                            #endif
-                            .autocorrectionDisabled()
+                        VStack(alignment: .leading, spacing: 4) {
+                            TextField("Email", text: $artistEmail, prompt: Text("email@example.com"))
+                                .textFieldStyle(.roundedBorder)
+                                .textContentType(.emailAddress)
+                                #if os(iOS)
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                #endif
+                                .autocorrectionDisabled()
+                            
+                            // Show previous reviewers matching the typed email
+                            if !artistEmail.isEmpty && !previousReviewers.isEmpty {
+                                let matches = previousReviewers.filter { 
+                                    $0.email.lowercased().contains(artistEmail.lowercased()) 
+                                }
+                                
+                                if !matches.isEmpty {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Previously worked with:")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                        
+                                        ForEach(matches.prefix(3), id: \.email) { reviewer in
+                                            Button {
+                                                artistEmail = reviewer.email
+                                                artistName = reviewer.name
+                                                Task {
+                                                    await checkForExistingUser(email: reviewer.email)
+                                                }
+                                            } label: {
+                                                HStack {
+                                                    VStack(alignment: .leading, spacing: 2) {
+                                                        Text(reviewer.name)
+                                                            .font(.caption)
+                                                        Text(reviewer.email)
+                                                            .font(.caption2)
+                                                            .foregroundStyle(.secondary)
+                                                    }
+                                                    Spacer()
+                                                    Text("\(reviewer.projectCount) project\(reviewer.projectCount > 1 ? "s" : "")")
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                .padding(.vertical, 4)
+                                                .padding(.horizontal, 8)
+                                                .background(Color.blue.opacity(0.1))
+                                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                }
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 } header: {
@@ -49,7 +101,24 @@ struct InviteArtistSheet: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 } footer: {
-                    Text("The artist will be able to join this project using the share code.")
+                    if let existingUser = existingUserFound {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Found existing user: \(existingUser.displayName). They'll be added to this project.")
+                                .font(.caption)
+                        }
+                    } else {
+                        Text("An invitation will be sent. The artist can accept it by signing in or creating an account.")
+                    }
+                }
+                .onChange(of: artistEmail) { _, newValue in
+                    Task {
+                        await checkForExistingUser(email: newValue)
+                    }
+                }
+                .task {
+                    await loadPreviousReviewers()
                 }
                 
                 Section {
@@ -121,6 +190,46 @@ struct InviteArtistSheet: View {
         #endif
     }
     
+    private func loadPreviousReviewers() async {
+        guard let userId = authService.currentUser?.id else {
+            return
+        }
+        
+        do {
+            let reviewers = try await firestoreService.getAllReviewersForProducer(userId: userId)
+            await MainActor.run {
+                previousReviewers = reviewers
+                print("📋 Loaded \(reviewers.count) previous reviewers")
+            }
+        } catch {
+            print("⚠️ Failed to load previous reviewers: \(error)")
+        }
+    }
+    
+    private func checkForExistingUser(email: String) async {
+        guard isValidEmail(email) else {
+            await MainActor.run {
+                existingUserFound = nil
+            }
+            return
+        }
+        
+        do {
+            let user = try await authService.getUserByEmail(email: email.lowercased().trimmingCharacters(in: .whitespaces))
+            await MainActor.run {
+                existingUserFound = user
+                // Pre-fill name if found
+                if let user = user, artistName.isEmpty {
+                    artistName = user.displayName
+                }
+            }
+        } catch {
+            await MainActor.run {
+                existingUserFound = nil
+            }
+        }
+    }
+    
     private func inviteArtist() async {
         print("🎯 Starting invite artist flow...")
         errorMessage = nil
@@ -129,15 +238,28 @@ struct InviteArtistSheet: View {
             isSaving = true
         }
         
-        // Create reviewer
+        let cleanEmail = artistEmail.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        // Generate unique invitation token
+        let invitationToken = UUID().uuidString
+        
+        // Create reviewer with invitation token
         let reviewer = Reviewer(
             displayName: artistName,
-            email: artistEmail.lowercased().trimmingCharacters(in: .whitespaces),
+            email: cleanEmail,
+            userId: existingUserFound?.id, // Link to existing user if found
             role: role,
-            inviteStatus: .sent
+            inviteStatus: .sent,
+            invitationToken: invitationToken,
+            invitedAt: Date()
         )
         
         print("📝 Created reviewer object: \(reviewer.displayName)")
+        if let userId = existingUserFound?.id {
+            print("✅ Linked to existing user: \(userId)")
+        } else {
+            print("📧 New user - invitation token: \(invitationToken)")
+        }
         
         // Set project relationship
         reviewer.project = project
@@ -165,6 +287,11 @@ struct InviteArtistSheet: View {
                     reviewer: reviewer
                 )
                 print("✓ Reviewer synced to Firestore successfully")
+                
+                // TODO: Send invitation email with token
+                // For now, we'll rely on the share code or manual notification
+                print("📬 Invitation token: \(invitationToken)")
+                print("📧 Artist email: \(cleanEmail)")
             } catch {
                 // Log the error but don't block the UI
                 print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")

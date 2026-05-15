@@ -30,8 +30,10 @@ final class Reviewer {
     var userId: String? // Firebase user ID (populated when they join)
     var role: ReviewerRole
     var inviteStatus: ReviewerInviteStatus
+    var invitationToken: String? // Unique token for accepting invitation
     var createdAt: Date
     var acceptedAt: Date? // When they accepted the invitation
+    var invitedAt: Date? // When invitation was sent
     
     var project: Project?
     
@@ -45,8 +47,10 @@ final class Reviewer {
         userId: String? = nil,
         role: ReviewerRole = .reviewer,
         inviteStatus: ReviewerInviteStatus = .notSent,
+        invitationToken: String? = nil,
         createdAt: Date = Date(),
-        acceptedAt: Date? = nil
+        acceptedAt: Date? = nil,
+        invitedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -54,7 +58,9 @@ final class Reviewer {
         self.userId = userId
         self.role = role
         self.inviteStatus = inviteStatus
+        self.invitationToken = invitationToken
         self.createdAt = createdAt
         self.acceptedAt = acceptedAt
+        self.invitedAt = invitedAt
     }
 }

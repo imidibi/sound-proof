@@ -27,6 +27,16 @@ struct ContentView: View {
                     
                     Task {
                         do {
+                            // Accept any pending invitations for this user
+                            if let userEmail = authService.currentUser?.email {
+                                try await syncService.acceptPendingInvitations(
+                                    userId: userId,
+                                    userEmail: userEmail,
+                                    modelContext: modelContext
+                                )
+                            }
+                            
+                            // Sync user's projects
                             try await syncService.syncUserProjectsFromCloud(
                                 userId: userId,
                                 modelContext: modelContext

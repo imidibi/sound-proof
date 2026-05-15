@@ -26,9 +26,14 @@ struct User: Codable, Identifiable {
     var organizationId: String?     // Firestore ID of Organization
     var organizationName: String?   // Cached for display
     
-    // Producer-specific fields
+    // Contact information (for all users)
     var phone: String?
     var title: String? // e.g., "Senior Producer", "Lead Engineer"
+    
+    // Notification preferences
+    var enablePushNotifications: Bool?
+    var enableSMSNotifications: Bool?
+    var enableEmailNotifications: Bool?
     
     // Studio-specific fields (when role == .studio)
     var isOrganizationAdmin: Bool?
@@ -132,7 +137,7 @@ class AuthenticationService {
                 return
             }
             
-            let user = User(
+            var user = User(
                 id: uid,
                 email: email,
                 displayName: displayName,
@@ -140,11 +145,91 @@ class AuthenticationService {
                 createdAt: timestamp.dateValue()
             )
             
+            // Load optional fields
+            user.phone = data["phone"] as? String
+            user.title = data["title"] as? String
+            user.organizationId = data["organizationId"] as? String
+            user.organizationName = data["organizationName"] as? String
+            user.enablePushNotifications = data["enablePushNotifications"] as? Bool
+            user.enableSMSNotifications = data["enableSMSNotifications"] as? Bool
+            user.enableEmailNotifications = data["enableEmailNotifications"] as? Bool
+            user.isOrganizationAdmin = data["isOrganizationAdmin"] as? Bool
+            
             await MainActor.run {
                 self.currentUser = user
             }
         } catch {
             print("Error loading user profile: \(error)")
+        }
+    }
+    
+    // MARK: - User Lookup
+    
+    func getUserByEmail(email: String) async throws -> User? {
+        let query = db.collection("users").whereField("email", isEqualTo: email.lowercased())
+        let snapshot = try await query.getDocuments()
+        
+        guard let document = snapshot.documents.first,
+              let data = document.data() as? [String: Any],
+              let displayName = data["displayName"] as? String,
+              let roleString = data["role"] as? String,
+              let role = UserRole(rawValue: roleString),
+              let timestamp = data["createdAt"] as? Timestamp else {
+            return nil
+        }
+        
+        var user = User(
+            id: document.documentID,
+            email: email,
+            displayName: displayName,
+            role: role,
+            createdAt: timestamp.dateValue()
+        )
+        
+        // Load optional fields
+        user.phone = data["phone"] as? String
+        user.title = data["title"] as? String
+        user.organizationId = data["organizationId"] as? String
+        user.organizationName = data["organizationName"] as? String
+        
+        return user
+    }
+    
+    func getUser(userId: String) async throws -> User? {
+        let document = try await db.collection("users").document(userId).getDocument()
+        
+        guard let data = document.data(),
+              let email = data["email"] as? String,
+              let displayName = data["displayName"] as? String,
+              let roleString = data["role"] as? String,
+              let role = UserRole(rawValue: roleString),
+              let timestamp = data["createdAt"] as? Timestamp else {
+            return nil
+        }
+        
+        var user = User(
+            id: userId,
+            email: email,
+            displayName: displayName,
+            role: role,
+            createdAt: timestamp.dateValue()
+        )
+        
+        // Load optional fields
+        user.phone = data["phone"] as? String
+        user.title = data["title"] as? String
+        user.organizationId = data["organizationId"] as? String
+        user.organizationName = data["organizationName"] as? String
+        
+        return user
+    }
+    
+    func updateUserProfile(userId: String, data: [String: Any]) async throws {
+        try await db.collection("users").document(userId).updateData(data)
+        
+        // Reload current user if updating self
+        if userId == currentUser?.id {
+            await loadUserProfile(uid: userId)
         }
     }
 }
