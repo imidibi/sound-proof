@@ -97,6 +97,9 @@ struct SignInView: View {
     @State private var errorMessage: String?
     @State private var isLoading = false
     @State private var invitationToken: String?
+    @State private var showForgotPassword = false
+    @State private var resetEmail = ""
+    @State private var resetSuccess = false
     
     var body: some View {
         VStack(spacing: 32) {
@@ -200,11 +203,31 @@ struct SignInView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .disabled(email.isEmpty || password.isEmpty || isLoading)
             
-            Button("Create an account") {
-                showSignUp()
+            HStack(spacing: 20) {
+                Button("Create an account") {
+                    showSignUp()
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                
+                Text("•")
+                    .foregroundStyle(.secondary)
+                
+                Button("Forgot password?") {
+                    resetEmail = email
+                    showForgotPassword = true
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordSheet(email: $resetEmail, resetSuccess: $resetSuccess)
+        }
+        .alert("Password Reset Email Sent", isPresented: $resetSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Check your email for instructions to reset your password.")
         }
     }
     
@@ -638,6 +661,118 @@ struct ServiceRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+struct ForgotPasswordSheet: View {
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(\.dismiss) private var dismiss
+    
+    @Binding var email: String
+    @Binding var resetSuccess: Bool
+    
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.blue)
+                    .padding(.top, 40)
+                
+                VStack(spacing: 8) {
+                    Text("Reset Password")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("Enter your email address and we'll send you instructions to reset your password.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Email")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        TextField("email@example.com", text: $email)
+                            .textFieldStyle(.roundedBorder)
+                            .textContentType(.emailAddress)
+                            #if os(iOS)
+                            .autocapitalization(.none)
+                            #endif
+                            .autocorrectionDisabled()
+                    }
+                    
+                    if let errorMessage = errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                    
+                    Button {
+                        Task {
+                            await sendResetEmail()
+                        }
+                    } label: {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                        } else {
+                            Text("Send Reset Email")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .disabled(email.isEmpty || isLoading)
+                }
+                .padding(.horizontal, 32)
+                
+                Spacer()
+            }
+            .navigationTitle("Forgot Password")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func sendResetEmail() async {
+        errorMessage = nil
+        isLoading = true
+        
+        defer {
+            isLoading = false
+        }
+        
+        do {
+            try await authService.resetPassword(email: email.lowercased().trimmingCharacters(in: .whitespaces))
+            
+            await MainActor.run {
+                resetSuccess = true
+                dismiss()
+            }
+        } catch {
+            errorMessage = "Failed to send reset email: \(error.localizedDescription)"
+        }
     }
 }
 
