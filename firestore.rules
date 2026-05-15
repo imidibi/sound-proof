@@ -40,8 +40,13 @@ service cloud.firestore {
 
     // Projects collection
     match /projects/{projectId} {
-      allow read: if isSignedIn() &&
-                     (isProjectOwner(projectId) || isProjectReviewer(projectId));
+      // Allow reading individual projects
+      allow get: if isSignedIn() &&
+                    (isProjectOwner(projectId) || isProjectReviewer(projectId));
+      // Allow listing/querying projects owned by the user
+      allow list: if isSignedIn() &&
+                     request.resource == null &&
+                     resource.data.ownerUserId == request.auth.uid;
       allow create: if isSignedIn() && isProducer();
       allow update: if isSignedIn() && isProjectOwner(projectId);
       allow delete: if isSignedIn() && isProjectOwner(projectId);
@@ -87,7 +92,12 @@ service cloud.firestore {
 
     // Organizations collection
     match /organizations/{organizationId} {
-      allow read: if isSignedIn() && isOrganizationMember(organizationId);
+      // Allow reading individual organizations
+      allow get: if isSignedIn() && isOrganizationMember(organizationId);
+      // Allow querying organizations where user is a member
+      allow list: if isSignedIn() &&
+                     request.resource == null &&
+                     request.auth.uid in resource.data.memberIds;
       allow create: if isSignedIn() && isProducer();
       allow update: if isSignedIn() && isOrganizationMember(organizationId);
       allow delete: if isSignedIn() && isOrganizationMember(organizationId);
