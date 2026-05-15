@@ -8,7 +8,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>salesdiver.Session-Proof</string>
+			<string>salesdiver​.​Session​-​Proof</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>sessionproof</string>

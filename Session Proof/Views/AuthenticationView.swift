@@ -297,8 +297,7 @@ struct SignInView: View {
     }
     
     private func checkForPendingInvitations() async {
-        guard let userId = authService.currentUser?.id,
-              let userEmail = authService.currentUser?.email else {
+        guard let userEmail = authService.currentUser?.email else {
             return
         }
         
@@ -490,8 +489,7 @@ struct SignUpView: View {
     }
     
     private func checkForPendingInvitations() async {
-        guard let userId = authService.currentUser?.id,
-              let userEmail = authService.currentUser?.email else {
+        guard let userEmail = authService.currentUser?.email else {
             return
         }
         

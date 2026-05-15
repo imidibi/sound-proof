@@ -16,9 +16,22 @@
 		5F4837862FAE7EA20072004D /* Session Proof.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Session Proof.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5F0C3C502FB7CC7D00C2BD4E /* Exceptions for "Session Proof" folder in "Session Proof" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Session-Proof-Info.plist",
+			);
+			target = 5F4837852FAE7EA20072004D /* Session Proof */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5F4837882FAE7EA20072004D /* Session Proof */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5F0C3C502FB7CC7D00C2BD4E /* Exceptions for "Session Proof" folder in "Session Proof" target */,
+			);
 			path = "Session Proof";
 			sourceTree = "<group>";
 		};
@@ -271,6 +284,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Session-Proof-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Sound Proof";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Session Proof needs access to your microphone to record voice notes and comments for audio reviews.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Session Proof needs access to your photo library to import audio files.";
@@ -320,6 +334,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Session-Proof-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Sound Proof";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Session Proof needs access to your microphone to record voice notes and comments for audio reviews.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Session Proof needs access to your photo library to import audio files.";

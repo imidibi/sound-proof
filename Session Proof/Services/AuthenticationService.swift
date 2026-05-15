@@ -206,9 +206,13 @@ class AuthenticationService {
         let query = db.collection("users").whereField("email", isEqualTo: email.lowercased())
         let snapshot = try await query.getDocuments()
         
-        guard let document = snapshot.documents.first,
-              let data = document.data() as? [String: Any],
-              let displayName = data["displayName"] as? String,
+        guard let document = snapshot.documents.first else {
+            return nil
+        }
+        
+        let data = document.data()
+        
+        guard let displayName = data["displayName"] as? String,
               let roleString = data["role"] as? String,
               let role = UserRole(rawValue: roleString),
               let timestamp = data["createdAt"] as? Timestamp else {

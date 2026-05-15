@@ -160,7 +160,6 @@ struct NewOrganizationSheet: View {
                 print("📤 Uploading organization to Firestore...")
                 print("   Name: \(organization.name)")
                 print("   Member IDs: \(organization.memberIds)")
-                print("   Member IDs is Array: \(organization.memberIds is [String])")
                 
                 let firestoreId = try await firestoreService.createOrganization(
                     organization: organization,
