@@ -140,15 +140,13 @@ struct ProjectListView: View {
             .toolbar {
                 #if os(macOS)
                 // Mac-specific toolbar layout
-                ToolbarItem(placement: .navigation) {
+                ToolbarItemGroup(placement: .navigation) {
                     Button {
                         showingSettings = true
                     } label: {
                         Label("Settings", systemImage: "gear")
                     }
-                }
-                
-                ToolbarItemGroup(placement: .automatic) {
+                    
                     Menu {
                         // Always show New Project
                         Button {

@@ -12,12 +12,15 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(ProjectSyncService.self) private var syncService
     
     @Query private var organizations: [Organization]
     
     @State private var isLoggingOut = false
     @State private var showingLogoutConfirmation = false
     @State private var showingOrganizationManagement = false
+    @State private var isSyncing = false
+    @State private var lastSyncTime: Date?
     
     private var userOrganization: Organization? {
         guard let userId = authService.currentUser?.id else {
@@ -70,6 +73,39 @@ struct SettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                     }
+                }
+                
+                Section {
+                    Button {
+                        Task {
+                            await syncNow()
+                        }
+                    } label: {
+                        HStack {
+                            Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                            
+                            if isSyncing {
+                                Spacer()
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(isSyncing)
+                    
+                    if let lastSync = lastSyncTime {
+                        LabeledContent("Last Synced") {
+                            Text(lastSync, style: .relative)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Sync")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                } footer: {
+                    Text("Manually sync your projects and organization with the cloud.")
                 }
                 
                 Section {
@@ -138,6 +174,50 @@ struct SettingsView: View {
     
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+    }
+    
+    private func syncNow() async {
+        guard let userId = authService.currentUser?.id,
+              let userEmail = authService.currentUser?.email else {
+            return
+        }
+        
+        isSyncing = true
+        
+        do {
+            print("🔄 Manual sync initiated")
+            
+            // Accept pending invitations
+            try await syncService.acceptPendingInvitations(
+                userId: userId,
+                userEmail: userEmail,
+                modelContext: modelContext
+            )
+            
+            // Sync projects
+            try await syncService.syncUserProjectsFromCloud(
+                userId: userId,
+                modelContext: modelContext
+            )
+            
+            // Sync organization
+            try await syncService.syncUserOrganization(
+                userId: userId,
+                modelContext: modelContext
+            )
+            
+            await MainActor.run {
+                lastSyncTime = Date()
+                isSyncing = false
+            }
+            
+            print("✅ Manual sync completed")
+        } catch {
+            print("❌ Manual sync failed: \(error)")
+            await MainActor.run {
+                isSyncing = false
+            }
+        }
     }
     
     private func signOut() async {

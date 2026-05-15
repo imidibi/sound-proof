@@ -123,9 +123,8 @@ struct MixDetailView: View {
                 )
             }
             
-            // Floating comment button
+            // Floating buttons at top right
             VStack {
-                Spacer()
                 HStack {
                     Spacer()
                     
@@ -158,6 +157,8 @@ struct MixDetailView: View {
                     }
                     .padding()
                 }
+                
+                Spacer()
             }
         }
         .navigationTitle(mix.name)
