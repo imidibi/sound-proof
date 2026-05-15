@@ -25,6 +25,8 @@ struct InviteArtistSheet: View {
     @State private var existingUserFound: User?
     @State private var previousReviewers: [(email: String, name: String, projectCount: Int)] = []
     @State private var showingSuggestions = false
+    @State private var invitationSent = false
+    @State private var invitationLink = ""
     
     var canSave: Bool {
         !artistName.isEmpty && !artistEmail.isEmpty && isValidEmail(artistEmail)
@@ -288,8 +290,13 @@ Section {
                 )
                 print("✓ Reviewer synced to Firestore successfully")
                 
-                // TODO: Send invitation email with token
-                // For now, we'll rely on the share code or manual notification
+                // Send invitation email
+                await sendInvitationEmail(
+                    to: cleanEmail,
+                    artistName: artistName,
+                    projectName: project.name,
+                    invitationToken: invitationToken
+                )
                 print("📬 Invitation token: \(invitationToken)")
                 print("📧 Artist email: \(cleanEmail)")
             } catch {
@@ -309,9 +316,68 @@ Section {
     }
     
     private func isValidEmail(_ email: String) -> Bool {
-        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Z0-9a-z]{2,64}"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         return emailPredicate.evaluate(with: email)
+    }
+    
+    private func sendInvitationEmail(
+        to email: String,
+        artistName: String,
+        projectName: String,
+        invitationToken: String
+    ) async {
+        guard let producerName = authService.currentUser?.displayName else {
+            return
+        }
+        
+        // Create deep link for invitation
+        // Format: sessionproof://invite?token=<token>&email=<email>
+        let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? email
+        let deepLink = "sessionproof://invite?token=\(invitationToken)&email=\(encodedEmail)"
+        
+        await MainActor.run {
+            invitationLink = deepLink
+        }
+        
+        // Create email content
+        let subject = "\(producerName) invited you to review \(projectName)"
+        let body = """
+        Hi \(artistName),
+        
+        \(producerName) has invited you to review the project "\(projectName)" on Session Proof.
+        
+        To get started:
+        1. Download Session Proof from the App Store
+        2. Create an account using this email address: \(email)
+        3. Sign in and you'll automatically see the project
+        
+        Or tap this link on your iOS device to accept the invitation directly:
+        \(deepLink)
+        
+        Thanks,
+        The Session Proof Team
+        """
+        
+        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
+        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? body
+        
+        // Open mail client with pre-filled email
+        if let mailtoURL = URL(string: "mailto:\(email)?subject=\(encodedSubject)&body=\(encodedBody)") {
+            #if os(iOS)
+            await MainActor.run {
+                UIApplication.shared.open(mailtoURL)
+            }
+            #elseif os(macOS)
+            await MainActor.run {
+                NSWorkspace.shared.open(mailtoURL)
+            }
+            #endif
+            
+            await MainActor.run {
+                invitationSent = true
+            }
+        }
     }
 }
 

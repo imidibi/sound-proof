@@ -17,6 +17,7 @@ struct Session_ProofApp: App {
     @State private var syncService: ProjectSyncService
     @State private var networkMonitor: NetworkMonitor
     @State private var syncQueueService: SyncQueueService
+    @State private var pendingInvitationURL: URL?
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -74,13 +75,63 @@ struct Session_ProofApp: App {
                     .environment(syncService)
                     .environment(networkMonitor)
                     .environment(syncQueueService)
+                    .onOpenURL { url in
+                        handleIncomingURL(url)
+                    }
             } else {
                 AuthenticationView()
                     .environment(authService)
                     .environment(firestoreService)
                     .environment(syncService)
+                    .onOpenURL { url in
+                        // Store URL to handle after authentication
+                        pendingInvitationURL = url
+                    }
             }
         }
         .modelContainer(sharedModelContainer)
+    }
+    
+    private func handleIncomingURL(_ url: URL) {
+        print("📱 Received URL: \(url.absoluteString)")
+        
+        guard url.scheme == "sessionproof",
+              url.host == "invite" else {
+            print("⚠️ Invalid URL scheme or host")
+            return
+        }
+        
+        // Parse query parameters
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let queryItems = components.queryItems else {
+            print("⚠️ No query parameters found")
+            return
+        }
+        
+        let token = queryItems.first(where: { $0.name == "token" })?.value
+        let email = queryItems.first(where: { $0.name == "email" })?.value
+        
+        print("📧 Invitation - Token: \(token ?? "none"), Email: \(email ?? "none")")
+        
+        // If user is authenticated and this matches their email, accept the invitation
+        if let userEmail = authService.currentUser?.email,
+           let inviteEmail = email,
+           userEmail.lowercased() == inviteEmail.lowercased() {
+            
+            Task {
+                do {
+                    try await syncService.acceptPendingInvitations(
+                        userId: authService.currentUser?.id ?? "",
+                        userEmail: userEmail,
+                        modelContext: sharedModelContainer.mainContext
+                    )
+                    print("✅ Processed invitation from deep link")
+                } catch {
+                    print("❌ Error processing invitation: \(error)")
+                }
+            }
+        } else {
+            print("⚠️ Email mismatch or user not authenticated")
+        }
     }
 }
