@@ -66,7 +66,7 @@ class AuthenticationService {
         // Check if user is already signed in
         if let firebaseUser = auth.currentUser {
             Task {
-                await loadUserProfile(uid: firebaseUser.uid)
+                await loadUserProfile(uid: firebaseUser.uid, email: firebaseUser.email ?? "")
                 await MainActor.run {
                     self.isCheckingAuth = false
                 }
@@ -99,7 +99,7 @@ class AuthenticationService {
     
     func signIn(email: String, password: String) async throws {
         let result = try await auth.signIn(withEmail: email, password: password)
-        await loadUserProfile(uid: result.user.uid)
+        await loadUserProfile(uid: result.user.uid, email: result.user.email ?? email)
     }
     
     func signOut() throws {
@@ -124,16 +124,51 @@ class AuthenticationService {
         try await db.collection("users").document(user.id).setData(data)
     }
     
-    private func loadUserProfile(uid: String) async {
+    private func loadUserProfile(uid: String, email: String) async {
+        print("📥 Loading user profile for UID: \(uid)")
+        
         do {
             let document = try await db.collection("users").document(uid).getDocument()
             
-            guard let data = document.data(),
-                  let email = data["email"] as? String,
-                  let displayName = data["displayName"] as? String,
-                  let roleString = data["role"] as? String,
-                  let role = UserRole(rawValue: roleString),
-                  let timestamp = data["createdAt"] as? Timestamp else {
+            guard document.exists else {
+                print("❌ User profile document does not exist in Firestore for UID: \(uid)")
+                print("⚠️ This usually means the user was created directly in Firebase Auth without a Firestore profile")
+                print("🔧 Attempting to create profile automatically...")
+                
+                // Create a basic profile - we'll prompt user to complete it later
+                await createMissingProfile(uid: uid, email: email)
+                return
+            }
+            
+            guard let data = document.data() else {
+                print("❌ User profile document exists but has no data")
+                return
+            }
+            
+            print("📊 User profile data: \(data.keys.joined(separator: ", "))")
+            
+            guard let email = data["email"] as? String else {
+                print("❌ Missing email field")
+                return
+            }
+            
+            guard let displayName = data["displayName"] as? String else {
+                print("❌ Missing displayName field")
+                return
+            }
+            
+            guard let roleString = data["role"] as? String else {
+                print("❌ Missing role field")
+                return
+            }
+            
+            guard let role = UserRole(rawValue: roleString) else {
+                print("❌ Invalid role value: \(roleString)")
+                return
+            }
+            
+            guard let timestamp = data["createdAt"] as? Timestamp else {
+                print("❌ Missing createdAt field")
                 return
             }
             
@@ -157,9 +192,11 @@ class AuthenticationService {
             
             await MainActor.run {
                 self.currentUser = user
+                print("✅ User profile loaded successfully: \(user.displayName) (\(user.email))")
             }
         } catch {
-            print("Error loading user profile: \(error)")
+            print("❌ Error loading user profile: \(error)")
+            print("   Error details: \(error.localizedDescription)")
         }
     }
     
@@ -229,7 +266,31 @@ class AuthenticationService {
         
         // Reload current user if updating self
         if userId == currentUser?.id {
-            await loadUserProfile(uid: userId)
+            await loadUserProfile(uid: userId, email: currentUser?.email ?? "")
+        }
+    }
+    
+    // MARK: - Migration Helper
+    
+    private func createMissingProfile(uid: String, email: String) async {
+        // Create a temporary profile with minimal info
+        // The user will be prompted to complete it on first login
+        let user = User(
+            id: uid,
+            email: email,
+            displayName: email.components(separatedBy: "@").first ?? "User",
+            role: .producer, // Default to producer, can be changed later
+            createdAt: Date()
+        )
+        
+        do {
+            try await saveUserProfile(user: user)
+            print("✅ Created missing user profile for: \(email)")
+            
+            // Now load the newly created profile
+            await loadUserProfile(uid: uid, email: email)
+        } catch {
+            print("❌ Failed to create missing profile: \(error)")
         }
     }
 }
