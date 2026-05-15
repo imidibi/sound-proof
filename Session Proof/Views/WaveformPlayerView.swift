@@ -58,22 +58,69 @@ struct WaveformPlayerView: View {
                     
                     // Large time display overlay
                     VStack {
-                        Text(formatLargeTime(audioPlayerService.currentTime))
-                            .font(.system(size: timeDisplaySize, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(.black.opacity(0.3))
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                            )
+                        HStack {
+                            #if os(iOS)
+                            // Position differently for iPhone vs iPad
+                            if UIDevice.current.userInterfaceIdiom == .phone {
+                                // iPhone: smaller, positioned at top left
+                                Text(formatLargeTime(audioPlayerService.currentTime))
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 2)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.black.opacity(0.3))
+                                            .background(.ultraThinMaterial)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    )
+                                
+                                Spacer()
+                            } else {
+                                // iPad: centered at top
+                                Spacer()
+                                
+                                Text(formatLargeTime(audioPlayerService.currentTime))
+                                    .font(.system(size: timeDisplaySize, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .fill(.black.opacity(0.3))
+                                            .background(.ultraThinMaterial)
+                                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    )
+                                
+                                Spacer()
+                            }
+                            #else
+                            // macOS: centered at top
+                            Spacer()
+                            
+                            Text(formatLargeTime(audioPlayerService.currentTime))
+                                .font(.system(size: timeDisplaySize, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(.black.opacity(0.3))
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                                )
+                            
+                            Spacer()
+                            #endif
+                        }
                         
                         Spacer()
                     }
-                    .padding(.top, 60)
+                    .padding(.top, timeDisplayTopPadding)
                 } else {
                     Text("Waveform not available")
                         .foregroundStyle(.secondary)
@@ -151,6 +198,15 @@ struct WaveformPlayerView: View {
         return UIDevice.current.userInterfaceIdiom == .phone ? 48 : 72
         #else
         return 72
+        #endif
+    }
+    
+    private var timeDisplayTopPadding: CGFloat {
+        #if os(iOS)
+        // Less padding on iPhone to keep it compact
+        return UIDevice.current.userInterfaceIdiom == .phone ? 8 : 60
+        #else
+        return 60
         #endif
     }
     

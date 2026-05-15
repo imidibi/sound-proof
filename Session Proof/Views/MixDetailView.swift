@@ -110,10 +110,39 @@ struct MixDetailView: View {
     private var iOSLayout: some View {
         ZStack {
             VStack(spacing: 0) {
-                // Mix header for iPad
+                // Mix header for iPad with integrated buttons
                 if UIDevice.current.userInterfaceIdiom == .pad {
-                    MixHeaderView(mix: mix)
-                        .padding()
+                    HStack {
+                        MixHeaderView(mix: mix)
+                        
+                        // Action buttons in the middle
+                        HStack(spacing: 16) {
+                            Button {
+                                showingInspector = true
+                            } label: {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 3)
+                            }
+                            
+                            Button {
+                                showingCommentSheet = true
+                            } label: {
+                                Image(systemName: "plus.message.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.accentColor)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 3)
+                            }
+                        }
+                    }
+                    .padding()
                     Divider()
                 }
                 
@@ -123,42 +152,44 @@ struct MixDetailView: View {
                 )
             }
             
-            // Floating buttons at top right
-            VStack {
-                HStack {
-                    Spacer()
-                    
-                    VStack(spacing: 12) {
-                        // Inspector button (iPhone and iPad)
-                        Button {
-                            showingInspector = true
-                        } label: {
-                            Image(systemName: "info.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                                .frame(width: 56, height: 56)
-                                .background(Color.blue)
-                                .clipShape(Circle())
-                                .shadow(radius: 4)
-                        }
+            // Floating buttons for iPhone only
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                VStack {
+                    HStack {
+                        Spacer()
                         
-                        // Add comment button
-                        Button {
-                            showingCommentSheet = true
-                        } label: {
-                            Image(systemName: "plus.message.fill")
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                                .frame(width: 56, height: 56)
-                                .background(Color.accentColor)
-                                .clipShape(Circle())
-                                .shadow(radius: 4)
+                        VStack(spacing: 12) {
+                            // Inspector button
+                            Button {
+                                showingInspector = true
+                            } label: {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 50, height: 50)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                            }
+                            
+                            // Add comment button
+                            Button {
+                                showingCommentSheet = true
+                            } label: {
+                                Image(systemName: "plus.message.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 50, height: 50)
+                                    .background(Color.accentColor)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                            }
                         }
+                        .padding()
                     }
-                    .padding()
+                    
+                    Spacer()
                 }
-                
-                Spacer()
             }
         }
         .navigationTitle(mix.name)
