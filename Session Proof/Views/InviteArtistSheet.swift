@@ -280,6 +280,15 @@ Section {
             }
         }
         
+        // Send invitation email
+        print("📧 Sending invitation email to: \(cleanEmail)")
+        await sendInvitationEmail(
+            to: cleanEmail,
+            artistName: artistName,
+            projectName: project.name,
+            invitationToken: invitationToken
+        )
+        
         // Sync to Firestore (non-blocking - continue even if it fails)
         if let firestoreId = project.firestoreId {
             print("☁️ Attempting Firestore sync...")
@@ -289,16 +298,7 @@ Section {
                     reviewer: reviewer
                 )
                 print("✓ Reviewer synced to Firestore successfully")
-                
-                // Send invitation email
-                await sendInvitationEmail(
-                    to: cleanEmail,
-                    artistName: artistName,
-                    projectName: project.name,
-                    invitationToken: invitationToken
-                )
                 print("📬 Invitation token: \(invitationToken)")
-                print("📧 Artist email: \(cleanEmail)")
             } catch {
                 // Log the error but don't block the UI
                 print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")
