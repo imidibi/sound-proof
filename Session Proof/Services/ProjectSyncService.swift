@@ -825,25 +825,25 @@ class ProjectSyncService {
         print("☁️ Found organization in Firestore: \(firestoreId)")
         
         // Check if organization already exists locally
-        // First check by firestoreId if we can convert to UUID
-        var existingOrganizations: [Organization] = []
-        if let firestoreUUID = UUID(uuidString: firestoreId) {
-            let idDescriptor = FetchDescriptor<Organization>(
-                predicate: #Predicate { org in
-                    org.id == firestoreUUID
-                }
-            )
-            existingOrganizations = try modelContext.fetch(idDescriptor)
-        }
+        print("🔍 Checking for existing local organization...")
         
-        // If not found by ID, check by memberIds
-        if existingOrganizations.isEmpty {
-            let memberDescriptor = FetchDescriptor<Organization>(
-                predicate: #Predicate { org in
-                    org.memberIds.contains(userId)
-                }
-            )
-            existingOrganizations = try modelContext.fetch(memberDescriptor)
+        // First try to fetch all organizations and filter manually to avoid predicate issues
+        let allOrgsDescriptor = FetchDescriptor<Organization>()
+        let allOrganizations = try modelContext.fetch(allOrgsDescriptor)
+        
+        print("📊 Found \(allOrganizations.count) total local organizations")
+        
+        // Check by firestoreId or memberIds
+        let existingOrganizations = allOrganizations.filter { org in
+            if let orgFirestoreId = org.firestoreId, orgFirestoreId == firestoreId {
+                print("✓ Match by firestoreId: \(orgFirestoreId)")
+                return true
+            }
+            if org.memberIds.contains(userId) {
+                print("✓ Match by memberIds")
+                return true
+            }
+            return false
         }
         
         if let existingOrg = existingOrganizations.first {
