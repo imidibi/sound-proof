@@ -157,6 +157,11 @@ struct NewOrganizationSheet: View {
             
             // Sync to Firestore
             do {
+                print("📤 Uploading organization to Firestore...")
+                print("   Name: \(organization.name)")
+                print("   Member IDs: \(organization.memberIds)")
+                print("   Member IDs is Array: \(organization.memberIds is [String])")
+                
                 let firestoreId = try await firestoreService.createOrganization(
                     organization: organization,
                     userId: userId
@@ -168,6 +173,7 @@ struct NewOrganizationSheet: View {
                 }
             } catch {
                 print("⚠️ Error syncing organization to Firestore: \(error)")
+                print("   Error details: \(error.localizedDescription)")
                 // Continue anyway - organization is saved locally
             }
             

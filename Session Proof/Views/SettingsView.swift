@@ -21,25 +21,10 @@ struct SettingsView: View {
     
     private var userOrganization: Organization? {
         guard let userId = authService.currentUser?.id else {
-            print("⚠️ No current user ID")
             return nil
         }
         
-        print("🔍 Looking for organization for user: \(userId)")
-        print("   Total organizations: \(organizations.count)")
-        
-        for org in organizations {
-            print("   - Organization: \(org.name), Members: \(org.memberIds)")
-        }
-        
-        let org = organizations.first { $0.memberIds.contains(userId) }
-        if let org = org {
-            print("✅ Found user's organization: \(org.name)")
-        } else {
-            print("⚠️ No organization found for user")
-        }
-        
-        return org
+        return organizations.first { $0.memberIds.contains(userId) }
     }
     
     var body: some View {

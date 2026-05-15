@@ -433,13 +433,24 @@ class FirestoreService {
     }
     
     func getUserOrganization(userId: String) async throws -> (id: String, data: [String: Any])? {
+        print("🔍 Querying Firestore for organization with userId: \(userId)")
         let query = db.collection("organizations").whereField("memberIds", arrayContains: userId)
         let snapshot = try await query.getDocuments()
         
+        print("📊 Query returned \(snapshot.documents.count) organization(s)")
+        for doc in snapshot.documents {
+            print("   - Found org: \(doc.documentID)")
+            if let memberIds = doc.data()["memberIds"] as? [String] {
+                print("     memberIds: \(memberIds)")
+            }
+        }
+        
         guard let document = snapshot.documents.first else {
+            print("⚠️ No organization document found")
             return nil
         }
         
+        print("✅ Returning organization: \(document.documentID)")
         return (document.documentID, document.data())
     }
     
