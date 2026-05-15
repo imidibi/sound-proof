@@ -52,6 +52,16 @@ struct ProjectReviewersView: View {
                                     }
                                 }
                             }
+                            .contextMenu {
+                                if reviewer.role != .owner && authService.currentUser?.isProducer == true {
+                                    Button(role: .destructive) {
+                                        reviewerToDelete = reviewer
+                                        showingDeleteConfirmation = true
+                                    } label: {
+                                        Label("Remove Reviewer", systemImage: "trash")
+                                    }
+                                }
+                            }
                     }
                 } header: {
                     Text("Artists & Reviewers")
