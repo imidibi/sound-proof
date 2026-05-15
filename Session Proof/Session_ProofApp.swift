@@ -77,6 +77,8 @@ struct Session_ProofApp: App {
             } else {
                 AuthenticationView()
                     .environment(authService)
+                    .environment(firestoreService)
+                    .environment(syncService)
             }
         }
         .modelContainer(sharedModelContainer)
