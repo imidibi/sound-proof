@@ -242,6 +242,19 @@ Section {
         
         let cleanEmail = artistEmail.lowercased().trimmingCharacters(in: .whitespaces)
         
+        // Check if this email is already a reviewer on this project
+        let existingReviewer = project.reviewers.first { reviewer in
+            reviewer.email.lowercased() == cleanEmail
+        }
+        
+        if existingReviewer != nil {
+            await MainActor.run {
+                errorMessage = "This email address is already invited to this project"
+                isSaving = false
+            }
+            return
+        }
+        
         // Generate unique invitation token
         let invitationToken = UUID().uuidString
         
@@ -269,15 +282,21 @@ Section {
         print("🔗 Set project relationship")
         
         // Save to local database
-        await MainActor.run {
-            do {
+        do {
+            await MainActor.run {
                 modelContext.insert(reviewer)
-                try modelContext.save()
-                print("💾 Reviewer saved to local database")
-            } catch {
-                print("❌ Failed to save reviewer locally: \(error)")
-                errorMessage = "Failed to save: \(error.localizedDescription)"
             }
+            try await MainActor.run {
+                try modelContext.save()
+            }
+            print("💾 Reviewer saved to local database")
+        } catch {
+            print("❌ Failed to save reviewer locally: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to save: \(error.localizedDescription)"
+                isSaving = false
+            }
+            return
         }
         
         // Send invitation email
