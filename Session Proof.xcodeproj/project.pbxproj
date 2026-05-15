@@ -16,22 +16,9 @@
 		5F4837862FAE7EA20072004D /* Session Proof.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Session Proof.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		5F0C3C502FB7CC7D00C2BD4E /* Exceptions for "Session Proof" folder in "Session Proof" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"Session-Proof-Info.plist",
-			);
-			target = 5F4837852FAE7EA20072004D /* Session Proof */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5F4837882FAE7EA20072004D /* Session Proof */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				5F0C3C502FB7CC7D00C2BD4E /* Exceptions for "Session Proof" folder in "Session Proof" target */,
-			);
 			path = "Session Proof";
 			sourceTree = "<group>";
 		};

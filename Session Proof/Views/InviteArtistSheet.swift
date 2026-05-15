@@ -370,7 +370,7 @@ Section {
             }
             #elseif os(macOS)
             await MainActor.run {
-                NSWorkspace.shared.open(mailtoURL)
+                _ = NSWorkspace.shared.open(mailtoURL)
             }
             #endif
             

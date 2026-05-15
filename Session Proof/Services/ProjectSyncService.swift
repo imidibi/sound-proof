@@ -188,7 +188,7 @@ class ProjectSyncService {
         shareCode: String,
         modelContext: ModelContext
     ) async throws -> Project {
-        guard let userId = authService.currentUser?.id else {
+        guard authService.currentUser?.id != nil else {
             throw NSError(domain: "ProjectSync", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
         }
         
