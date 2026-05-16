@@ -27,6 +27,7 @@ struct InviteArtistSheet: View {
     @State private var showingSuggestions = false
     @State private var invitationSent = false
     @State private var invitationLink = ""
+    @State private var showingExistingUserConfirmation = false
     
     var canSave: Bool {
         !artistName.isEmpty && !artistEmail.isEmpty && isValidEmail(artistEmail)
@@ -173,8 +174,13 @@ Section {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        Task {
-                            await inviteArtist()
+                        // If existing user found, show confirmation dialog
+                        if existingUserFound != nil {
+                            showingExistingUserConfirmation = true
+                        } else {
+                            Task {
+                                await inviteArtist()
+                            }
                         }
                     } label: {
                         if isSaving {
@@ -190,6 +196,27 @@ Section {
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 600, minHeight: 500)
         #endif
+        .confirmationDialog(
+            existingUserFound != nil 
+                ? "This reviewer is already registered - invite again?" 
+                : "",
+            isPresented: $showingExistingUserConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Yes, Send Invitation") {
+                Task {
+                    await inviteArtist()
+                }
+            }
+            
+            Button("No, Cancel", role: .cancel) {
+                // Dialog will dismiss automatically
+            }
+        } message: {
+            if let user = existingUserFound {
+                Text("\(user.displayName) (\(user.email)) already has an account. Do you want to send them an invitation email?")
+            }
+        }
     }
     
     private func loadPreviousReviewers() async {
