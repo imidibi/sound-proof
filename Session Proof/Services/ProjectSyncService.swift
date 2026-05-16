@@ -801,9 +801,15 @@ class ProjectSyncService {
         print("👥 Found \(cloudReviewers.count) reviewers for project")
         
         for (reviewerId, reviewerData) in cloudReviewers {
+            // Convert reviewerId string to UUID
+            guard let reviewerUUID = UUID(uuidString: reviewerId) else {
+                print("⚠️ Skipping reviewer with invalid UUID format: \(reviewerId)")
+                continue
+            }
+            
             // Check if reviewer already exists locally
             let descriptor = FetchDescriptor<Reviewer>(
-                predicate: #Predicate { $0.id.uuidString == reviewerId }
+                predicate: #Predicate { $0.id == reviewerUUID }
             )
             let existingReviewers = try modelContext.fetch(descriptor)
             
@@ -821,7 +827,7 @@ class ProjectSyncService {
                 }
                 
                 let reviewer = Reviewer(
-                    id: UUID(uuidString: reviewerId) ?? UUID(),
+                    id: reviewerUUID,
                     displayName: displayName,
                     email: email,
                     userId: reviewerData["userId"] as? String,
