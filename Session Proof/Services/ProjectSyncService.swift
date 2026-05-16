@@ -481,6 +481,7 @@ class ProjectSyncService {
         defer { isSyncing = false }
         
         print("🔄 Syncing projects from cloud for user: \(userId)")
+        print("🆔 User ID being used for sync: '\(userId)'")
         
         do {
             // Get projects owned by this user

@@ -70,20 +70,32 @@ class FirestoreService {
         
         // Get all projects
         let projectsSnapshot = try await db.collection("projects").getDocuments()
+        print("📊 Total projects in Firestore: \(projectsSnapshot.documents.count)")
         var projectsWithUser: [(id: String, data: [String: Any])] = []
         
         // For each project, check if the user is in the reviewers subcollection
         for projectDoc in projectsSnapshot.documents {
+            let projectName = projectDoc.data()["name"] as? String ?? "Unknown"
+            print("🔎 Checking project: \(projectName) (\(projectDoc.documentID))")
+            
             let reviewersSnapshot = try await db.collection("projects")
                 .document(projectDoc.documentID)
                 .collection("reviewers")
-                .whereField("userId", isEqualTo: userId)
                 .getDocuments()
             
-            // If we found the user as a reviewer, add this project
-            if !reviewersSnapshot.documents.isEmpty {
-                print("✅ Found user as reviewer in project: \(projectDoc.data()["name"] ?? "Unknown")")
-                projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+            print("   👥 Found \(reviewersSnapshot.documents.count) reviewers in this project")
+            
+            // Check each reviewer
+            for reviewerDoc in reviewersSnapshot.documents {
+                let reviewerUserId = reviewerDoc.data()["userId"] as? String ?? "none"
+                let reviewerEmail = reviewerDoc.data()["email"] as? String ?? "none"
+                print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId)")
+                
+                if reviewerUserId == userId {
+                    print("      ✅ MATCH! This is the user we're looking for")
+                    projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+                    break
+                }
             }
         }
         
