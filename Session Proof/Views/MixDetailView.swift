@@ -108,89 +108,73 @@ struct MixDetailView: View {
     
     #if os(iOS)
     private var iOSLayout: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                // Mix header for iPad with integrated buttons
+        VStack(spacing: 0) {
+            // Compact header for both iPad and iPhone
+            HStack {
                 if UIDevice.current.userInterfaceIdiom == .pad {
-                    HStack {
-                        MixHeaderView(mix: mix)
+                    // iPad: full header with mix info
+                    MixHeaderView(mix: mix)
+                } else {
+                    // iPhone: just format info
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mix.name)
+                            .font(.headline)
+                            .lineLimit(1)
                         
-                        // Action buttons in the middle
-                        HStack(spacing: 16) {
-                            Button {
-                                showingInspector = true
-                            } label: {
-                                Image(systemName: "info.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 3)
-                            }
+                        HStack(spacing: 8) {
+                            Text(formatDuration(mix.duration))
+                                .font(.caption)
+                                .monospacedDigit()
                             
-                            Button {
-                                showingCommentSheet = true
-                            } label: {
-                                Image(systemName: "plus.message.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.accentColor)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 3)
-                            }
+                            Text("•")
+                                .font(.caption)
+                            
+                            Text("\(Int(mix.sampleRate / 1000))kHz • \(mix.channels)ch")
+                                .font(.caption)
                         }
+                        .foregroundStyle(.secondary)
                     }
-                    .padding()
-                    Divider()
                 }
                 
-                WaveformPlayerView(
-                    mix: mix,
-                    audioPlayerService: audioPlayerService
-                )
-            }
-            
-            // Floating buttons for iPhone only
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                VStack {
-                    HStack {
-                        Spacer()
-                        
-                        VStack(spacing: 12) {
-                            // Inspector button
-                            Button {
-                                showingInspector = true
-                            } label: {
-                                Image(systemName: "info.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 50, height: 50)
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 4)
-                            }
-                            
-                            // Add comment button
-                            Button {
-                                showingCommentSheet = true
-                            } label: {
-                                Image(systemName: "plus.message.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 50, height: 50)
-                                    .background(Color.accentColor)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 4)
-                            }
-                        }
-                        .padding()
+                Spacer()
+                
+                // Action buttons - horizontal for both devices
+                HStack(spacing: 12) {
+                    Button {
+                        showingInspector = true
+                    } label: {
+                        Image(systemName: "info.circle.fill")
+                            .font(UIDevice.current.userInterfaceIdiom == .pad ? .title2 : .title3)
+                            .foregroundStyle(.white)
+                            .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38, 
+                                   height: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .shadow(radius: 3)
                     }
                     
-                    Spacer()
+                    Button {
+                        showingCommentSheet = true
+                    } label: {
+                        Image(systemName: "plus.message.fill")
+                            .font(UIDevice.current.userInterfaceIdiom == .pad ? .title2 : .title3)
+                            .foregroundStyle(.white)
+                            .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38, 
+                                   height: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38)
+                            .background(Color.accentColor)
+                            .clipShape(Circle())
+                            .shadow(radius: 3)
+                    }
                 }
             }
+            .padding()
+            
+            Divider()
+            
+            WaveformPlayerView(
+                mix: mix,
+                audioPlayerService: audioPlayerService
+            )
         }
         .navigationTitle(mix.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -250,6 +234,12 @@ struct MixDetailView: View {
         reviewerListener?.remove()
         reviewerListener = nil
         print("⏹️ Stopped comment and reviewer sync")
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
