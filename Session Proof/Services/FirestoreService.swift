@@ -65,6 +65,32 @@ class FirestoreService {
         }
     }
     
+    func getProjectsWhereUserIsReviewer(userId: String) async throws -> [(id: String, data: [String: Any])] {
+        print("🔍 Searching for projects where user \(userId) is a reviewer")
+        
+        // Get all projects
+        let projectsSnapshot = try await db.collection("projects").getDocuments()
+        var projectsWithUser: [(id: String, data: [String: Any])] = []
+        
+        // For each project, check if the user is in the reviewers subcollection
+        for projectDoc in projectsSnapshot.documents {
+            let reviewersSnapshot = try await db.collection("projects")
+                .document(projectDoc.documentID)
+                .collection("reviewers")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            
+            // If we found the user as a reviewer, add this project
+            if !reviewersSnapshot.documents.isEmpty {
+                print("✅ Found user as reviewer in project: \(projectDoc.data()["name"] ?? "Unknown")")
+                projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+            }
+        }
+        
+        print("📦 Found \(projectsWithUser.count) projects where user is a reviewer")
+        return projectsWithUser
+    }
+    
     func getProjectSongs(projectId: String) async throws -> [(id: String, data: [String: Any])] {
         let snapshot = try await db.collection("projects")
             .document(projectId)

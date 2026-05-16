@@ -483,9 +483,25 @@ class ProjectSyncService {
         print("🔄 Syncing projects from cloud for user: \(userId)")
         
         do {
-            // Get all projects for this user from Firestore
-            let cloudProjects = try await firestoreService.getUserProjects(userId: userId)
-            print("📦 Found \(cloudProjects.count) projects in cloud")
+            // Get projects owned by this user
+            let ownedProjects = try await firestoreService.getUserProjects(userId: userId)
+            print("📦 Found \(ownedProjects.count) owned projects")
+            
+            // Get projects where user is a reviewer
+            let reviewerProjects = try await firestoreService.getProjectsWhereUserIsReviewer(userId: userId)
+            print("📦 Found \(reviewerProjects.count) projects where user is a reviewer")
+            
+            // Combine and deduplicate projects
+            var projectsMap: [String: [String: Any]] = [:]
+            for (projectId, projectData) in ownedProjects {
+                projectsMap[projectId] = projectData
+            }
+            for (projectId, projectData) in reviewerProjects {
+                projectsMap[projectId] = projectData
+            }
+            
+            let cloudProjects = Array(projectsMap)
+            print("📦 Total unique projects to sync: \(cloudProjects.count)")
             
             for (projectId, projectData) in cloudProjects {
                 // Check if project already exists locally
@@ -518,6 +534,13 @@ class ProjectSyncService {
                     modelContext.insert(project)
                     try modelContext.save()
                     
+                    // Sync reviewers for this project
+                    try await syncProjectReviewers(
+                        projectId: projectId,
+                        project: project,
+                        modelContext: modelContext
+                    )
+                    
                     // Now sync songs for this project
                     try await syncProjectSongsFromCloud(
                         projectId: projectId,
@@ -527,8 +550,14 @@ class ProjectSyncService {
                 } else {
                     print("✓ Project already exists locally: \(projectData["name"] ?? "Unknown")")
                     
-                    // Still sync songs in case there are new ones
+                    // Still sync reviewers and songs in case there are new ones
                     if let existingProject = existingProjects.first {
+                        try await syncProjectReviewers(
+                            projectId: projectId,
+                            project: existingProject,
+                            modelContext: modelContext
+                        )
+                        
                         try await syncProjectSongsFromCloud(
                             projectId: projectId,
                             project: existingProject,
