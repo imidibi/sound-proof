@@ -65,8 +65,8 @@ class FirestoreService {
         }
     }
     
-    func getProjectsWhereUserIsReviewer(userId: String) async throws -> [(id: String, data: [String: Any])] {
-        print("🔍 Searching for projects where user \(userId) is a reviewer")
+    func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
+        print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
         
         // Get all projects
         let projectsSnapshot = try await db.collection("projects").getDocuments()
@@ -87,12 +87,33 @@ class FirestoreService {
             
             // Check each reviewer
             for reviewerDoc in reviewersSnapshot.documents {
-                let reviewerUserId = reviewerDoc.data()["userId"] as? String ?? "none"
+                let reviewerUserId = reviewerDoc.data()["userId"] as? String
                 let reviewerEmail = reviewerDoc.data()["email"] as? String ?? "none"
-                print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId)")
+                print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId ?? "none")")
                 
-                if reviewerUserId == userId {
-                    print("      ✅ MATCH! This is the user we're looking for")
+                // Check by userId first
+                if let reviewerUserId = reviewerUserId, reviewerUserId == userId {
+                    print("      ✅ MATCH by userId!")
+                    projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+                    break
+                }
+                
+                // Fallback: check by email and backfill userId
+                if reviewerEmail.lowercased() == userEmail.lowercased() {
+                    print("      ✅ MATCH by email! Backfilling userId...")
+                    
+                    // Update this reviewer record with the userId
+                    do {
+                        try await db.collection("projects")
+                            .document(projectDoc.documentID)
+                            .collection("reviewers")
+                            .document(reviewerDoc.documentID)
+                            .updateData(["userId": userId])
+                        print("      ✓ Updated reviewer with userId")
+                    } catch {
+                        print("      ⚠️ Failed to update reviewer: \(error)")
+                    }
+                    
                     projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
                     break
                 }

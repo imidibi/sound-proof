@@ -480,16 +480,22 @@ class ProjectSyncService {
         isSyncing = true
         defer { isSyncing = false }
         
+        guard let userEmail = authService.currentUser?.email else {
+            print("❌ Cannot sync: user email not available")
+            throw NSError(domain: "ProjectSync", code: 401, userInfo: [NSLocalizedDescriptionKey: "User email not available"])
+        }
+        
         print("🔄 Syncing projects from cloud for user: \(userId)")
         print("🆔 User ID being used for sync: '\(userId)'")
+        print("📧 User email: '\(userEmail)'")
         
         do {
             // Get projects owned by this user
             let ownedProjects = try await firestoreService.getUserProjects(userId: userId)
             print("📦 Found \(ownedProjects.count) owned projects")
             
-            // Get projects where user is a reviewer
-            let reviewerProjects = try await firestoreService.getProjectsWhereUserIsReviewer(userId: userId)
+            // Get projects where user is a reviewer (with email fallback and backfill)
+            let reviewerProjects = try await firestoreService.getProjectsWhereUserIsReviewer(userId: userId, userEmail: userEmail)
             print("📦 Found \(reviewerProjects.count) projects where user is a reviewer")
             
             // Combine and deduplicate projects
