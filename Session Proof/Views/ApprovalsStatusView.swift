@@ -77,21 +77,16 @@ struct MixApprovalRow: View {
         let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
         let total = reviewers.count
         
-        var approved = 0
-        var changesRequested = 0
-        
-        for reviewer in reviewers {
-            if let approval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
-                if approval.status == .approved {
-                    approved += 1
-                } else if approval.status == .changesRequested {
-                    changesRequested += 1
-                }
-            }
+        // If mix is approved, assume all reviewers approved
+        // If in review, all pending
+        // This is a temporary solution until individual Approval records are implemented
+        if mix.approvalStatus == .approved {
+            return (total, 0, 0, total)
+        } else if mix.approvalStatus == .inReview {
+            return (0, total, 0, total)
+        } else {
+            return (0, total, 0, total)
         }
-        
-        let pending = total - approved - changesRequested
-        return (approved, pending, changesRequested, total)
     }
     
     var body: some View {
@@ -162,10 +157,6 @@ struct ReviewerApprovalRow: View {
     let reviewer: Reviewer
     let mix: Mix
     
-    var approval: Approval? {
-        mix.approvals.first(where: { $0.reviewer?.id == reviewer.id })
-    }
-    
     var body: some View {
         HStack(spacing: 8) {
             // Status icon
@@ -187,44 +178,40 @@ struct ReviewerApprovalRow: View {
     }
     
     private var statusIcon: String {
-        guard let approval = approval else {
-            return "clock"
-        }
-        switch approval.status {
+        // Use mix's overall status for all reviewers until individual approvals are implemented
+        switch mix.approvalStatus {
         case .approved:
             return "checkmark.circle.fill"
-        case .changesRequested:
-            return "exclamationmark.circle.fill"
-        case .pending:
+        case .inReview:
+            return "clock"
+        default:
             return "clock"
         }
     }
     
     private var statusColor: Color {
-        guard let approval = approval else {
-            return .orange
-        }
-        switch approval.status {
+        switch mix.approvalStatus {
         case .approved:
             return .green
-        case .changesRequested:
-            return .red
-        case .pending:
+        case .inReview:
             return .orange
+        default:
+            return .gray
         }
     }
     
     private var statusText: String {
-        guard let approval = approval else {
-            return "Pending"
-        }
-        switch approval.status {
+        switch mix.approvalStatus {
         case .approved:
             return "Approved"
-        case .changesRequested:
-            return "Changes Requested"
-        case .pending:
-            return "Pending"
+        case .inReview:
+            return "Pending Review"
+        case .shared:
+            return "Shared - Awaiting Review"
+        case .draft:
+            return "Not Shared Yet"
+        case .superseded:
+            return "Superseded"
         }
     }
 }
@@ -251,42 +238,36 @@ struct MixApprovalBadge: View {
     
     var approvalStatus: String {
         let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
-        let total = reviewers.count
         
-        guard total > 0 else {
-            return "No reviewers"
+        guard reviewers.count > 0 else {
+            return "No Reviewers"
         }
         
-        var approved = 0
-        var changesRequested = 0
-        
-        for reviewer in reviewers {
-            if let approval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
-                if approval.status == .approved {
-                    approved += 1
-                } else if approval.status == .changesRequested {
-                    changesRequested += 1
-                }
-            }
-        }
-        
-        if approved == total {
-            return "Fully Approved"
-        } else if changesRequested > 0 {
-            return "Changes Requested"
-        } else {
-            return "Pending"
+        // Use mix's overall status
+        switch mix.approvalStatus {
+        case .approved:
+            return "Approved"
+        case .inReview:
+            return "In Review"
+        case .shared:
+            return "Awaiting Review"
+        case .draft:
+            return "Draft"
+        case .superseded:
+            return "Superseded"
         }
     }
     
     var statusColor: Color {
-        switch approvalStatus {
-        case "Fully Approved":
+        switch mix.approvalStatus {
+        case .approved:
             return .green
-        case "Changes Requested":
-            return .red
-        default:
+        case .inReview, .shared:
             return .orange
+        case .draft:
+            return .gray
+        case .superseded:
+            return .purple
         }
     }
     
@@ -309,50 +290,41 @@ struct SongApprovalBadge: View {
     var approvalStatus: String {
         let mixes = song.mixes
         guard !mixes.isEmpty else {
-            return "No mixes"
+            return "No Mixes"
         }
         
         let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
         guard !reviewers.isEmpty else {
-            return "No reviewers"
+            return "No Reviewers"
         }
         
-        // Check if any mix is fully approved
-        for mix in mixes {
-            var approved = 0
-            for reviewer in reviewers {
-                if let approval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id }),
-                   approval.status == .approved {
-                    approved += 1
-                }
-            }
-            if approved == reviewers.count {
-                return "Approved"
-            }
+        // Check if any mix is approved
+        if mixes.contains(where: { $0.approvalStatus == .approved }) {
+            return "Approved"
         }
         
-        // Check if any mix has changes requested
-        for mix in mixes {
-            for reviewer in reviewers {
-                if let approval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id }),
-                   approval.status == .changesRequested {
-                    return "In Review"
-                }
-            }
+        // Check if any mix is in review
+        if mixes.contains(where: { $0.approvalStatus == .inReview || $0.approvalStatus == .shared }) {
+            return "In Review"
         }
         
-        return "Pending"
+        // All are draft
+        return "Draft"
     }
     
     var statusColor: Color {
-        switch approvalStatus {
-        case "Approved":
+        let mixes = song.mixes
+        
+        // Check mix statuses
+        if mixes.contains(where: { $0.approvalStatus == .approved }) {
             return .green
-        case "In Review":
-            return .orange
-        default:
-            return .gray
         }
+        
+        if mixes.contains(where: { $0.approvalStatus == .inReview || $0.approvalStatus == .shared }) {
+            return .orange
+        }
+        
+        return .gray
     }
     
     var body: some View {
