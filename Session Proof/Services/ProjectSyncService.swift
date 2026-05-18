@@ -745,12 +745,35 @@ class ProjectSyncService {
             print("📬 Received \(documents.count) reviewer documents from Firestore")
             
             Task { @MainActor in
+                // Get all reviewer IDs from Firestore
+                let firestoreReviewerIds = Set(documents.compactMap { UUID(uuidString: $0.documentID) })
+                
+                // Get all local reviewers for this project
+                let localReviewers = project.reviewers
+                
+                // Remove local reviewers that no longer exist in Firestore
+                for localReviewer in localReviewers {
+                    if !firestoreReviewerIds.contains(localReviewer.id) {
+                        print("🗑️ Removing deleted reviewer: \(localReviewer.displayName)")
+                        modelContext.delete(localReviewer)
+                    }
+                }
+                
+                // Add or update reviewers from Firestore
                 for document in documents {
                     await self.processReviewerFromCloud(
                         document: document,
                         project: project,
                         modelContext: modelContext
                     )
+                }
+                
+                // Save all changes
+                do {
+                    try modelContext.save()
+                    print("✅ Reviewer sync completed")
+                } catch {
+                    print("❌ Error saving reviewer changes: \(error)")
                 }
             }
         }
