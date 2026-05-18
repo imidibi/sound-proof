@@ -78,45 +78,51 @@ class FirestoreService {
             let projectName = projectDoc.data()["name"] as? String ?? "Unknown"
             print("🔎 Checking project: \(projectName) (\(projectDoc.documentID))")
             
-            let reviewersSnapshot = try await db.collection("projects")
-                .document(projectDoc.documentID)
-                .collection("reviewers")
-                .getDocuments()
-            
-            print("   👥 Found \(reviewersSnapshot.documents.count) reviewers in this project")
-            
-            // Check each reviewer
-            for reviewerDoc in reviewersSnapshot.documents {
-                let reviewerUserId = reviewerDoc.data()["userId"] as? String
-                let reviewerEmail = reviewerDoc.data()["email"] as? String ?? "none"
-                print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId ?? "none")")
+            do {
+                let reviewersSnapshot = try await db.collection("projects")
+                    .document(projectDoc.documentID)
+                    .collection("reviewers")
+                    .getDocuments()
                 
-                // Check by userId first
-                if let reviewerUserId = reviewerUserId, reviewerUserId == userId {
-                    print("      ✅ MATCH by userId!")
-                    projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
-                    break
-                }
+                print("   👥 Found \(reviewersSnapshot.documents.count) reviewers in this project")
                 
-                // Fallback: check by email and backfill userId
-                if reviewerEmail.lowercased() == userEmail.lowercased() {
-                    print("      ✅ MATCH by email! Backfilling userId...")
+                // Check each reviewer
+                for reviewerDoc in reviewersSnapshot.documents {
+                    let reviewerUserId = reviewerDoc.data()["userId"] as? String
+                    let reviewerEmail = reviewerDoc.data()["email"] as? String ?? "none"
+                    print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId ?? "none")")
                     
-                    // Update this reviewer record with the userId
-                    do {
-                        try await db.collection("projects")
-                            .document(projectDoc.documentID)
-                            .collection("reviewers")
-                            .document(reviewerDoc.documentID)
-                            .updateData(["userId": userId])
-                        print("      ✓ Updated reviewer with userId")
-                    } catch {
-                        print("      ⚠️ Failed to update reviewer: \(error)")
+                    // Check by userId first
+                    if let reviewerUserId = reviewerUserId, reviewerUserId == userId {
+                        print("      ✅ MATCH by userId!")
+                        projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+                        break
                     }
                     
-                    projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
-                    break
+                    // Fallback: check by email and backfill userId
+                    if reviewerEmail.lowercased() == userEmail.lowercased() {
+                        print("      ✅ MATCH by email! Backfilling userId...")
+                        
+                        // Update this reviewer record with the userId
+                        do {
+                            try await db.collection("projects")
+                                .document(projectDoc.documentID)
+                                .collection("reviewers")
+                                .document(reviewerDoc.documentID)
+                                .updateData(["userId": userId])
+                            print("      ✓ Updated reviewer with userId")
+                        } catch {
+                            print("      ⚠️ Failed to update reviewer: \(error)")
+                        }
+                        
+                        projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
+                        break
+                    }
                 }
+            } catch {
+                print("   ⚠️ Cannot access reviewers for this project (permissions issue): \(error.localizedDescription)")
+                print("   ⏭️ Skipping this project and continuing with others...")
+                continue
             }
         }
         
