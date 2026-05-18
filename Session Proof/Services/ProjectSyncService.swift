@@ -686,13 +686,29 @@ class ProjectSyncService {
                 print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
                 
                 // Update the approval status in case it changed in Firestore
-                if let existingMix = existingMixes.first,
-                   let statusString = mixData["approvalStatus"] as? String,
-                   let status = MixStatus(rawValue: statusString) {
-                    if existingMix.approvalStatus != status {
-                        print("🔄 Updating mix approval status from \(existingMix.approvalStatus.rawValue) to \(status.rawValue)")
-                        existingMix.approvalStatus = status
-                        try modelContext.save()
+                if let existingMix = existingMixes.first {
+                    print("   Current local status: \(existingMix.approvalStatus.rawValue)")
+                    print("   Firestore data: \(mixData)")
+                    
+                    if let statusString = mixData["approvalStatus"] as? String {
+                        print("   Firestore status string: '\(statusString)'")
+                        
+                        if let status = MixStatus(rawValue: statusString) {
+                            print("   Parsed Firestore status: \(status.rawValue)")
+                            
+                            if existingMix.approvalStatus != status {
+                                print("🔄 Updating mix approval status from \(existingMix.approvalStatus.rawValue) to \(status.rawValue)")
+                                existingMix.approvalStatus = status
+                                try modelContext.save()
+                                print("✅ Mix status updated and saved")
+                            } else {
+                                print("   ℹ️ Status already matches, no update needed")
+                            }
+                        } else {
+                            print("   ⚠️ Failed to parse status from string: '\(statusString)'")
+                        }
+                    } else {
+                        print("   ⚠️ No approvalStatus field in Firestore data")
                     }
                 }
             }

@@ -311,20 +311,33 @@ struct MixInfoSection: View {
               let songId = song.firestoreId,
               let mixId = mix.firestoreId else {
             print("⚠️ Cannot sync mix status - missing required IDs")
+            print("   Mix ID: \(mix.id)")
+            print("   Mix Firestore ID: \(mix.firestoreId ?? "nil")")
+            print("   Song: \(mix.song?.name ?? "nil")")
+            print("   Song Firestore ID: \(mix.song?.firestoreId ?? "nil")")
+            print("   Project: \(mix.song?.project?.name ?? "nil")")
+            print("   Project Firestore ID: \(mix.song?.project?.firestoreId ?? "nil")")
             return
         }
         
         do {
-            print("🔄 Syncing mix status change to Firestore: \(mix.approvalStatus.rawValue)")
+            print("🔄 Syncing mix status change to Firestore")
+            print("   Mix: \(mix.name)")
+            print("   Status: \(mix.approvalStatus.rawValue)")
+            print("   Project ID: \(projectId)")
+            print("   Song ID: \(songId)")
+            print("   Mix ID: \(mixId)")
+            
             try await firestoreService.updateMixStatus(
                 projectId: projectId,
                 songId: songId,
                 mixId: mixId,
                 status: mix.approvalStatus
             )
-            print("✅ Mix status synced successfully")
+            print("✅ Mix status synced successfully to Firestore")
         } catch {
             print("❌ Failed to sync mix status: \(error.localizedDescription)")
+            print("   Error details: \(error)")
         }
     }
     
