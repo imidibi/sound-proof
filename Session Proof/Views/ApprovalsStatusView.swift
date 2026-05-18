@@ -73,9 +73,16 @@ struct MixApprovalRow: View {
     let mix: Mix
     let project: Project
     
+    var allReviewers: [Reviewer] {
+        project.reviewers
+    }
+    
+    var acceptedReviewers: [Reviewer] {
+        allReviewers.filter { $0.inviteStatus == .accepted }
+    }
+    
     var approvalStats: (approved: Int, pending: Int, changesRequested: Int, total: Int) {
-        let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
-        let total = reviewers.count
+        let total = acceptedReviewers.count
         
         // If mix is approved, assume all reviewers approved
         // If in review, all pending
@@ -135,14 +142,35 @@ struct MixApprovalRow: View {
             }
             .font(.caption)
             
+            // Debug info
+            if allReviewers.isEmpty {
+                Text("No reviewers in project")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else if acceptedReviewers.isEmpty {
+                Text("Total reviewers: \(allReviewers.count), but none are 'accepted'. Statuses: \(allReviewers.map { $0.inviteStatus.rawValue }.joined(separator: ", "))")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            
             // Individual reviewer status
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(project.reviewers.filter { $0.inviteStatus == .accepted }.sorted(by: { $0.displayName < $1.displayName })) { reviewer in
+                ForEach(acceptedReviewers.sorted(by: { $0.displayName < $1.displayName })) { reviewer in
                     ReviewerApprovalRow(reviewer: reviewer, mix: mix)
                 }
             }
         }
         .padding(.vertical, 8)
+        .onAppear {
+            print("🔍 MixApprovalRow debug:")
+            print("   Mix: \(mix.name)")
+            print("   Project: \(project.name)")
+            print("   Total reviewers: \(allReviewers.count)")
+            print("   Accepted reviewers: \(acceptedReviewers.count)")
+            for reviewer in allReviewers {
+                print("   - \(reviewer.displayName): \(reviewer.inviteStatus.rawValue)")
+            }
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
