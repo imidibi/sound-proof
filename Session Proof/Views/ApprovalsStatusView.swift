@@ -78,7 +78,10 @@ struct MixApprovalRow: View {
     }
     
     var acceptedReviewers: [Reviewer] {
-        allReviewers.filter { $0.inviteStatus == .accepted }
+        // Include both .accepted and .sent reviewers
+        // .sent means they were invited and can participate
+        // .accepted means they explicitly joined/were added
+        allReviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
     }
     
     var approvalStats: (approved: Int, pending: Int, changesRequested: Int, total: Int) {
@@ -142,17 +145,6 @@ struct MixApprovalRow: View {
             }
             .font(.caption)
             
-            // Debug info
-            if allReviewers.isEmpty {
-                Text("No reviewers in project")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            } else if acceptedReviewers.isEmpty {
-                Text("Total reviewers: \(allReviewers.count), but none are 'accepted'. Statuses: \(allReviewers.map { $0.inviteStatus.rawValue }.joined(separator: ", "))")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-            
             // Individual reviewer status
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(acceptedReviewers.sorted(by: { $0.displayName < $1.displayName })) { reviewer in
@@ -161,16 +153,6 @@ struct MixApprovalRow: View {
             }
         }
         .padding(.vertical, 8)
-        .onAppear {
-            print("🔍 MixApprovalRow debug:")
-            print("   Mix: \(mix.name)")
-            print("   Project: \(project.name)")
-            print("   Total reviewers: \(allReviewers.count)")
-            print("   Accepted reviewers: \(acceptedReviewers.count)")
-            for reviewer in allReviewers {
-                print("   - \(reviewer.displayName): \(reviewer.inviteStatus.rawValue)")
-            }
-        }
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -265,7 +247,7 @@ struct MixApprovalBadge: View {
     let project: Project
     
     var approvalStatus: String {
-        let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
+        let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
         
         guard reviewers.count > 0 else {
             return "No Reviewers"
@@ -321,7 +303,7 @@ struct SongApprovalBadge: View {
             return "No Mixes"
         }
         
-        let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted }
+        let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
         guard !reviewers.isEmpty else {
             return "No Reviewers"
         }
