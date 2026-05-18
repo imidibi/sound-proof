@@ -353,6 +353,7 @@ struct ProjectFolderRow: View {
     @State private var showingShareSheet = false
     @State private var showingEditProjectSheet = false
     @State private var showingReviewersSheet = false
+    @State private var showingApprovalsStatus = false
     @State private var isEditingName = false
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
@@ -479,6 +480,12 @@ struct ProjectFolderRow: View {
                     Label("Rename", systemImage: "text.cursor")
                 }
                 
+                Button {
+                    showingApprovalsStatus = true
+                } label: {
+                    Label("Approvals Status", systemImage: "checkmark.circle")
+                }
+                
                 Divider()
                 
                 Button {
@@ -518,6 +525,9 @@ struct ProjectFolderRow: View {
         .sheet(isPresented: $showingReviewersSheet) {
             ProjectReviewersView(project: project)
         }
+        .sheet(isPresented: $showingApprovalsStatus) {
+            ApprovalsStatusView(project: project, selectedSong: nil)
+        }
         .confirmationDialog(
             "Delete Project",
             isPresented: $showingDeleteConfirmation,
@@ -555,6 +565,7 @@ struct SongFolderRow: View {
     @Environment(AuthenticationService.self) private var authService
     
     @State private var showingImportSheet = false
+    @State private var showingApprovalsStatus = false
     @State private var isEditingName = false
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
@@ -645,6 +656,12 @@ struct SongFolderRow: View {
                     Label("Import Mix", systemImage: "square.and.arrow.down")
                 }
                 
+                Button {
+                    showingApprovalsStatus = true
+                } label: {
+                    Label("Approvals Status", systemImage: "checkmark.circle")
+                }
+                
                 if canDelete {
                     Divider()
                     
@@ -658,6 +675,11 @@ struct SongFolderRow: View {
         }
         .sheet(isPresented: $showingImportSheet) {
             ImportMixSheet(song: song)
+        }
+        .sheet(isPresented: $showingApprovalsStatus) {
+            if let project = song.project {
+                ApprovalsStatusView(project: project, selectedSong: song)
+            }
         }
         .confirmationDialog(
             "Delete Song",
