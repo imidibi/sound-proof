@@ -27,7 +27,6 @@ struct InviteArtistSheet: View {
     @State private var showingSuggestions = false
     @State private var invitationSent = false
     @State private var invitationLink = ""
-    @State private var showingExistingUserConfirmation = false
     
     var canSave: Bool {
         !artistName.isEmpty && !artistEmail.isEmpty && isValidEmail(artistEmail)
@@ -173,50 +172,55 @@ Section {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        // If existing user found, show confirmation dialog
-                        if existingUserFound != nil {
-                            showingExistingUserConfirmation = true
-                        } else {
+                    if existingUserFound != nil {
+                        // Show "Add" button for existing users
+                        Button {
+                            Task {
+                                await addExistingUser()
+                            }
+                        } label: {
+                            if isSaving {
+                                ProgressView()
+                            } else {
+                                Text("Add")
+                            }
+                        }
+                        .disabled(!canSave || isSaving)
+                    } else {
+                        // Show "Invite" button for new users
+                        Button {
                             Task {
                                 await inviteArtist()
                             }
+                        } label: {
+                            if isSaving {
+                                ProgressView()
+                            } else {
+                                Text("Invite")
+                            }
                         }
-                    } label: {
-                        if isSaving {
-                            ProgressView()
-                        } else {
+                        .disabled(!canSave || isSaving)
+                    }
+                }
+                
+                // Add secondary "Invite" button when existing user is found
+                if existingUserFound != nil {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            Task {
+                                await inviteArtist()
+                            }
+                        } label: {
                             Text("Invite")
                         }
+                        .disabled(!canSave || isSaving)
                     }
-                    .disabled(!canSave || isSaving)
                 }
             }
         }
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 600, minHeight: 500)
         #endif
-        .confirmationDialog(
-            existingUserFound != nil 
-                ? "This reviewer is already registered - invite again?" 
-                : "",
-            isPresented: $showingExistingUserConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Yes, Send Invitation") {
-                Task {
-                    await inviteArtist()
-                }
-            }
-            
-            Button("No, Cancel", role: .cancel) {
-                // Dialog will dismiss automatically
-            }
-        } message: {
-            if let user = existingUserFound {
-                Text("\(user.displayName) (\(user.email)) already has an account. Do you want to send them an invitation email?")
-            }
-        }
     }
     
     private func loadPreviousReviewers() async {
@@ -256,6 +260,90 @@ Section {
             await MainActor.run {
                 existingUserFound = nil
             }
+        }
+    }
+    
+    private func addExistingUser() async {
+        print("➕ Adding existing user directly without email invitation...")
+        errorMessage = nil
+        
+        await MainActor.run {
+            isSaving = true
+        }
+        
+        let cleanEmail = artistEmail.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        // Check if this email is already a reviewer on this project
+        let existingReviewer = project.reviewers.first { reviewer in
+            reviewer.email.lowercased() == cleanEmail
+        }
+        
+        if existingReviewer != nil {
+            await MainActor.run {
+                errorMessage = "This email address is already invited to this project"
+                isSaving = false
+            }
+            return
+        }
+        
+        // Create reviewer without invitation token (they're already registered)
+        let reviewer = Reviewer(
+            displayName: artistName,
+            email: cleanEmail,
+            userId: existingUserFound?.id,
+            role: role,
+            inviteStatus: .accepted, // Mark as accepted since they're already in the system
+            acceptedAt: Date()
+        )
+        
+        print("📝 Created reviewer object for existing user: \(reviewer.displayName)")
+        if let userId = existingUserFound?.id {
+            print("✅ Linked to existing user: \(userId)")
+        }
+        
+        // Set project relationship
+        reviewer.project = project
+        
+        // Save to local database
+        do {
+            await MainActor.run {
+                modelContext.insert(reviewer)
+            }
+            try await MainActor.run {
+                try modelContext.save()
+            }
+            print("💾 Reviewer saved to local database")
+        } catch {
+            print("❌ Failed to save reviewer locally: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to save: \(error.localizedDescription)"
+                isSaving = false
+            }
+            return
+        }
+        
+        // Sync to Firestore (non-blocking - continue even if it fails)
+        if let firestoreId = project.firestoreId {
+            print("☁️ Attempting Firestore sync...")
+            do {
+                try await syncService.addReviewer(
+                    projectId: firestoreId,
+                    reviewer: reviewer
+                )
+                print("✓ Reviewer synced to Firestore successfully")
+            } catch {
+                // Log the error but don't block the UI
+                print("⚠️ Firestore sync failed (reviewer saved locally): \(error.localizedDescription)")
+            }
+        } else {
+            print("⚠️ No Firestore ID, skipping cloud sync")
+        }
+        
+        // Always dismiss and reset state
+        print("✅ Dismissing invite sheet")
+        await MainActor.run {
+            isSaving = false
+            dismiss()
         }
     }
     
