@@ -328,7 +328,17 @@ class FirestoreService {
             data["invitedAt"] = Timestamp(date: invitedAt)
         }
         
+        // Create the main reviewer document with UUID as ID
         try await reviewerRef.setData(data)
+        
+        // Also create a document with userId as ID for Firestore rules to work
+        // This allows isProjectReviewer() to check exists(/reviewers/$(request.auth.uid))
+        if let userId = reviewer.userId {
+            let userIdRef = db.collection("projects").document(projectId).collection("reviewers").document(userId)
+            var userIdData = data
+            userIdData["primaryReviewerId"] = reviewer.id.uuidString  // Reference to the main document
+            try await userIdRef.setData(userIdData)
+        }
     }
     
     func updateReviewer(
@@ -345,9 +355,22 @@ class FirestoreService {
         projectId: String,
         reviewerId: String
     ) async throws {
+        // Get the reviewer document first to find the userId
+        let reviewerDoc = try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .getDocument()
+        
+        // Delete the main reviewer document
         try await db.collection("projects").document(projectId)
             .collection("reviewers").document(reviewerId)
             .delete()
+        
+        // Also delete the userId-based document if it exists
+        if let userId = reviewerDoc.data()?["userId"] as? String {
+            try? await db.collection("projects").document(projectId)
+                .collection("reviewers").document(userId)
+                .delete()
+        }
     }
     
     func getProjectReviewers(projectId: String) async throws -> [(id: String, data: [String: Any])] {
