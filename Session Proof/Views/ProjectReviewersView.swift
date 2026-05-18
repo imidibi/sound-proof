@@ -129,18 +129,28 @@ struct ProjectReviewersView: View {
         
         do {
             try modelContext.save()
+            print("✅ Removed reviewer locally: \(reviewer.displayName)")
             
             // Remove from Firestore
             if let firestoreId = project.firestoreId {
                 Task {
-                    try? await syncService.removeReviewer(
-                        projectId: firestoreId,
-                        reviewerId: reviewer.id.uuidString
-                    )
+                    do {
+                        print("🔄 Removing reviewer from Firestore: \(reviewer.displayName)")
+                        try await syncService.removeReviewer(
+                            projectId: firestoreId,
+                            reviewerId: reviewer.id.uuidString
+                        )
+                        print("✅ Reviewer removed from Firestore successfully")
+                    } catch {
+                        print("❌ Failed to remove reviewer from Firestore: \(error.localizedDescription)")
+                        print("   Error details: \(error)")
+                    }
                 }
+            } else {
+                print("⚠️ Cannot remove from Firestore - project has no firestoreId")
             }
         } catch {
-            print("Error removing reviewer: \(error)")
+            print("❌ Error removing reviewer locally: \(error)")
         }
     }
 }
