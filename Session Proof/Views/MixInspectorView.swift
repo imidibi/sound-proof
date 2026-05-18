@@ -159,6 +159,7 @@ struct SongStatusBadge: View {
 struct MixInfoSection: View {
     @Bindable var mix: Mix
     @Environment(\.modelContext) private var modelContext
+    @Environment(FirestoreService.self) private var firestoreService
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -176,6 +177,11 @@ struct MixInfoSection: View {
             .onChange(of: mix.approvalStatus) { oldValue, newValue in
                 if newValue == .approved {
                     markOtherMixesAsSuperseded()
+                }
+                
+                // Sync the status change to Firestore
+                Task {
+                    await syncMixStatus()
                 }
             }
             
@@ -271,10 +277,54 @@ struct MixInfoSection: View {
     
     private func markOtherMixesAsSuperseded() {
         // When a mix is approved, mark all other mixes in the same song as superseded
-        guard let song = mix.song else { return }
+        guard let song = mix.song,
+              let project = song.project,
+              let projectId = project.firestoreId,
+              let songId = song.firestoreId else { return }
         
         for otherMix in song.mixes where otherMix.id != mix.id && otherMix.approvalStatus == .approved {
             otherMix.approvalStatus = .superseded
+            
+            // Sync this status change to Firestore as well
+            if let mixId = otherMix.firestoreId {
+                Task {
+                    do {
+                        try await firestoreService.updateMixStatus(
+                            projectId: projectId,
+                            songId: songId,
+                            mixId: mixId,
+                            status: .superseded
+                        )
+                        print("✅ Marked mix '\(otherMix.name)' as superseded in Firestore")
+                    } catch {
+                        print("❌ Failed to sync superseded status for mix '\(otherMix.name)': \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+    
+    private func syncMixStatus() async {
+        guard let song = mix.song,
+              let project = song.project,
+              let projectId = project.firestoreId,
+              let songId = song.firestoreId,
+              let mixId = mix.firestoreId else {
+            print("⚠️ Cannot sync mix status - missing required IDs")
+            return
+        }
+        
+        do {
+            print("🔄 Syncing mix status change to Firestore: \(mix.approvalStatus.rawValue)")
+            try await firestoreService.updateMixStatus(
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId,
+                status: mix.approvalStatus
+            )
+            print("✅ Mix status synced successfully")
+        } catch {
+            print("❌ Failed to sync mix status: \(error.localizedDescription)")
         }
     }
     
