@@ -684,6 +684,17 @@ class ProjectSyncService {
                 print("📥 Mix metadata synced (audio will download on demand)")
             } else {
                 print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
+                
+                // Update the approval status in case it changed in Firestore
+                if let existingMix = existingMixes.first,
+                   let statusString = mixData["approvalStatus"] as? String,
+                   let status = MixStatus(rawValue: statusString) {
+                    if existingMix.approvalStatus != status {
+                        print("🔄 Updating mix approval status from \(existingMix.approvalStatus.rawValue) to \(status.rawValue)")
+                        existingMix.approvalStatus = status
+                        try modelContext.save()
+                    }
+                }
             }
         }
     }
