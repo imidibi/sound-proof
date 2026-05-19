@@ -831,11 +831,22 @@ class ProjectSyncService {
                 guard let displayName = data["displayName"] as? String,
                       let email = data["email"] as? String,
                       let roleString = data["role"] as? String,
-                      let role = ReviewerRole(rawValue: roleString),
-                      let statusString = data["inviteStatus"] as? String,
-                      let status = ReviewerInviteStatus(rawValue: statusString) else {
+                      let role = ReviewerRole(rawValue: roleString) else {
                     print("⚠️ Invalid reviewer data for \(reviewerId)")
                     return
+                }
+                
+                // Handle inviteStatus with default fallback for legacy data
+                let status: ReviewerInviteStatus
+                var needsFirestoreUpdate = false
+                if let statusString = data["inviteStatus"] as? String,
+                   let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
+                    status = parsedStatus
+                } else {
+                    // Default to .accepted for reviewers without inviteStatus (legacy data)
+                    print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                    status = .accepted
+                    needsFirestoreUpdate = true
                 }
                 
                 let reviewer = Reviewer(
@@ -857,6 +868,23 @@ class ProjectSyncService {
                 try modelContext.save()
                 
                 print("✨ Created new reviewer from cloud: \(displayName)")
+                
+                // Fix missing inviteStatus in Firestore
+                if needsFirestoreUpdate {
+                    Task {
+                        do {
+                            try await self.firestoreService.updateReviewerField(
+                                projectId: project.firestoreId ?? "",
+                                reviewerId: reviewerId,
+                                field: "inviteStatus",
+                                value: status.rawValue
+                            )
+                            print("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
+                        } catch {
+                            print("⚠️ Failed to update inviteStatus in Firestore: \(error)")
+                        }
+                    }
+                }
             } else {
                 print("✓ Reviewer already exists locally: \(data["displayName"] ?? "Unknown")")
             }
@@ -892,11 +920,22 @@ class ProjectSyncService {
                 guard let displayName = reviewerData["displayName"] as? String,
                       let email = reviewerData["email"] as? String,
                       let roleString = reviewerData["role"] as? String,
-                      let role = ReviewerRole(rawValue: roleString),
-                      let statusString = reviewerData["inviteStatus"] as? String,
-                      let status = ReviewerInviteStatus(rawValue: statusString) else {
+                      let role = ReviewerRole(rawValue: roleString) else {
                     print("⚠️ Invalid reviewer data for \(reviewerId)")
                     continue
+                }
+                
+                // Handle inviteStatus with default fallback for legacy data
+                let status: ReviewerInviteStatus
+                var needsFirestoreUpdate = false
+                if let statusString = reviewerData["inviteStatus"] as? String,
+                   let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
+                    status = parsedStatus
+                } else {
+                    // Default to .accepted for reviewers without inviteStatus (legacy data)
+                    print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                    status = .accepted
+                    needsFirestoreUpdate = true
                 }
                 
                 let reviewer = Reviewer(
@@ -917,6 +956,23 @@ class ProjectSyncService {
                 try modelContext.save()
                 
                 print("📥 Reviewer synced: \(displayName)")
+                
+                // Fix missing inviteStatus in Firestore
+                if needsFirestoreUpdate {
+                    Task {
+                        do {
+                            try await self.firestoreService.updateReviewerField(
+                                projectId: projectId,
+                                reviewerId: reviewerId,
+                                field: "inviteStatus",
+                                value: status.rawValue
+                            )
+                            print("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
+                        } catch {
+                            print("⚠️ Failed to update inviteStatus in Firestore: \(error)")
+                        }
+                    }
+                }
             } else {
                 print("✓ Reviewer already exists locally: \(reviewerData["displayName"] ?? "Unknown")")
             }

@@ -419,6 +419,30 @@ class FirestoreService {
         }
     }
     
+    func updateReviewerField(
+        projectId: String,
+        reviewerId: String,
+        field: String,
+        value: Any
+    ) async throws {
+        // Update the main reviewer document
+        try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .updateData([field: value])
+        
+        // Also try to update the userId-based document if it exists
+        // First get the reviewer to find the userId
+        let reviewerDoc = try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .getDocument()
+        
+        if let userId = reviewerDoc.data()?["userId"] as? String {
+            try? await db.collection("projects").document(projectId)
+                .collection("reviewers").document(userId)
+                .updateData([field: value])
+        }
+    }
+    
     func getProjectReviewers(projectId: String) async throws -> [(id: String, data: [String: Any])] {
         let snapshot = try await db.collection("projects")
             .document(projectId)
