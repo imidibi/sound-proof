@@ -59,8 +59,10 @@ struct SettingsView: View {
                                 TextField("email@example.com", text: $editedEmail)
                                     .textFieldStyle(.roundedBorder)
                                     .textContentType(.emailAddress)
+                                    #if os(iOS)
                                     .autocapitalization(.none)
                                     .keyboardType(.emailAddress)
+                                    #endif
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {
