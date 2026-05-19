@@ -79,12 +79,14 @@ class AuthenticationService {
     // MARK: - Authentication
     
     func signUp(email: String, password: String, displayName: String, role: UserRole) async throws {
-        let result = try await auth.createUser(withEmail: email, password: password)
+        // Always use lowercase email for consistency
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        let result = try await auth.createUser(withEmail: normalizedEmail, password: password)
         
         // Create user profile in Firestore
         let user = User(
             id: result.user.uid,
-            email: email,
+            email: normalizedEmail,
             displayName: displayName,
             role: role,
             createdAt: Date()
@@ -98,8 +100,10 @@ class AuthenticationService {
     }
     
     func signIn(email: String, password: String) async throws {
-        let result = try await auth.signIn(withEmail: email, password: password)
-        await loadUserProfile(uid: result.user.uid, email: result.user.email ?? email)
+        // Always use lowercase email for consistency
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        let result = try await auth.signIn(withEmail: normalizedEmail, password: password)
+        await loadUserProfile(uid: result.user.uid, email: result.user.email ?? normalizedEmail)
     }
     
     func signOut() throws {
@@ -108,7 +112,9 @@ class AuthenticationService {
     }
     
     func resetPassword(email: String) async throws {
-        try await auth.sendPasswordReset(withEmail: email)
+        // Always use lowercase email for consistency
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        try await auth.sendPasswordReset(withEmail: normalizedEmail)
     }
     
     // MARK: - User Profile
@@ -122,6 +128,18 @@ class AuthenticationService {
         ]
         
         try await db.collection("users").document(user.id).setData(data)
+    }
+    
+    func updateUserProfile(user: User) async throws {
+        // Update in Firestore
+        try await saveUserProfile(user: user)
+        
+        // Update local state
+        await MainActor.run {
+            self.currentUser = user
+        }
+        
+        print("✅ User profile updated: \(user.displayName) (\(user.email))")
     }
     
     private func loadUserProfile(uid: String, email: String) async {

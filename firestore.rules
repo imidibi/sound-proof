@@ -78,6 +78,20 @@ service cloud.firestore {
           allow update: if isSignedIn() &&
                            isProjectReviewer(projectId) &&
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus']);
+
+          // Approvals subcollection
+          match /approvals/{approvalId} {
+            allow read: if isSignedIn() &&
+                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            // Allow reviewers to create their own approval records
+            allow create: if isSignedIn() && isProjectReviewer(projectId);
+            // Allow reviewers to update only their own approval records
+            allow update: if isSignedIn() &&
+                             isProjectReviewer(projectId) &&
+                             resource.data.reviewerUserId == request.auth.uid;
+            // Only project owner can delete approvals
+            allow delete: if isSignedIn() && isProjectOwner(projectId);
+          }
         }
       }
 

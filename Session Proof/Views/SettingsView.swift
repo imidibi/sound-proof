@@ -22,6 +22,13 @@ struct SettingsView: View {
     @State private var isSyncing = false
     @State private var lastSyncTime: Date?
     
+    // Profile editing
+    @State private var editedDisplayName = ""
+    @State private var editedEmail = ""
+    @State private var editedRole: UserRole = .artist
+    @State private var isEditingProfile = false
+    @State private var isSavingProfile = false
+    
     private var userOrganization: Organization? {
         guard let userId = authService.currentUser?.id else {
             return nil
@@ -35,12 +42,69 @@ struct SettingsView: View {
             Form {
                 Section {
                     if let user = authService.currentUser {
-                        LabeledContent("Email", value: user.email)
-                        LabeledContent("Name", value: user.displayName)
-                        LabeledContent("Role", value: user.role.rawValue.capitalized)
-                        
-                        if let orgName = user.organizationName {
-                            LabeledContent("Organization", value: orgName)
+                        if isEditingProfile {
+                            // Editable fields
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Name")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("Display Name", text: $editedDisplayName)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Email")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("email@example.com", text: $editedEmail)
+                                    .textFieldStyle(.roundedBorder)
+                                    .textContentType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .keyboardType(.emailAddress)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Role")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker("Role", selection: $editedRole) {
+                                    ForEach([UserRole.producer, .studio, .artist], id: \.self) { role in
+                                        Text(role.rawValue.capitalized).tag(role)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                            
+                            // Save and Cancel buttons
+                            HStack {
+                                Button("Cancel") {
+                                    isEditingProfile = false
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Spacer()
+                                
+                                Button("Save") {
+                                    Task {
+                                        await saveProfileChanges()
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(isSavingProfile || editedDisplayName.isEmpty || editedEmail.isEmpty)
+                            }
+                        } else {
+                            // Read-only display
+                            LabeledContent("Name", value: user.displayName)
+                            LabeledContent("Email", value: user.email)
+                            LabeledContent("Role", value: user.role.rawValue.capitalized)
+                            
+                            if let orgName = user.organizationName {
+                                LabeledContent("Organization", value: orgName)
+                            }
+                            
+                            Button("Edit Profile") {
+                                startEditingProfile()
+                            }
                         }
                     }
                 } header: {
@@ -234,6 +298,50 @@ struct SettingsView: View {
                 isLoggingOut = false
                 // Error handling could be improved with an alert
                 print("Error signing out: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func startEditingProfile() {
+        guard let user = authService.currentUser else { return }
+        editedDisplayName = user.displayName
+        editedEmail = user.email
+        editedRole = user.role
+        isEditingProfile = true
+    }
+    
+    private func saveProfileChanges() async {
+        guard let user = authService.currentUser else { return }
+        
+        isSavingProfile = true
+        
+        // Normalize email
+        let normalizedEmail = editedEmail.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        do {
+            // Update user profile
+            let updatedUser = User(
+                id: user.id,
+                email: normalizedEmail,
+                displayName: editedDisplayName,
+                role: editedRole,
+                createdAt: user.createdAt,
+                organizationId: user.organizationId,
+                organizationName: user.organizationName
+            )
+            
+            try await authService.updateUserProfile(user: updatedUser)
+            
+            await MainActor.run {
+                isSavingProfile = false
+                isEditingProfile = false
+            }
+            
+            print("✅ Profile updated successfully")
+        } catch {
+            print("❌ Failed to update profile: \(error)")
+            await MainActor.run {
+                isSavingProfile = false
             }
         }
     }

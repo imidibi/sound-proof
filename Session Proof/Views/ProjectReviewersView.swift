@@ -19,6 +19,8 @@ struct ProjectReviewersView: View {
     @State private var showingInviteSheet = false
     @State private var reviewerToDelete: Reviewer?
     @State private var showingDeleteConfirmation = false
+    @State private var reviewerToEdit: Reviewer?
+    @State private var showingEditSheet = false
     
     var sortedReviewers: [Reviewer] {
         project.reviewers.sorted { reviewer1, reviewer2 in
@@ -41,7 +43,7 @@ struct ProjectReviewersView: View {
             List {
                 Section {
                     ForEach(sortedReviewers) { reviewer in
-                        ReviewerRow(reviewer: reviewer)
+                        ReviewerRow(reviewer: reviewer, isProducerView: authService.currentUser?.isProducer == true)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if reviewer.role != .owner && authService.currentUser?.isProducer == true {
                                     Button(role: .destructive) {
@@ -54,6 +56,24 @@ struct ProjectReviewersView: View {
                             }
                             .contextMenu {
                                 if reviewer.role != .owner && authService.currentUser?.isProducer == true {
+                                    Button {
+                                        reviewerToEdit = reviewer
+                                        showingEditSheet = true
+                                    } label: {
+                                        Label("Edit Reviewer", systemImage: "pencil")
+                                    }
+                                    
+                                    Button {
+                                        toggleKeyApprover(reviewer)
+                                    } label: {
+                                        Label(
+                                            reviewer.isKeyApprover ? "Remove as Key Approver" : "Set as Key Approver",
+                                            systemImage: reviewer.isKeyApprover ? "crown.fill" : "crown"
+                                        )
+                                    }
+                                    
+                                    Divider()
+                                    
                                     Button(role: .destructive) {
                                         reviewerToDelete = reviewer
                                         showingDeleteConfirmation = true
@@ -102,6 +122,9 @@ struct ProjectReviewersView: View {
             .sheet(isPresented: $showingInviteSheet) {
                 InviteArtistSheet(project: project)
             }
+            .sheet(item: $reviewerToEdit) { reviewer in
+                EditReviewerSheet(reviewer: reviewer, project: project)
+            }
             .confirmationDialog(
                 "Remove Reviewer",
                 isPresented: $showingDeleteConfirmation,
@@ -122,6 +145,50 @@ struct ProjectReviewersView: View {
         #if os(macOS)
         .frame(minWidth: 600, idealWidth: 700, minHeight: 500)
         #endif
+    }
+    
+    private func toggleKeyApprover(_ reviewer: Reviewer) {
+        // If setting as key approver, remove key approver status from all other reviewers
+        if !reviewer.isKeyApprover {
+            for otherReviewer in project.reviewers {
+                if otherReviewer.id != reviewer.id && otherReviewer.isKeyApprover {
+                    otherReviewer.isKeyApprover = false
+                    syncKeyApproverStatus(otherReviewer)
+                }
+            }
+        }
+        
+        // Toggle this reviewer's key approver status
+        reviewer.isKeyApprover.toggle()
+        
+        do {
+            try modelContext.save()
+            print("✅ Updated key approver status for \(reviewer.displayName): \(reviewer.isKeyApprover)")
+            syncKeyApproverStatus(reviewer)
+        } catch {
+            print("❌ Error updating key approver status: \(error)")
+        }
+    }
+    
+    private func syncKeyApproverStatus(_ reviewer: Reviewer) {
+        guard let firestoreId = project.firestoreId else {
+            print("⚠️ Cannot sync key approver status - project has no firestoreId")
+            return
+        }
+        
+        Task {
+            do {
+                print("🔄 Syncing key approver status to Firestore for \(reviewer.displayName)")
+                try await syncService.updateReviewerKeyApproverStatus(
+                    projectId: firestoreId,
+                    reviewerId: reviewer.id.uuidString,
+                    isKeyApprover: reviewer.isKeyApprover
+                )
+                print("✅ Key approver status synced successfully")
+            } catch {
+                print("❌ Failed to sync key approver status: \(error.localizedDescription)")
+            }
+        }
     }
     
     private func removeReviewer(_ reviewer: Reviewer) {
@@ -157,6 +224,7 @@ struct ProjectReviewersView: View {
 
 struct ReviewerRow: View {
     let reviewer: Reviewer
+    let isProducerView: Bool
     
     var statusIcon: String {
         switch reviewer.inviteStatus {
@@ -214,6 +282,21 @@ struct ReviewerRow: View {
                             .background(Color.blue.opacity(0.2))
                             .foregroundStyle(.blue)
                             .clipShape(Capsule())
+                    }
+                    
+                    // Only show key approver badge to producers
+                    if reviewer.isKeyApprover && isProducerView {
+                        HStack(spacing: 3) {
+                            Image(systemName: "crown.fill")
+                                .font(.caption2)
+                            Text("Key Approver")
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.yellow.opacity(0.3))
+                        .foregroundStyle(.orange)
+                        .clipShape(Capsule())
                     }
                 }
                 
@@ -287,4 +370,122 @@ struct ReviewerRow: View {
             authService: AuthenticationService()
         ))
         .modelContainer(for: Project.self, inMemory: true)
+}
+
+// MARK: - Edit Reviewer Sheet
+
+struct EditReviewerSheet: View {
+    @Bindable var reviewer: Reviewer
+    let project: Project
+    
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ProjectSyncService.self) private var syncService
+    
+    @State private var editedDisplayName = ""
+    @State private var editedEmail = ""
+    @State private var editedRole: ReviewerRole = .reviewer
+    @State private var isSaving = false
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Name")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("Display Name", text: $editedDisplayName)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Email")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("email@example.com", text: $editedEmail)
+                            .textFieldStyle(.roundedBorder)
+                            .textContentType(.emailAddress)
+                            .autocapitalization(.none)
+                            .keyboardType(.emailAddress)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Role")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker("Role", selection: $editedRole) {
+                            ForEach([ReviewerRole.reviewer, .viewer], id: \.self) { role in
+                                Text(role.rawValue).tag(role)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                } header: {
+                    Text("Reviewer Details")
+                }
+            }
+            .navigationTitle("Edit Reviewer")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            await saveChanges()
+                        }
+                    }
+                    .disabled(isSaving || editedDisplayName.isEmpty || editedEmail.isEmpty)
+                }
+            }
+            .onAppear {
+                editedDisplayName = reviewer.displayName
+                editedEmail = reviewer.email
+                editedRole = reviewer.role
+            }
+        }
+    }
+    
+    private func saveChanges() async {
+        isSaving = true
+        
+        // Normalize email
+        let normalizedEmail = editedEmail.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        // Update local reviewer
+        reviewer.displayName = editedDisplayName
+        reviewer.email = normalizedEmail
+        reviewer.role = editedRole
+        
+        do {
+            try modelContext.save()
+            print("✅ Updated reviewer locally: \(reviewer.displayName)")
+            
+            // Update in Firestore
+            if let firestoreId = project.firestoreId {
+                try await syncService.updateReviewer(
+                    projectId: firestoreId,
+                    reviewer: reviewer
+                )
+                print("✅ Reviewer updated in Firestore successfully")
+            }
+            
+            await MainActor.run {
+                isSaving = false
+                dismiss()
+            }
+        } catch {
+            print("❌ Error updating reviewer: \(error)")
+            await MainActor.run {
+                isSaving = false
+            }
+        }
+    }
 }

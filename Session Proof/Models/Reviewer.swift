@@ -31,6 +31,7 @@ final class Reviewer {
     var role: ReviewerRole
     var inviteStatus: ReviewerInviteStatus
     var invitationToken: String? // Unique token for accepting invitation
+    var isKeyApprover: Bool = false // Only one per project - their approval finalizes songs
     var createdAt: Date
     var acceptedAt: Date? // When they accepted the invitation
     var invitedAt: Date? // When invitation was sent
@@ -48,6 +49,7 @@ final class Reviewer {
         role: ReviewerRole = .reviewer,
         inviteStatus: ReviewerInviteStatus = .notSent,
         invitationToken: String? = nil,
+        isKeyApprover: Bool = false,
         createdAt: Date = Date(),
         acceptedAt: Date? = nil,
         invitedAt: Date? = nil
@@ -59,6 +61,7 @@ final class Reviewer {
         self.role = role
         self.inviteStatus = inviteStatus
         self.invitationToken = invitationToken
+        self.isKeyApprover = isKeyApprover
         self.createdAt = createdAt
         self.acceptedAt = acceptedAt
         self.invitedAt = invitedAt

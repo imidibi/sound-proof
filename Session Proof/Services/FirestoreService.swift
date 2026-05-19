@@ -315,6 +315,7 @@ class FirestoreService {
             "userId": reviewer.userId as Any,
             "role": reviewer.role.rawValue,
             "inviteStatus": reviewer.inviteStatus.rawValue,
+            "isKeyApprover": reviewer.isKeyApprover,
             "createdAt": Timestamp(date: reviewer.createdAt)
         ]
         
@@ -370,6 +371,51 @@ class FirestoreService {
             try? await db.collection("projects").document(projectId)
                 .collection("reviewers").document(userId)
                 .delete()
+        }
+    }
+    
+    func updateReviewerKeyApproverStatus(
+        projectId: String,
+        reviewerId: String,
+        isKeyApprover: Bool
+    ) async throws {
+        // Update the main reviewer document
+        try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .updateData(["isKeyApprover": isKeyApprover])
+        
+        // Also update the userId-based document if it exists
+        let reviewerDoc = try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewerId)
+            .getDocument()
+        
+        if let userId = reviewerDoc.data()?["userId"] as? String {
+            try? await db.collection("projects").document(projectId)
+                .collection("reviewers").document(userId)
+                .updateData(["isKeyApprover": isKeyApprover])
+        }
+    }
+    
+    func updateReviewer(
+        projectId: String,
+        reviewer: Reviewer
+    ) async throws {
+        let data: [String: Any] = [
+            "displayName": reviewer.displayName,
+            "email": reviewer.email.lowercased(),
+            "role": reviewer.role.rawValue
+        ]
+        
+        // Update the main reviewer document
+        try await db.collection("projects").document(projectId)
+            .collection("reviewers").document(reviewer.id.uuidString)
+            .updateData(data)
+        
+        // Also update the userId-based document if it exists
+        if let userId = reviewer.userId {
+            try? await db.collection("projects").document(projectId)
+                .collection("reviewers").document(userId)
+                .updateData(data)
         }
     }
     

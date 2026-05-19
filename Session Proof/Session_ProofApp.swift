@@ -32,9 +32,24 @@ struct Session_ProofApp: App {
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return container
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // If migration fails, try deleting the store and creating a new one
+            // Data will be resynced from Firestore
+            print("⚠️ Model container creation failed: \(error)")
+            print("🔄 Attempting to reset local database - data will resync from Firestore...")
+            
+            do {
+                let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+                try? FileManager.default.removeItem(at: storeURL)
+                
+                let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+                print("✅ Successfully created new model container")
+                return container
+            } catch {
+                fatalError("Could not create ModelContainer even after reset: \(error)")
+            }
         }
     }()
     

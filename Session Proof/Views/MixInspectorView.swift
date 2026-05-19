@@ -94,13 +94,33 @@ struct SongStatusSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
-            Picker("Status", selection: $song.status) {
-                ForEach([SongStatus.inReview, .revisionsNeeded, .approved, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
-                    Text("\(statusEmoji(for: status)) \(status.rawValue)")
-                        .tag(status)
+            // Show approved status as read-only badge
+            if song.status == .approved {
+                HStack(spacing: 8) {
+                    Text("\(statusEmoji(for: song.status)) \(song.status.rawValue)")
+                        .font(.body)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.green.opacity(0.2))
+                        .foregroundStyle(.green)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    
+                    Text("Approved by key approver")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
                 }
+            } else {
+                // Allow changing status for non-approved songs (exclude .approved from options)
+                Picker("Status", selection: $song.status) {
+                    ForEach([SongStatus.inReview, .revisionsNeeded, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
+                        Text("\(statusEmoji(for: status)) \(status.rawValue)")
+                            .tag(status)
+                    }
+                }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -160,6 +180,7 @@ struct MixInfoSection: View {
     @Bindable var mix: Mix
     @Environment(\.modelContext) private var modelContext
     @Environment(FirestoreService.self) private var firestoreService
+    @Environment(AuthenticationService.self) private var authService
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -175,13 +196,8 @@ struct MixInfoSection: View {
             }
             .pickerStyle(.menu)
             .onChange(of: mix.approvalStatus) { oldValue, newValue in
-                if newValue == .approved {
-                    markOtherMixesAsSuperseded()
-                }
-                
-                // Sync the status change to Firestore
                 Task {
-                    await syncMixStatus()
+                    await handleApprovalStatusChange(from: oldValue, to: newValue)
                 }
             }
             
@@ -301,6 +317,83 @@ struct MixInfoSection: View {
                     }
                 }
             }
+        }
+    }
+    
+    private func handleApprovalStatusChange(from oldStatus: MixStatus, to newStatus: MixStatus) async {
+        guard let song = mix.song,
+              let project = song.project else {
+            print("⚠️ Cannot handle approval - missing song or project")
+            return
+        }
+        
+        // Sync the status change to Firestore
+        await syncMixStatus()
+        
+        // If the status is being set to approved, create/update an Approval record
+        if newStatus == .approved, let currentUserId = authService.currentUser?.id {
+            await createOrUpdateApproval(userId: currentUserId, project: project)
+            
+            // Check if current user is key approver or producer
+            let isKeyApprover = project.reviewers.first(where: { $0.userId == currentUserId })?.isKeyApprover ?? false
+            let isProducer = authService.currentUser?.isProducer ?? false
+            
+            print("📋 Approval context:")
+            print("   User ID: \(currentUserId)")
+            print("   Is Key Approver: \(isKeyApprover)")
+            print("   Is Producer: \(isProducer)")
+            
+            // If user is key approver or producer, approve the song and supersede other mixes
+            if isKeyApprover || isProducer {
+                print("👑 Key approver or producer approved mix - approving song and superseding others")
+                
+                // Approve the song
+                song.status = .approved
+                
+                // Mark other mixes as superseded
+                markOtherMixesAsSuperseded()
+                
+                // Save changes
+                do {
+                    try modelContext.save()
+                    print("✅ Song approved and other mixes superseded")
+                } catch {
+                    print("❌ Error saving approval changes: \(error)")
+                }
+            } else {
+                print("ℹ️ Regular reviewer approved mix - recording opinion only")
+            }
+        }
+    }
+    
+    private func createOrUpdateApproval(userId: String, project: Project) async {
+        // Find the reviewer for this user
+        guard let reviewer = project.reviewers.first(where: { $0.userId == userId }) else {
+            print("⚠️ Cannot create approval - reviewer not found for user ID: \(userId)")
+            return
+        }
+        
+        // Check if an approval already exists for this reviewer and mix
+        let existingApproval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id })
+        
+        if let approval = existingApproval {
+            // Update existing approval
+            approval.status = .approved
+            approval.updatedAt = Date()
+            print("✅ Updated existing approval for \(reviewer.displayName)")
+        } else {
+            // Create new approval
+            let approval = Approval(status: .approved)
+            approval.mix = mix
+            approval.reviewer = reviewer
+            modelContext.insert(approval)
+            print("✅ Created new approval for \(reviewer.displayName)")
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Error saving approval: \(error)")
         }
     }
     

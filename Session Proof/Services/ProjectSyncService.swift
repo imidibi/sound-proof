@@ -731,6 +731,28 @@ class ProjectSyncService {
         try await firestoreService.removeReviewer(projectId: projectId, reviewerId: reviewerId)
     }
     
+    func updateReviewerKeyApproverStatus(
+        projectId: String,
+        reviewerId: String,
+        isKeyApprover: Bool
+    ) async throws {
+        try await firestoreService.updateReviewerKeyApproverStatus(
+            projectId: projectId,
+            reviewerId: reviewerId,
+            isKeyApprover: isKeyApprover
+        )
+    }
+    
+    func updateReviewer(
+        projectId: String,
+        reviewer: Reviewer
+    ) async throws {
+        try await firestoreService.updateReviewer(
+            projectId: projectId,
+            reviewer: reviewer
+        )
+    }
+    
     // MARK: - Listen to Reviewers
     
     func startListeningToReviewers(
@@ -822,7 +844,8 @@ class ProjectSyncService {
                     email: email,
                     userId: data["userId"] as? String,
                     role: role,
-                    inviteStatus: status
+                    inviteStatus: status,
+                    isKeyApprover: data["isKeyApprover"] as? Bool ?? false
                 )
                 
                 if let acceptedTimestamp = data["acceptedAt"] as? Timestamp {

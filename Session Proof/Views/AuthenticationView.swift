@@ -170,6 +170,8 @@ struct SignInView: View {
                 TextField("email@example.com", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.emailAddress)
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -371,6 +373,8 @@ struct SignUpView: View {
                         TextField("email@example.com", text: $email)
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.emailAddress)
+                            .autocapitalization(.none)
+                            .keyboardType(.emailAddress)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -701,9 +705,8 @@ struct ForgotPasswordSheet: View {
                         TextField("email@example.com", text: $email)
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.emailAddress)
-                            #if os(iOS)
                             .autocapitalization(.none)
-                            #endif
+                            .keyboardType(.emailAddress)
                             .autocorrectionDisabled()
                     }
                     
