@@ -290,8 +290,35 @@ struct SettingsView: View {
         isLoggingOut = true
         
         do {
+            // Sign out from Firebase
             try authService.signOut()
+            
+            // Clear all local SwiftData to prevent data leakage between users
             await MainActor.run {
+                print("🗑️ Clearing all local data for user isolation...")
+                
+                // Delete all projects (cascade will delete songs, mixes, comments, reviewers, approvals)
+                do {
+                    let descriptor = FetchDescriptor<Project>()
+                    let allProjects = try modelContext.fetch(descriptor)
+                    for project in allProjects {
+                        modelContext.delete(project)
+                    }
+                    
+                    // Delete all organizations
+                    let orgDescriptor = FetchDescriptor<Organization>()
+                    let allOrganizations = try modelContext.fetch(orgDescriptor)
+                    for organization in allOrganizations {
+                        modelContext.delete(organization)
+                    }
+                    
+                    // Save changes
+                    try modelContext.save()
+                    print("✅ All local data cleared - user isolation complete")
+                } catch {
+                    print("❌ Error clearing local data: \(error)")
+                }
+                
                 isLoggingOut = false
                 dismiss()
             }
