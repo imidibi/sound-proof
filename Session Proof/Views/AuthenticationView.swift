@@ -337,6 +337,9 @@ struct SignUpView: View {
     @State private var errorMessage: String?
     @State private var isLoading = false
     @State private var invitationToken: String?
+    @State private var isInvitedReviewer = false
+    @State private var invitedProjectNames: [String] = []
+    @State private var isCheckingEmail = false
     
     var body: some View {
         ScrollView {
@@ -368,9 +371,16 @@ struct SignUpView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Email")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack {
+                            Text("Email")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            if isCheckingEmail {
+                                ProgressView()
+                                    .controlSize(.mini)
+                            }
+                        }
                         
                         TextField("email@example.com", text: $email)
                             .textFieldStyle(.roundedBorder)
@@ -379,6 +389,23 @@ struct SignUpView: View {
                             .autocapitalization(.none)
                             .keyboardType(.emailAddress)
                             #endif
+                            .onChange(of: email) { oldValue, newValue in
+                                Task {
+                                    await checkIfInvitedReviewer(email: newValue)
+                                }
+                            }
+                        
+                        if isInvitedReviewer && !invitedProjectNames.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "envelope.badge.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.caption)
+                                Text("You've been invited to: \(invitedProjectNames.joined(separator: ", "))")
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -401,18 +428,38 @@ struct SignUpView: View {
                             .textContentType(.newPassword)
                     }
                     
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("I am a...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        Picker("Role", selection: $selectedRole) {
-                            Label("Producer/Engineer", systemImage: "music.note.list")
-                                .tag(UserRole.producer)
-                            Label("Artist/Approver", systemImage: "person.fill")
-                                .tag(UserRole.artist)
+                    if isInvitedReviewer {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Account Type: Artist/Approver")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.green.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            
+                            Text("You're signing up as an approver for the invited project(s). Your account will be free.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.segmented)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("I am a...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            Picker("Role", selection: $selectedRole) {
+                                Label("Producer/Engineer", systemImage: "music.note.list")
+                                    .tag(UserRole.producer)
+                                Label("Artist/Approver", systemImage: "person.fill")
+                                    .tag(UserRole.artist)
+                            }
+                            .pickerStyle(.segmented)
+                        }
                     }
                     
                     if let errorMessage = errorMessage {
@@ -465,6 +512,61 @@ struct SignUpView: View {
         !displayName.isEmpty &&
         password == confirmPassword &&
         password.count >= 6
+    }
+    
+    private func checkIfInvitedReviewer(email: String) async {
+        // Only check if email is valid format
+        guard email.contains("@") && email.contains(".") else {
+            await MainActor.run {
+                isInvitedReviewer = false
+                invitedProjectNames = []
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isCheckingEmail = true
+        }
+        
+        defer {
+            Task { @MainActor in
+                isCheckingEmail = false
+            }
+        }
+        
+        do {
+            // Check if this email exists in any project's reviewers
+            let invitations = try await firestoreService.findPendingInvitationsByEmail(email: email)
+            
+            await MainActor.run {
+                if !invitations.isEmpty {
+                    isInvitedReviewer = true
+                    selectedRole = .artist  // Automatically set to artist
+                    
+                    // Get project names for display
+                    Task {
+                        var projectNames: [String] = []
+                        for invitation in invitations {
+                            if let project = try? await firestoreService.getProject(projectId: invitation.projectId) {
+                                projectNames.append(project["name"] as? String ?? "Unknown Project")
+                            }
+                        }
+                        await MainActor.run {
+                            invitedProjectNames = projectNames
+                        }
+                    }
+                } else {
+                    isInvitedReviewer = false
+                    invitedProjectNames = []
+                }
+            }
+        } catch {
+            print("❌ Error checking for invitations: \(error)")
+            await MainActor.run {
+                isInvitedReviewer = false
+                invitedProjectNames = []
+            }
+        }
     }
     
     private func signUp() async {
