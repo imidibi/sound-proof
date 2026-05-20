@@ -1136,54 +1136,50 @@ class ProjectSyncService {
         var invitationsAccepted = 0
         
         do {
-            // Get ALL projects from Firestore, not just owned projects
-            // We need to find any project where this user's email appears as a reviewer
-            let allProjectIds = try await firestoreService.getAllProjectIds()
-            print("🔍 Searching \(allProjectIds.count) projects for pending invitations...")
+            // Use collection group query to find all reviewers with this email across all projects
+            let pendingInvitations = try await firestoreService.findPendingInvitationsByEmail(email: userEmail)
+            print("🔍 Found \(pendingInvitations.count) reviewer record(s) with email: \(userEmail)")
             
-            // For each project, try to check for reviewers with matching email
-            for projectId in allProjectIds {
-                do {
-                    let reviewers = try await firestoreService.getProjectReviewers(projectId: projectId)
+            for invitation in pendingInvitations {
+                // Check if this reviewer has no userId (pending invitation)
+                // Note: Firestore null values come through as NSNull, not nil
+                let userIdValue = invitation.data["userId"]
+                let hasNoUserId = userIdValue == nil || 
+                                 userIdValue is NSNull || 
+                                 (userIdValue as? String)?.isEmpty == true
+                
+                if hasNoUserId {
+                    print("✉️ Found pending invitation in project: \(invitation.projectId)")
+                    print("   Reviewer email: \(invitation.data["email"] ?? ""), Document ID: \(invitation.reviewerId)")
                     
-                    for (reviewerId, reviewerData) in reviewers {
-                        // Check if this reviewer has our email but no userId (pending invitation)
-                        if let email = reviewerData["email"] as? String,
-                           email.lowercased() == userEmail.lowercased(),
-                           reviewerData["userId"] == nil || (reviewerData["userId"] as? String)?.isEmpty == true {
-                            
-                            print("✉️ Found pending invitation in project: \(projectId)")
-                            print("   Reviewer email: \(email), Document ID: \(reviewerId)")
-                            
-                            // Update reviewer with userId and accept status
-                            try await firestoreService.updateReviewer(
-                                projectId: projectId,
-                                reviewerId: reviewerId,
-                                data: [
-                                    "userId": userId,
-                                    "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
-                                    "acceptedAt": Timestamp(date: Date())
-                                ]
-                            )
-                            
-                            invitationsAccepted += 1
-                            print("✅ Accepted invitation and linked userId for project: \(projectId)")
-                        }
-                    }
-                } catch {
-                    // If we can't access a project's reviewers (permissions), skip it
-                    // This is expected for projects we don't have access to
-                    continue
+                    // Update reviewer with userId and accept status
+                    try await firestoreService.updateReviewer(
+                        projectId: invitation.projectId,
+                        reviewerId: invitation.reviewerId,
+                        data: [
+                            "userId": userId,
+                            "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
+                            "acceptedAt": Timestamp(date: Date())
+                        ]
+                    )
+                    
+                    invitationsAccepted += 1
+                    print("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
+                } else {
+                    print("✓ Reviewer already linked with userId in project: \(invitation.projectId)")
                 }
             }
             
             if invitationsAccepted > 0 {
                 print("🎉 Accepted \(invitationsAccepted) pending invitation(s)")
+            } else if pendingInvitations.isEmpty {
+                print("ℹ️ No reviewer records found for email: \(userEmail)")
             } else {
-                print("ℹ️ No pending invitations found")
+                print("ℹ️ All reviewer records already have userId linked")
             }
         } catch {
             print("⚠️ Error checking for pending invitations: \(error)")
+            print("   Error details: \(error.localizedDescription)")
         }
     }
 }

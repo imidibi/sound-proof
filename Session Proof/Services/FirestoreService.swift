@@ -70,64 +70,78 @@ class FirestoreService {
         return snapshot.documents.map { $0.documentID }
     }
     
-    func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
-        print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
+    func findPendingInvitationsByEmail(email: String) async throws -> [(projectId: String, reviewerId: String, data: [String: Any])] {
+        // Get all projects and check their reviewers subcollections
+        // This avoids needing a collection group index
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        print("🔍 Searching all projects for reviewers with email: \(normalizedEmail)")
+        
+        var results: [(projectId: String, reviewerId: String, data: [String: Any])] = []
         
         // Get all projects
         let projectsSnapshot = try await db.collection("projects").getDocuments()
-        print("📊 Total projects in Firestore: \(projectsSnapshot.documents.count)")
-        var projectsWithUser: [(id: String, data: [String: Any])] = []
+        print("📁 Found \(projectsSnapshot.documents.count) total projects to check")
         
-        // For each project, check if the user is in the reviewers subcollection
+        // Check each project's reviewers subcollection
         for projectDoc in projectsSnapshot.documents {
-            let projectName = projectDoc.data()["name"] as? String ?? "Unknown"
-            print("🔎 Checking project: \(projectName) (\(projectDoc.documentID))")
+            let projectId = projectDoc.documentID
+            
+            // Query reviewers in this specific project by email
+            let reviewersQuery = db.collection("projects").document(projectId)
+                .collection("reviewers")
+                .whereField("email", isEqualTo: normalizedEmail)
+            
+            let reviewersSnapshot = try await reviewersQuery.getDocuments()
+            
+            // Add any matching reviewers to results
+            for reviewerDoc in reviewersSnapshot.documents {
+                print("✉️ Found reviewer in project \(projectId): \(reviewerDoc.documentID)")
+                results.append((
+                    projectId: projectId,
+                    reviewerId: reviewerDoc.documentID,
+                    data: reviewerDoc.data()
+                ))
+            }
+        }
+        
+        print("📊 Total matching reviewers found: \(results.count)")
+        return results
+    }
+    
+    func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
+        print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
+        
+        // Use findPendingInvitationsByEmail to get all reviewer records for this user
+        // This works because it queries by email in each project's reviewers subcollection
+        let reviewerRecords = try await findPendingInvitationsByEmail(email: userEmail)
+        print("📧 Found \(reviewerRecords.count) reviewer record(s) with user's email")
+        
+        var projectsWithUser: [(id: String, data: [String: Any])] = []
+        var processedProjectIds = Set<String>()
+        
+        // For each reviewer record, get the project data
+        for record in reviewerRecords {
+            let projectId = record.projectId
+            
+            // Skip if we've already processed this project
+            guard !processedProjectIds.contains(projectId) else {
+                continue
+            }
             
             do {
-                let reviewersSnapshot = try await db.collection("projects")
-                    .document(projectDoc.documentID)
-                    .collection("reviewers")
-                    .getDocuments()
+                // Get the project document
+                let projectDoc = try await db.collection("projects").document(projectId).getDocument()
                 
-                print("   👥 Found \(reviewersSnapshot.documents.count) reviewers in this project")
-                
-                // Check each reviewer
-                for reviewerDoc in reviewersSnapshot.documents {
-                    let reviewerUserId = reviewerDoc.data()["userId"] as? String
-                    let reviewerEmail = reviewerDoc.data()["email"] as? String ?? "none"
-                    print("      - Reviewer: \(reviewerEmail), userId: \(reviewerUserId ?? "none")")
-                    
-                    // Check by userId first
-                    if let reviewerUserId = reviewerUserId, reviewerUserId == userId {
-                        print("      ✅ MATCH by userId!")
-                        projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
-                        break
-                    }
-                    
-                    // Fallback: check by email and backfill userId
-                    if reviewerEmail.lowercased() == userEmail.lowercased() {
-                        print("      ✅ MATCH by email! Backfilling userId...")
-                        
-                        // Update this reviewer record with the userId
-                        do {
-                            try await db.collection("projects")
-                                .document(projectDoc.documentID)
-                                .collection("reviewers")
-                                .document(reviewerDoc.documentID)
-                                .updateData(["userId": userId])
-                            print("      ✓ Updated reviewer with userId")
-                        } catch {
-                            print("      ⚠️ Failed to update reviewer: \(error)")
-                        }
-                        
-                        projectsWithUser.append((projectDoc.documentID, projectDoc.data()))
-                        break
-                    }
+                if projectDoc.exists, let projectData = projectDoc.data() {
+                    let projectName = projectData["name"] as? String ?? "Unknown"
+                    print("✅ Found project: \(projectName) (\(projectId))")
+                    projectsWithUser.append((projectId, projectData))
+                    processedProjectIds.insert(projectId)
+                } else {
+                    print("⚠️ Project \(projectId) not found or has no data")
                 }
             } catch {
-                print("   ⚠️ Cannot access reviewers for this project (permissions issue): \(error.localizedDescription)")
-                print("   ⏭️ Skipping this project and continuing with others...")
-                continue
+                print("⚠️ Error fetching project \(projectId): \(error.localizedDescription)")
             }
         }
         
@@ -380,9 +394,37 @@ class FirestoreService {
         reviewerId: String,
         data: [String: Any]
     ) async throws {
+        // Update the main reviewer document
         try await db.collection("projects").document(projectId)
             .collection("reviewers").document(reviewerId)
             .updateData(data)
+        
+        // If we're setting a userId, also create/update the userId-based document
+        if let userId = data["userId"] as? String {
+            print("🔗 Creating userId-based reviewer document: \(userId)")
+            
+            // Get the current reviewer data to merge with updates
+            let reviewerDoc = try await db.collection("projects").document(projectId)
+                .collection("reviewers").document(reviewerId)
+                .getDocument()
+            
+            if var reviewerData = reviewerDoc.data() {
+                // Merge the updates into existing data
+                for (key, value) in data {
+                    reviewerData[key] = value
+                }
+                
+                // Add reference to primary document
+                reviewerData["primaryReviewerId"] = reviewerId
+                
+                // Create/update the userId-based document
+                try await db.collection("projects").document(projectId)
+                    .collection("reviewers").document(userId)
+                    .setData(reviewerData)
+                
+                print("✅ Created userId-based document for reviewer")
+            }
+        }
     }
     
     func removeReviewer(
