@@ -108,7 +108,7 @@ struct Session_ProofApp: App {
         #if os(macOS)
         .commands {
             CommandGroup(replacing: .help) {
-                Button("Session Proof Help") {
+                Button("Approvl Help") {
                     showHelpWindow()
                 }
                 .keyboardShortcut("?", modifiers: .command)
@@ -116,7 +116,7 @@ struct Session_ProofApp: App {
                 Divider()
                 
                 Button("Support & Bug Reports") {
-                    if let url = URL(string: "mailto:support@studioguru.net?subject=Session%20Proof%20Support") {
+                    if let url = URL(string: "mailto:support@studioguru.net?subject=Approvl%20Support") {
                         NSWorkspace.shared.open(url)
                     }
                 }
@@ -130,7 +130,7 @@ struct Session_ProofApp: App {
         let helpView = HelpView()
         let hostingController = NSHostingController(rootView: helpView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Session Proof Help"
+        window.title = "Approvl Help"
         window.styleMask = [.titled, .closable, .resizable]
         window.setContentSize(NSSize(width: 600, height: 700))
         window.center()
@@ -141,7 +141,7 @@ struct Session_ProofApp: App {
     private func handleIncomingURL(_ url: URL) {
         print("📱 Received URL: \(url.absoluteString)")
         
-        guard url.scheme == "sessionproof",
+        guard url.scheme == "approvl",
               url.host == "invite" else {
             print("⚠️ Invalid URL scheme or host")
             return

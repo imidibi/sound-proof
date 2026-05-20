@@ -203,7 +203,7 @@ struct SettingsView: View {
                     }
                     
                     Button {
-                        if let url = URL(string: "mailto:support@studioguru.net?subject=Session%20Proof%20Support") {
+                        if let url = URL(string: "mailto:support@studioguru.net?subject=Approvl%20Support") {
                             #if os(iOS)
                             UIApplication.shared.open(url)
                             #elseif os(macOS)
@@ -271,7 +271,7 @@ struct SettingsView: View {
         let helpView = HelpView()
         let hostingController = NSHostingController(rootView: helpView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Session Proof Help"
+        window.title = "Approvl Help"
         window.styleMask = [.titled, .closable, .resizable]
         window.setContentSize(NSSize(width: 600, height: 700))
         window.center()

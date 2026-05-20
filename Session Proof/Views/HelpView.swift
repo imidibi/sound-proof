@@ -20,7 +20,7 @@ struct HelpView: View {
                             .font(.title2)
                             .fontWeight(.bold)
 
-                        Text("Session Proof is a mix distribution and approval system for music producers and studios. It allows you to create projects, which then can contain multiple songs, and each song can then have one or more mixes.")
+                        Text("Approvl is a mix distribution and approval system for music producers and studios. It allows you to create projects, which then can contain multiple songs, and each song can then have one or more mixes.")
                             .font(.body)
                     }
 
@@ -97,7 +97,7 @@ struct HelpView: View {
                             .font(.body)
 
                         Button {
-                            if let url = URL(string: "mailto:support@studioguru.net?subject=Session%20Proof%20Support") {
+                            if let url = URL(string: "mailto:support@studioguru.net?subject=Approvl%20Support") {
                                 #if os(iOS)
                                 UIApplication.shared.open(url)
                                 #elseif os(macOS)
@@ -114,7 +114,7 @@ struct HelpView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Session Proof Help")
+            .navigationTitle("Approvl Help")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

@@ -466,9 +466,9 @@ Section {
         }
         
         // Create deep link for invitation
-        // Format: sessionproof://invite?token=<token>&email=<email>
+        // Format: approvl://invite?token=<token>&email=<email>
         let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? email
-        let deepLink = "sessionproof://invite?token=\(invitationToken)&email=\(encodedEmail)"
+        let deepLink = "approvl://invite?token=\(invitationToken)&email=\(encodedEmail)"
         
         await MainActor.run {
             invitationLink = deepLink
@@ -479,10 +479,10 @@ Section {
         let body = """
         Hi \(artistName),
         
-        \(producerName) has invited you to review the project "\(projectName)" on Session Proof.
+        \(producerName) has invited you to review the project "\(projectName)" on Approvl.
         
         To get started:
-        1. Download Session Proof from the App Store
+        1. Download Approvl from the App Store
         2. Create an account using this email address: \(email)
         3. Sign in and you'll automatically see the project
         
@@ -490,7 +490,7 @@ Section {
         \(deepLink)
         
         Thanks,
-        The Session Proof Team
+        The Approvl Team
         """
         
         let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
