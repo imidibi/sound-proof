@@ -105,7 +105,38 @@ struct Session_ProofApp: App {
             }
         }
         .modelContainer(sharedModelContainer)
+        #if os(macOS)
+        .commands {
+            CommandGroup(replacing: .help) {
+                Button("Session Proof Help") {
+                    showHelpWindow()
+                }
+                .keyboardShortcut("?", modifiers: .command)
+                
+                Divider()
+                
+                Button("Support & Bug Reports") {
+                    if let url = URL(string: "mailto:support@studioguru.net?subject=Session%20Proof%20Support") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
+        }
+        #endif
     }
+    
+    #if os(macOS)
+    private func showHelpWindow() {
+        let helpView = HelpView()
+        let hostingController = NSHostingController(rootView: helpView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Session Proof Help"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 600, height: 700))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+    #endif
     
     private func handleIncomingURL(_ url: URL) {
         print("📱 Received URL: \(url.absoluteString)")

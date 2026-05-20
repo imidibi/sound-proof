@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var showingOrganizationManagement = false
     @State private var isSyncing = false
     @State private var lastSyncTime: Date?
+    @State private var showingHelp = false
     
     // Profile editing
     @State private var editedDisplayName = ""
@@ -191,6 +192,34 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    Button {
+                        #if os(iOS)
+                        showingHelp = true
+                        #elseif os(macOS)
+                        showHelpWindow()
+                        #endif
+                    } label: {
+                        Label("Help", systemImage: "questionmark.circle")
+                    }
+                    
+                    Button {
+                        if let url = URL(string: "mailto:support@studioguru.net?subject=Session%20Proof%20Support") {
+                            #if os(iOS)
+                            UIApplication.shared.open(url)
+                            #elseif os(macOS)
+                            NSWorkspace.shared.open(url)
+                            #endif
+                        }
+                    } label: {
+                        Label("Support & Bug Reports", systemImage: "envelope")
+                    }
+                } header: {
+                    Text("Support")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                Section {
                     LabeledContent("Version", value: appVersion)
                     LabeledContent("Build", value: buildNumber)
                 } header: {
@@ -228,11 +257,27 @@ struct SettingsView: View {
             .sheet(isPresented: $showingOrganizationManagement) {
                 OrganizationManagementView()
             }
+            .sheet(isPresented: $showingHelp) {
+                HelpView()
+            }
         }
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 600, minHeight: 400)
         #endif
     }
+    
+    #if os(macOS)
+    private func showHelpWindow() {
+        let helpView = HelpView()
+        let hostingController = NSHostingController(rootView: helpView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Session Proof Help"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 600, height: 700))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+    #endif
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
