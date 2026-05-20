@@ -92,8 +92,6 @@ struct SignInView: View {
     
     @State private var email = ""
     @State private var password = ""
-    @State private var shareCode = ""
-    @State private var showShareCodeEntry = false
     @State private var errorMessage: String?
     @State private var isLoading = false
     @State private var invitationToken: String?
@@ -124,11 +122,7 @@ struct SignInView: View {
             
             // Sign in form
             VStack(spacing: 20) {
-                if showShareCodeEntry {
-                    shareCodeSection
-                } else {
-                    emailPasswordSection
-                }
+                emailPasswordSection
                 
                 if let errorMessage = errorMessage {
                     Text(errorMessage)
@@ -144,19 +138,7 @@ struct SignInView: View {
             .padding(.horizontal, 40)
             
             Spacer()
-            
-            // Toggle between sign in and share code
-            Button {
-                withAnimation {
-                    showShareCodeEntry.toggle()
-                    errorMessage = nil
-                }
-            } label: {
-                Text(showShareCodeEntry ? "Sign in with email instead" : "Have a share code?")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-            }
-            .padding(.bottom, 20)
+                .frame(height: 20)
         }
     }
     
@@ -235,47 +217,6 @@ struct SignInView: View {
         }
     }
     
-    private var shareCodeSection: some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Project Share Code")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                TextField("ABC123", text: $shareCode)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.oneTimeCode)
-                    .font(.system(.title3, design: .monospaced))
-            }
-            
-            Text("Enter the 6-character code shared by the producer to access the project as a guest.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            
-            Button {
-                Task {
-                    await joinWithShareCode()
-                }
-            } label: {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                } else {
-                    Text("Join Project")
-                        .fontWeight(.semibold)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.green)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .disabled(shareCode.isEmpty || isLoading)
-        }
-    }
-    
     private func signIn() async {
         errorMessage = nil
         isLoading = true
@@ -309,16 +250,6 @@ struct SignInView: View {
         
         // This will be handled in ContentView after successful sign-in
         // We'll add a method to ProjectSyncService to auto-accept pending invitations
-    }
-    
-    private func joinWithShareCode() async {
-        errorMessage = nil
-        isLoading = true
-        
-        // TODO: Implement guest access with share code
-        errorMessage = "Guest access coming soon! Please create an account for now."
-        
-        isLoading = false
     }
 }
 

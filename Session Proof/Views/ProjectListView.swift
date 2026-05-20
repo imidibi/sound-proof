@@ -350,7 +350,6 @@ struct ProjectFolderRow: View {
     @Environment(AuthenticationService.self) private var authService
     
     @State private var showingNewSongSheet = false
-    @State private var showingShareSheet = false
     @State private var showingEditProjectSheet = false
     @State private var showingReviewersSheet = false
     @State private var showingApprovalsStatus = false
@@ -410,28 +409,6 @@ struct ProjectFolderRow: View {
                 
                 Spacer()
                 
-                // Share code indicator
-                if let shareCode = project.shareCode {
-                    Button {
-                        showingShareSheet = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "link")
-                                .font(.caption)
-                            Text(shareCode)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .monospacedDigit()
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundStyle(.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                }
-                
                 if project.status != .draft {
                     StatusBadge(status: project.status)
                 }
@@ -457,16 +434,6 @@ struct ProjectFolderRow: View {
                 }
             }
             .contextMenu {
-                if project.shareCode != nil {
-                    Button {
-                        showingShareSheet = true
-                    } label: {
-                        Label("Share Project", systemImage: "square.and.arrow.up")
-                    }
-                    
-                    Divider()
-                }
-                
                 Button {
                     showingEditProjectSheet = true
                 } label: {
@@ -515,9 +482,6 @@ struct ProjectFolderRow: View {
         }
         .sheet(isPresented: $showingNewSongSheet) {
             NewSongSheet(project: project)
-        }
-        .sheet(isPresented: $showingShareSheet) {
-            ShareProjectSheet(project: project)
         }
         .sheet(isPresented: $showingEditProjectSheet) {
             ProjectEditSheet(project: project)
