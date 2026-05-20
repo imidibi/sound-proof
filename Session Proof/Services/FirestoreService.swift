@@ -65,6 +65,11 @@ class FirestoreService {
         }
     }
     
+    func getAllProjectIds() async throws -> [String] {
+        let snapshot = try await db.collection("projects").getDocuments()
+        return snapshot.documents.map { $0.documentID }
+    }
+    
     func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
         print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
         
@@ -319,6 +324,15 @@ class FirestoreService {
             "createdAt": Timestamp(date: reviewer.createdAt)
         ]
         
+        print("🔍 DEBUG: About to write reviewer to Firestore with data:")
+        print("   displayName: \(data["displayName"] ?? "nil")")
+        print("   email: \(data["email"] ?? "nil")")
+        print("   userId: \(data["userId"] ?? "nil")")
+        print("   role: \(data["role"] ?? "nil")")
+        print("   inviteStatus: \(data["inviteStatus"] ?? "nil")")
+        print("   isKeyApprover: \(data["isKeyApprover"] ?? "nil")")
+        print("   Reviewer object inviteStatus: \(reviewer.inviteStatus.rawValue)")
+        
         if let invitationToken = reviewer.invitationToken {
             data["invitationToken"] = invitationToken
         }
@@ -330,7 +344,26 @@ class FirestoreService {
         }
         
         // Create the main reviewer document with UUID as ID
-        try await reviewerRef.setData(data)
+        do {
+            try await reviewerRef.setData(data)
+            print("✅ Successfully wrote reviewer to Firestore at path: projects/\(projectId)/reviewers/\(reviewer.id.uuidString)")
+            
+            // Immediately verify the write by reading it back
+            let verifyDoc = try await reviewerRef.getDocument()
+            if verifyDoc.exists {
+                print("✅ VERIFIED: Document exists in Firestore")
+                if let verifyData = verifyDoc.data() {
+                    print("   Fields in Firestore: \(verifyData.keys.sorted())")
+                    print("   inviteStatus in Firestore: \(verifyData["inviteStatus"] ?? "MISSING")")
+                }
+            } else {
+                print("❌ ERROR: Document does NOT exist in Firestore after write!")
+            }
+        } catch {
+            print("❌ CRITICAL ERROR writing to Firestore: \(error)")
+            print("   Error details: \(error.localizedDescription)")
+            throw error
+        }
         
         // Also create a document with userId as ID for Firestore rules to work
         // This allows isProjectReviewer() to check exists(/reviewers/$(request.auth.uid))
