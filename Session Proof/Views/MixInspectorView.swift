@@ -71,6 +71,7 @@ struct MixInspectorView: View {
                     // Approvals (if we have reviewers)
                     if let song = mix.song, let project = song.project {
                         ApprovalsSection(mix: mix, project: project)
+                            .id(mix.approvals.count) // Force refresh when approval count changes
                     }
                 }
                 .padding()
@@ -367,11 +368,22 @@ struct MixInfoSection: View {
     }
     
     private func createOrUpdateApproval(userId: String, project: Project) async {
+        print("🔍 createOrUpdateApproval called")
+        print("   User ID: \(userId)")
+        print("   Project reviewers count: \(project.reviewers.count)")
+        
+        for rev in project.reviewers {
+            print("   Reviewer: \(rev.displayName), userId: \(rev.userId ?? "nil"), id: \(rev.id)")
+        }
+        
         // Find the reviewer for this user
         guard let reviewer = project.reviewers.first(where: { $0.userId == userId }) else {
             print("⚠️ Cannot create approval - reviewer not found for user ID: \(userId)")
             return
         }
+        
+        print("✅ Found reviewer: \(reviewer.displayName) (id: \(reviewer.id))")
+        print("   Current approvals for mix: \(mix.approvals.count)")
         
         // Check if an approval already exists for this reviewer and mix
         let existingApproval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id })
@@ -388,10 +400,15 @@ struct MixInfoSection: View {
             approval.reviewer = reviewer
             modelContext.insert(approval)
             print("✅ Created new approval for \(reviewer.displayName)")
+            print("   Approval ID: \(approval.id)")
+            print("   Linked to reviewer ID: \(approval.reviewer?.id ?? UUID())")
+            print("   Linked to mix ID: \(approval.mix?.id ?? UUID())")
         }
         
         do {
             try modelContext.save()
+            print("✅ Approval saved successfully")
+            print("   Mix now has \(mix.approvals.count) approvals")
         } catch {
             print("❌ Error saving approval: \(error)")
         }
@@ -577,8 +594,32 @@ struct CommentStatusIndicator: View {
 }
 
 struct ApprovalsSection: View {
-    let mix: Mix
+    @Bindable var mix: Mix
     let project: Project
+    @Environment(\.modelContext) private var modelContext
+    @Query private var allApprovals: [Approval]
+    
+    // Computed property to get fresh approval data by querying all approvals
+    private var approvalsByReviewer: [UUID: Approval] {
+        // Find approvals for this specific mix from the full query
+        let mixApprovals = allApprovals.filter { approval in
+            approval.mix?.id == mix.id
+        }
+        
+        var dict: [UUID: Approval] = [:]
+        for approval in mixApprovals {
+            if let reviewerId = approval.reviewer?.id {
+                dict[reviewerId] = approval
+            }
+        }
+        
+        print("🔍 ApprovalsSection - Found \(dict.count) approvals for mix '\(mix.name)'")
+        for (reviewerId, approval) in dict {
+            print("   Reviewer ID: \(reviewerId), Status: \(approval.status.rawValue)")
+        }
+        
+        return dict
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -603,7 +644,7 @@ struct ApprovalsSection: View {
                 ForEach(project.reviewers) { reviewer in
                     ApprovalRowView(
                         reviewer: reviewer,
-                        approval: mix.approvals.first { $0.reviewer?.id == reviewer.id }
+                        approval: approvalsByReviewer[reviewer.id]
                     )
                 }
             }

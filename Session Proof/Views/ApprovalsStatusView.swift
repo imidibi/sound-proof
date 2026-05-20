@@ -72,6 +72,7 @@ struct SongApprovalSection: View {
 struct MixApprovalRow: View {
     let mix: Mix
     let project: Project
+    @Query private var allApprovals: [Approval]
     
     var allReviewers: [Reviewer] {
         project.reviewers
@@ -90,8 +91,11 @@ struct MixApprovalRow: View {
         var changesRequested = 0
         var pending = 0
         
+        // Get approvals for this specific mix
+        let mixApprovals = allApprovals.filter { $0.mix?.id == mix.id }
+        
         for reviewer in acceptedReviewers {
-            if let approval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
+            if let approval = mixApprovals.first(where: { $0.reviewer?.id == reviewer.id }) {
                 switch approval.status {
                 case .approved:
                     approved += 1
@@ -177,10 +181,13 @@ struct ReviewerApprovalRow: View {
     let reviewer: Reviewer
     let mix: Mix
     @Environment(AuthenticationService.self) private var authService
+    @Query private var allApprovals: [Approval]
     
-    // Get the approval record for this reviewer and mix
+    // Get the approval record for this reviewer and mix from database query
     var approval: Approval? {
-        mix.approvals.first(where: { $0.reviewer?.id == reviewer.id })
+        allApprovals.first(where: { 
+            $0.mix?.id == mix.id && $0.reviewer?.id == reviewer.id 
+        })
     }
     
     var body: some View {
