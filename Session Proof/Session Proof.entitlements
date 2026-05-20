@@ -15,7 +15,7 @@
 	<true/>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)salesdiver.Session-Proof</string>
+		<string>$(AppIdentifierPrefix)com.studioguru.approvl</string>
 	</array>
 </dict>
 </plist>
