@@ -111,11 +111,11 @@ struct SignInView: View {
                     .font(.system(size: 80))
                     .foregroundStyle(.white)
                 
-                Text("Sound Proof")
+                Text("Approvl")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 
-                Text("Professional Audio Review")
+                Text("Mix Distribution & Approval")
                     .font(.title3)
                     .foregroundStyle(.white.opacity(0.9))
             }
