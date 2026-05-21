@@ -26,6 +26,23 @@ struct ProjectListView: View {
     @State private var expandedSongs: Set<UUID> = []
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
+    // Helper function to filter songs based on user role
+    // Archived songs are hidden from non-producers
+    private func visibleSongs(for project: Project) -> [Song] {
+        let isProducer = authService.currentUser?.id == project.ownerUserID
+        
+        return project.songs
+            .filter { song in
+                // Show all songs to producer
+                if isProducer {
+                    return true
+                }
+                // Hide archived songs from non-producers
+                return song.status != .archived
+            }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+    
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $selectedMix) {
@@ -49,7 +66,7 @@ struct ProjectListView: View {
                         
                         // Expanded songs as direct List children for swipe actions
                         if expandedProjects.contains(project.id) {
-                            ForEach(project.songs.sorted { $0.sortOrder < $1.sortOrder }) { song in
+                            ForEach(visibleSongs(for: project)) { song in
                                 SongFolderRow(
                                     song: song,
                                     isExpanded: expandedSongs.contains(song.id),
@@ -103,7 +120,7 @@ struct ProjectListView: View {
                             
                             // Expanded songs as direct List children for swipe actions
                             if expandedProjects.contains(project.id) {
-                                ForEach(project.songs.sorted { $0.sortOrder < $1.sortOrder }) { song in
+                                ForEach(visibleSongs(for: project)) { song in
                                     SongFolderRow(
                                         song: song,
                                         isExpanded: expandedSongs.contains(song.id),

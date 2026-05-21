@@ -690,6 +690,16 @@ class ProjectSyncService {
                 try modelContext.save()
                 
                 print("📥 Mix metadata synced (audio will download on demand)")
+                
+                // Sync approvals for this mix
+                await syncMixApprovalsFromCloud(
+                    projectId: projectId,
+                    songId: songId,
+                    mixId: mixId,
+                    mix: mix,
+                    project: song.project!,
+                    modelContext: modelContext
+                )
             } else {
                 print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
                 
@@ -768,6 +778,16 @@ class ProjectSyncService {
                             try modelContext.save()
                         }
                     }
+                    
+                    // Sync approvals for existing mix
+                    await syncMixApprovalsFromCloud(
+                        projectId: projectId,
+                        songId: songId,
+                        mixId: mixId,
+                        mix: existingMix,
+                        project: song.project!,
+                        modelContext: modelContext
+                    )
                 }
             }
         }
@@ -1037,6 +1057,36 @@ class ProjectSyncService {
             try modelContext.save()
         } catch {
             print("❌ Error saving approval: \(error)")
+        }
+    }
+    
+    private func syncMixApprovalsFromCloud(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        mix: Mix,
+        project: Project,
+        modelContext: ModelContext
+    ) async {
+        do {
+            let approvals = try await firestoreService.getApprovals(
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId
+            )
+            
+            print("📥 Syncing \(approvals.count) approvals for mix")
+            
+            for (_, approvalData) in approvals {
+                await processApprovalFromCloud(
+                    approvalData: approvalData,
+                    mix: mix,
+                    project: project,
+                    modelContext: modelContext
+                )
+            }
+        } catch {
+            print("❌ Error syncing approvals: \(error)")
         }
     }
     
@@ -1358,7 +1408,7 @@ class ProjectSyncService {
     /// Automatically finds and uploads mixes that haven't been synced to the cloud yet
     /// This runs on app launch and network reconnect to ensure all local changes are backed up
     func syncUnsyncedMixesToCloud(modelContext: ModelContext) async throws {
-        guard let userId = authService.currentUser?.id else {
+        guard authService.currentUser?.id != nil else {
             print("⚠️ Cannot sync - no authenticated user")
             return
         }

@@ -88,6 +88,16 @@ struct MixInspectorView: View {
 
 struct SongStatusSection: View {
     @Bindable var song: Song
+    @Environment(AuthenticationService.self) private var authService
+    
+    // Check if current user is the producer
+    var isProducer: Bool {
+        guard let project = song.project,
+              let currentUserId = authService.currentUser?.id else {
+            return false
+        }
+        return currentUserId == project.ownerUserID
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -95,32 +105,47 @@ struct SongStatusSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
-            // Show approved status as read-only badge
-            if song.status == .approved {
+            if isProducer {
+                // Producer can edit song status
+                if song.status == .approved {
+                    HStack(spacing: 8) {
+                        Text("\(statusEmoji(for: song.status)) \(song.status.rawValue)")
+                            .font(.body)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.green.opacity(0.2))
+                            .foregroundStyle(.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        
+                        Text("Approved by key approver")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                    }
+                } else {
+                    // Allow changing status for non-approved songs (exclude .approved from options)
+                    Picker("Status", selection: $song.status) {
+                        ForEach([SongStatus.inReview, .revisionsNeeded, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
+                            Text("\(statusEmoji(for: status)) \(status.rawValue)")
+                                .tag(status)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            } else {
+                // Non-producers see read-only status
                 HStack(spacing: 8) {
                     Text("\(statusEmoji(for: song.status)) \(song.status.rawValue)")
                         .font(.body)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.green.opacity(0.2))
-                        .foregroundStyle(.green)
+                        .background(statusColor(for: song.status).opacity(0.2))
+                        .foregroundStyle(statusColor(for: song.status))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                    
-                    Text("Approved by key approver")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     
                     Spacer()
                 }
-            } else {
-                // Allow changing status for non-approved songs (exclude .approved from options)
-                Picker("Status", selection: $song.status) {
-                    ForEach([SongStatus.inReview, .revisionsNeeded, .archived, .draft, .inProgress, .mixingComplete], id: \.self) { status in
-                        Text("\(statusEmoji(for: status)) \(status.rawValue)")
-                            .tag(status)
-                    }
-                }
-                .pickerStyle(.menu)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,6 +160,18 @@ struct SongStatusSection: View {
         case .draft: return "📝"
         case .inProgress: return "🔄"
         case .mixingComplete: return "🎵"
+        }
+    }
+    
+    private func statusColor(for status: SongStatus) -> Color {
+        switch status {
+        case .inReview: return .blue
+        case .revisionsNeeded: return .orange
+        case .approved: return .green
+        case .archived: return .gray
+        case .draft: return .secondary
+        case .inProgress: return .blue
+        case .mixingComplete: return .purple
         }
     }
 }
@@ -621,6 +658,7 @@ struct ApprovalsSection: View {
     @Bindable var mix: Mix
     let project: Project
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
     @Query private var allApprovals: [Approval]
     
     // Computed property to get fresh approval data by querying all approvals
@@ -645,6 +683,23 @@ struct ApprovalsSection: View {
         return dict
     }
     
+    // Get approval for producer (by userId, not reviewer record)
+    private var producerApproval: Approval? {
+        allApprovals.first { approval in
+            approval.mix?.id == mix.id && approval.reviewer?.userId == project.ownerUserID
+        }
+    }
+    
+    // Check if producer is already in reviewers list
+    private var producerInReviewers: Bool {
+        project.reviewers.contains { $0.userId == project.ownerUserID }
+    }
+    
+    // Total count including producer if not in reviewers
+    private var totalReviewerCount: Int {
+        producerInReviewers ? project.reviewers.count : project.reviewers.count + 1
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -654,12 +709,22 @@ struct ApprovalsSection: View {
                 
                 Spacer()
                 
-                Text("\(mix.approvals.count)/\(project.reviewers.count)")
+                Text("\(mix.approvals.count)/\(totalReviewerCount)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             
-            if project.reviewers.isEmpty {
+            // Show producer first if not already in reviewers
+            if !producerInReviewers {
+                ProducerApprovalRowView(
+                    mix: mix,
+                    project: project,
+                    approval: producerApproval
+                )
+            }
+            
+            // Show all reviewers
+            if project.reviewers.isEmpty && producerInReviewers {
                 Text("No reviewers assigned")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -675,6 +740,258 @@ struct ApprovalsSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct ProducerApprovalRowView: View {
+    @Bindable var mix: Mix
+    let project: Project
+    let approval: Approval?
+    
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
+    @Environment(\.modelContext) private var modelContext
+    
+    // Check if this is the current user (producer)
+    var isCurrentUser: Bool {
+        guard let currentUserId = authService.currentUser?.id else {
+            return false
+        }
+        return currentUserId == project.ownerUserID
+    }
+    
+    // Get producer's display name from auth service or project
+    var producerDisplayName: String {
+        if let currentUser = authService.currentUser, currentUser.id == project.ownerUserID {
+            return currentUser.displayName + " (Producer)"
+        }
+        return project.producerName ?? "Producer"
+    }
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(producerDisplayName)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                if let approval = approval {
+                    Text(approval.status.rawValue)
+                        .font(.caption2)
+                        .foregroundStyle(approvalColor(approval.status))
+                } else {
+                    Text("Pending")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Show approval actions for producer
+            if isCurrentUser {
+                HStack(spacing: 8) {
+                    // Show current status if already approved/requested changes
+                    if let approval = approval, approval.status != .pending {
+                        ApprovalStatusIcon(status: approval.status)
+                    }
+                    
+                    // Always show buttons for current user to change their mind
+                    Menu {
+                        Button {
+                            setApprovalStatus(.approved)
+                        } label: {
+                            Label("Approve", systemImage: "checkmark.circle.fill")
+                        }
+                        
+                        Button {
+                            setApprovalStatus(.changesRequested)
+                        } label: {
+                            Label("Request Changes", systemImage: "exclamationmark.circle.fill")
+                        }
+                        
+                        if approval?.status != .pending {
+                            Button {
+                                setApprovalStatus(.pending)
+                            } label: {
+                                Label("Reset to Pending", systemImage: "clock")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                ApprovalStatusIcon(status: approval?.status ?? .pending)
+            }
+        }
+        .padding(8)
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(6)
+    }
+    
+    private func setApprovalStatus(_ status: ApprovalStatus) {
+        print("🎯 Setting producer approval status to: \(status.rawValue)")
+        print("   Producer: \(producerDisplayName)")
+        print("   Mix: \(mix.name)")
+        
+        // We need to create or get a virtual reviewer for the producer
+        // Find or create a reviewer record for the producer
+        let producerReviewer: Reviewer
+        if let existing = project.reviewers.first(where: { $0.userId == project.ownerUserID }) {
+            producerReviewer = existing
+        } else {
+            // Create a virtual reviewer for the producer
+            producerReviewer = Reviewer(
+                displayName: producerDisplayName,
+                email: authService.currentUser?.email ?? "",
+                userId: project.ownerUserID,
+                role: .owner,
+                inviteStatus: .accepted,
+                isKeyApprover: true
+            )
+            producerReviewer.project = project
+            modelContext.insert(producerReviewer)
+        }
+        
+        // Enforce one approval per user per song
+        // If approving a mix, clear any other approvals by this user on other mixes of the same song
+        if status == .approved, let song = mix.song {
+            clearOtherMixApprovals(for: producerReviewer, in: song)
+        }
+        
+        let approvalToSync: Approval
+        
+        if let existingApproval = approval {
+            // Update existing approval
+            existingApproval.status = status
+            existingApproval.updatedAt = Date()
+            approvalToSync = existingApproval
+            print("✅ Updated existing producer approval")
+        } else {
+            // Create new approval
+            let newApproval = Approval(status: status)
+            newApproval.mix = mix
+            newApproval.reviewer = producerReviewer
+            modelContext.insert(newApproval)
+            approvalToSync = newApproval
+            print("✅ Created new producer approval")
+        }
+        
+        do {
+            try modelContext.save()
+            print("✅ Saved producer approval to SwiftData")
+            
+            // Check if song should be auto-approved (producer is always a key approver)
+            if status == .approved {
+                checkAndAutoApproveSong()
+            }
+            
+            // Sync to Firestore
+            Task {
+                await syncApprovalToFirestore(approvalToSync, reviewer: producerReviewer)
+            }
+        } catch {
+            print("❌ Error saving producer approval: \(error)")
+        }
+    }
+    
+    private func syncApprovalToFirestore(_ approval: Approval, reviewer: Reviewer) async {
+        guard let projectId = mix.song?.project?.firestoreId,
+              let songId = mix.song?.firestoreId,
+              let mixId = mix.firestoreId,
+              let reviewerUserId = reviewer.userId else {
+            print("❌ Missing IDs for Firestore sync")
+            return
+        }
+        
+        print("📤 Syncing producer approval to Firestore...")
+        print("   Project ID: \(projectId)")
+        print("   Song ID: \(songId)")
+        print("   Mix ID: \(mixId)")
+        print("   Reviewer User ID: \(reviewerUserId)")
+        print("   Status: \(approval.status.rawValue)")
+        
+        do {
+            _ = try await firestoreService.createOrUpdateApproval(
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId,
+                approval: approval,
+                reviewerUserId: reviewerUserId
+            )
+            print("✅ Producer approval synced to Firestore")
+        } catch {
+            print("❌ Failed to sync producer approval: \(error.localizedDescription)")
+        }
+    }
+    
+    private func clearOtherMixApprovals(for reviewer: Reviewer, in song: Song) {
+        // Find all approvals by this reviewer on other mixes in the same song
+        for otherMix in song.mixes where otherMix.id != mix.id {
+            if let otherApproval = otherMix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
+                if otherApproval.status == .approved {
+                    print("🔄 Clearing previous approval on mix: \(otherMix.name)")
+                    otherApproval.status = .pending
+                    otherApproval.updatedAt = Date()
+                    
+                    // Sync to Firestore
+                    if let projectId = project.firestoreId,
+                       let songId = song.firestoreId,
+                       let mixId = otherMix.firestoreId,
+                       let reviewerUserId = reviewer.userId {
+                        Task {
+                            do {
+                                _ = try await firestoreService.createOrUpdateApproval(
+                                    projectId: projectId,
+                                    songId: songId,
+                                    mixId: mixId,
+                                    approval: otherApproval,
+                                    reviewerUserId: reviewerUserId
+                                )
+                                print("✅ Cleared approval synced to Firestore")
+                            } catch {
+                                print("❌ Failed to sync cleared approval: \(error)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func checkAndAutoApproveSong() {
+        guard let song = mix.song else { return }
+        
+        // Producer is always a key approver, so auto-approve the song
+        print("🎯 Producer approved mix - auto-approving song")
+        song.status = .approved
+        
+        do {
+            try modelContext.save()
+            print("✅ Song auto-approved")
+            
+            // Sync to Firestore if needed
+            if project.firestoreId != nil,
+               song.firestoreId != nil {
+                Task {
+                    // TODO: Add updateSongStatus to FirestoreService if needed
+                    print("📤 Syncing song status to Firestore (if implemented)")
+                }
+            }
+        } catch {
+            print("❌ Error auto-approving song: \(error)")
+        }
+    }
+    
+    private func approvalColor(_ status: ApprovalStatus) -> Color {
+        switch status {
+        case .pending: return .gray
+        case .approved: return .green
+        case .changesRequested: return .orange
+        }
     }
 }
 
@@ -766,6 +1083,12 @@ struct ApprovalRowView: View {
         print("   Reviewer: \(reviewer.displayName)")
         print("   Mix: \(mix.name)")
         
+        // Enforce one approval per user per song
+        // If approving a mix, clear any other approvals by this user on other mixes of the same song
+        if status == .approved, let song = mix.song {
+            clearOtherMixApprovals(for: reviewer, in: song)
+        }
+        
         let approvalToSync: Approval
         
         if let existingApproval = approval {
@@ -787,6 +1110,11 @@ struct ApprovalRowView: View {
         do {
             try modelContext.save()
             print("✅ Approval saved to local database")
+            
+            // Check if song should be auto-approved (if this is a key approver)
+            if status == .approved && reviewer.isKeyApprover {
+                checkAndAutoApproveSong()
+            }
             
             // Sync to Firestore
             Task {
@@ -818,6 +1146,66 @@ struct ApprovalRowView: View {
             print("✅ Approval synced to Firestore with ID: \(approvalId)")
         } catch {
             print("❌ Failed to sync approval to Firestore: \(error)")
+        }
+    }
+    
+    private func clearOtherMixApprovals(for reviewer: Reviewer, in song: Song) {
+        // Find all approvals by this reviewer on other mixes in the same song
+        for otherMix in song.mixes where otherMix.id != mix.id {
+            if let otherApproval = otherMix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
+                if otherApproval.status == .approved {
+                    print("🔄 Clearing previous approval on mix: \(otherMix.name)")
+                    otherApproval.status = .pending
+                    otherApproval.updatedAt = Date()
+                    
+                    // Sync to Firestore
+                    if let project = song.project,
+                       let projectId = project.firestoreId,
+                       let songId = song.firestoreId,
+                       let mixId = otherMix.firestoreId,
+                       let reviewerUserId = reviewer.userId {
+                        Task {
+                            do {
+                                _ = try await firestoreService.createOrUpdateApproval(
+                                    projectId: projectId,
+                                    songId: songId,
+                                    mixId: mixId,
+                                    approval: otherApproval,
+                                    reviewerUserId: reviewerUserId
+                                )
+                                print("✅ Cleared approval synced to Firestore")
+                            } catch {
+                                print("❌ Failed to sync cleared approval: \(error)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func checkAndAutoApproveSong() {
+        guard let song = mix.song else { return }
+        
+        // Key approver approved mix - auto-approve the song
+        print("🎯 Key approver (\(reviewer.displayName)) approved mix - auto-approving song")
+        song.status = .approved
+        
+        do {
+            try modelContext.save()
+            print("✅ Song auto-approved")
+            
+            // Sync to Firestore if needed
+            if let project = song.project,
+               project.firestoreId != nil,
+               song.firestoreId != nil {
+                Task {
+                    // TODO: Add updateSongStatus to FirestoreService if needed
+                    print("📤 Syncing song status to Firestore (if implemented)")
+                }
+            }
+        } catch {
+            print("❌ Error auto-approving song: \(error)")
         }
     }
     
