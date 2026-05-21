@@ -510,11 +510,17 @@ struct SignUpView: View {
         
         do {
             print("🔵 Attempting to sign up with email: \(email)")
+            
+            // If user is invited reviewer, force role to artist (not producer)
+            let finalRole: UserRole = isInvitedReviewer ? .artist : selectedRole
+            print("   Role: \(finalRole.rawValue)")
+            print("   Is invited reviewer: \(isInvitedReviewer)")
+            
             try await authService.signUp(
                 email: email,
                 password: password,
                 displayName: displayName,
-                role: selectedRole
+                role: finalRole
             )
             print("✅ Sign up successful!")
             

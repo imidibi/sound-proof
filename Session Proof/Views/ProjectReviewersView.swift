@@ -44,6 +44,28 @@ struct ProjectReviewersView: View {
                 Section {
                     ForEach(sortedReviewers) { reviewer in
                         ReviewerRow(reviewer: reviewer, isProducerView: authService.currentUser?.isProducer == true)
+                            #if os(iOS)
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                if reviewer.role != .owner && authService.currentUser?.isProducer == true {
+                                    Button {
+                                        toggleKeyApprover(reviewer)
+                                    } label: {
+                                        Label(
+                                            reviewer.isKeyApprover ? "Remove Key" : "Set Key",
+                                            systemImage: reviewer.isKeyApprover ? "crown.fill" : "crown"
+                                        )
+                                    }
+                                    .tint(.orange)
+                                    
+                                    Button {
+                                        reviewerToEdit = reviewer
+                                        showingEditSheet = true
+                                    } label: {
+                                        Label("Edit", systemImage: "pencil")
+                                    }
+                                    .tint(.blue)
+                                }
+                            }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if reviewer.role != .owner && authService.currentUser?.isProducer == true {
                                     Button(role: .destructive) {
@@ -54,6 +76,7 @@ struct ProjectReviewersView: View {
                                     }
                                 }
                             }
+                            #else
                             .contextMenu {
                                 if reviewer.role != .owner && authService.currentUser?.isProducer == true {
                                     Button {
@@ -82,6 +105,7 @@ struct ProjectReviewersView: View {
                                     }
                                 }
                             }
+                            #endif
                     }
                 } header: {
                     Text("Artists & Reviewers")
