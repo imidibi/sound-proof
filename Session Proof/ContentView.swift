@@ -51,6 +51,16 @@ struct ContentView: View {
                             )
                             print("✅ Initial organization sync completed")
                             
+                            // Auto-sync any unsyncced songs
+                            do {
+                                try await syncService.syncUnsyncedSongsToCloud(
+                                    modelContext: modelContext
+                                )
+                                print("✅ Auto-sync of unsyncced songs completed")
+                            } catch {
+                                print("❌ Auto-sync of songs failed: \(error)")
+                            }
+                            
                             // Auto-sync any unsyncced mixes
                             do {
                                 try await syncService.syncUnsyncedMixesToCloud(
@@ -59,6 +69,16 @@ struct ContentView: View {
                                 print("✅ Auto-sync of unsyncced mixes completed")
                             } catch {
                                 print("❌ Auto-sync failed: \(error)")
+                            }
+                            
+                            // Auto-sync any unsyncced approvals
+                            do {
+                                try await syncService.syncUnsyncedApprovalsToCloud(
+                                    modelContext: modelContext
+                                )
+                                print("✅ Auto-sync of unsyncced approvals completed")
+                            } catch {
+                                print("❌ Auto-sync of approvals failed: \(error)")
                             }
                         } catch {
                             print("❌ Initial sync failed: \(error)")
@@ -72,12 +92,28 @@ struct ContentView: View {
                         print("🔄 Network restored - processing pending syncs")
                         await syncQueueService.processPendingSyncs(modelContext: modelContext)
                         
+                        // Also auto-sync any unsyncced songs when network returns
+                        do {
+                            try await syncService.syncUnsyncedSongsToCloud(modelContext: modelContext)
+                            print("✅ Auto-sync of songs on network restore completed")
+                        } catch {
+                            print("❌ Auto-sync of songs on network restore failed: \(error)")
+                        }
+                        
                         // Also auto-sync any unsyncced mixes when network returns
                         do {
                             try await syncService.syncUnsyncedMixesToCloud(modelContext: modelContext)
                             print("✅ Auto-sync on network restore completed")
                         } catch {
                             print("❌ Auto-sync on network restore failed: \(error)")
+                        }
+                        
+                        // Auto-sync any unsyncced approvals when network returns
+                        do {
+                            try await syncService.syncUnsyncedApprovalsToCloud(modelContext: modelContext)
+                            print("✅ Auto-sync of approvals on network restore completed")
+                        } catch {
+                            print("❌ Auto-sync of approvals on network restore failed: \(error)")
                         }
                     }
                 }
@@ -117,12 +153,28 @@ struct ContentView: View {
                 
                 print("🔄 Starting periodic background sync...")
                 
+                // Sync unsyncced songs
+                do {
+                    try await syncService.syncUnsyncedSongsToCloud(modelContext: modelContext)
+                    print("✅ Periodic song sync completed")
+                } catch {
+                    print("❌ Periodic song sync failed: \(error.localizedDescription)")
+                }
+                
                 // Sync unsyncced mixes
                 do {
                     try await syncService.syncUnsyncedMixesToCloud(modelContext: modelContext)
                     print("✅ Periodic sync completed")
                 } catch {
                     print("❌ Periodic sync failed: \(error.localizedDescription)")
+                }
+                
+                // Sync unsyncced approvals
+                do {
+                    try await syncService.syncUnsyncedApprovalsToCloud(modelContext: modelContext)
+                    print("✅ Periodic approval sync completed")
+                } catch {
+                    print("❌ Periodic approval sync failed: \(error.localizedDescription)")
                 }
                 
                 // Also sync projects from cloud to catch updates from other devices

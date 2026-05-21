@@ -34,6 +34,8 @@ final class Song {
     
     // Cloud sync fields
     var firestoreId: String?
+    var needsUpload: Bool = false // Flag for pending upload to cloud
+    var lastSyncedAt: Date? // Last time synced to Firestore
     
     var project: Project?
     
@@ -51,7 +53,9 @@ final class Song {
         status: SongStatus = .inReview,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        sortOrder: Int = 0
+        sortOrder: Int = 0,
+        needsUpload: Bool = false,
+        lastSyncedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -61,5 +65,7 @@ final class Song {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.sortOrder = sortOrder
+        self.needsUpload = needsUpload
+        self.lastSyncedAt = lastSyncedAt
     }
 }

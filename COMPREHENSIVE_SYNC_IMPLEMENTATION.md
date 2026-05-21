@@ -357,7 +357,16 @@ Now that all phases are complete, test the following scenarios:
 
 ### Data Flow
 
-**Upload Flow**:
+**Upload Flow (Songs)**:
+1. User action (create, modify) → marks song with `needsUpload = true`, `updatedAt = Date()`
+2. On app launch / network restore / periodic timer → `syncUnsyncedSongsToCloud()` runs
+3. For each unsyncced song:
+   - If has firestoreId: call `updateSong()` in Firestore
+   - If no firestoreId: call `createSong()` in Firestore
+4. On success: set `needsUpload = false`, `lastSyncedAt = Date()`
+5. On failure: keep `needsUpload = true` for retry
+
+**Upload Flow (Mixes)**:
 1. User action (import, modify, delete) → marks mix with `needsUpload = true`, `lastModifiedAt = Date()`
 2. On app launch / network restore / periodic timer → `syncUnsyncedMixesToCloud()` runs
 3. For each unsyncced mix:
@@ -365,6 +374,14 @@ Now that all phases are complete, test the following scenarios:
    - If new: call `uploadMix()` (uploads file + creates Firestore doc)
    - If existing: call `updateMix()` in Firestore
 4. On success: set `needsUpload = false`
+5. On failure: keep `needsUpload = true` for retry
+
+**Upload Flow (Approvals)**:
+1. User action (approve, change status) → marks approval with `needsUpload = true`, `updatedAt = Date()`
+2. On app launch / network restore / periodic timer → `syncUnsyncedApprovalsToCloud()` runs
+3. For each unsyncced approval:
+   - Call `createOrUpdateApproval()` in Firestore
+4. On success: set `needsUpload = false`, `lastSyncedAt = Date()`
 5. On failure: keep `needsUpload = true` for retry
 
 **Download Flow**:
@@ -490,8 +507,112 @@ The sync system is successful if:
 
 ---
 
+## Phase 5: Song Sync ✅ COMPLETE
+
+### 5.1 Auto-Upload Unsyncced Songs ✅
+**Location**: `ProjectSyncService.swift:1627-1720`
+
+**Implementation**:
+- Created `syncUnsyncedSongsToCloud()` function that:
+  - Queries for songs with `needsUpload == true` OR `firestoreId == nil`
+  - Handles both new uploads and updates to existing songs
+  - Provides detailed logging for debugging
+
+**Called from**:
+- `ContentView.swift:54-61` - After initial sync on app launch
+- `ContentView.swift:85-92` - When network reconnects
+- `ContentView.swift:138-145` - Periodic background sync (every 5 minutes)
+
+### 5.2 Mark Songs for Upload ✅
+**Location**: `NewSongSheet.swift:146`
+
+**Implementation**: When creating songs:
+```swift
+let song = Song(
+    name: songName,
+    artist: artist.isEmpty ? nil : artist,
+    notes: notes.isEmpty ? nil : notes,
+    sortOrder: sortOrder,
+    needsUpload: true  // Mark for automatic upload
+)
+```
+
+### 5.3 Clear Upload Flag After Sync ✅
+**Location**: `ProjectSyncService.swift:190-192`
+
+**Implementation**: After successful Firestore sync:
+```swift
+await MainActor.run {
+    song.firestoreId = firestoreId
+    song.needsUpload = false
+    song.lastSyncedAt = Date()
+    try? modelContext.save()
+}
+```
+
+### 5.4 Song Model Sync Fields ✅
+**Location**: `Song.swift:37-38`
+
+**Fields Added**:
+- `needsUpload: Bool` - Flag for pending upload to cloud
+- `lastSyncedAt: Date?` - Last time synced to Firestore
+
+**Critical Fix**: This addresses the root cause of approvals not syncing - songs weren't being uploaded to Firestore, so the entire song/mix/approval hierarchy was missing from the cloud database.
+
+---
+
+## Phase 6: Approval Sync ✅ COMPLETE
+
+### 6.1 Auto-Upload Unsyncced Approvals ✅
+**Location**: `ProjectSyncService.swift:1541-1625`
+
+**Implementation**:
+- Created `syncUnsyncedApprovalsToCloud()` function that:
+  - Queries for approvals with `needsUpload == true`
+  - Uploads approval status to Firestore
+  - Marks as synced with `lastSyncedAt` timestamp
+  - Provides detailed logging for debugging
+
+**Called from**:
+- `ContentView.swift:63-70` - After initial sync on app launch
+- `ContentView.swift:84-91` - When network reconnects
+- `ContentView.swift:127-134` - Periodic background sync (every 5 minutes)
+
+### 6.2 Mark Approvals for Upload ✅
+**Location**: `MixInspectorView.swift` (ProducerApprovalRowView and ApprovalRowView)
+
+**Implementation**: When creating/updating approvals:
+```swift
+let newApproval = Approval(status: status, needsUpload: true)
+existingApproval.needsUpload = true
+existingApproval.updatedAt = Date()
+```
+
+### 6.3 Clear Upload Flag After Sync ✅
+**Location**: `MixInspectorView.swift`
+
+**Implementation**: After successful Firestore sync:
+```swift
+await MainActor.run {
+    approval.needsUpload = false
+    approval.lastSyncedAt = Date()
+    try? modelContext.save()
+}
+```
+
+### 6.4 Approval Model Sync Fields ✅
+**Location**: `Approval.swift:25-27`
+
+**Fields Added**:
+- `needsUpload: Bool` - Flag for pending upload to cloud
+- `lastSyncedAt: Date?` - Last time synced to Firestore
+
+---
+
 ## Build Status
 
 ✅ **Project builds successfully with no errors**
 
-All four phases are complete and ready for testing with beta users.
+All six phases are complete and ready for testing with beta users.
+
+**CRITICAL FIX**: Phase 5 (Song Sync) addresses the root cause of the sync issue - songs weren't being uploaded to Firestore for existing projects. When you run the app now, it will automatically sync all songs that are missing from the cloud, which will then allow mixes and approvals to sync properly.

@@ -868,11 +868,12 @@ struct ProducerApprovalRowView: View {
             // Update existing approval
             existingApproval.status = status
             existingApproval.updatedAt = Date()
+            existingApproval.needsUpload = true // Mark for sync
             approvalToSync = existingApproval
             print("✅ Updated existing producer approval")
         } else {
             // Create new approval
-            let newApproval = Approval(status: status)
+            let newApproval = Approval(status: status, needsUpload: true)
             newApproval.mix = mix
             newApproval.reviewer = producerReviewer
             modelContext.insert(newApproval)
@@ -922,6 +923,14 @@ struct ProducerApprovalRowView: View {
                 approval: approval,
                 reviewerUserId: reviewerUserId
             )
+            
+            // Mark as synced
+            await MainActor.run {
+                approval.needsUpload = false
+                approval.lastSyncedAt = Date()
+                try? modelContext.save()
+            }
+            
             print("✅ Producer approval synced to Firestore")
         } catch {
             print("❌ Failed to sync producer approval: \(error.localizedDescription)")
@@ -1095,11 +1104,12 @@ struct ApprovalRowView: View {
             // Update existing approval
             existingApproval.status = status
             existingApproval.updatedAt = Date()
+            existingApproval.needsUpload = true // Mark for sync
             approvalToSync = existingApproval
             print("✅ Updated existing approval")
         } else {
             // Create new approval
-            let newApproval = Approval(status: status)
+            let newApproval = Approval(status: status, needsUpload: true)
             newApproval.mix = mix
             newApproval.reviewer = reviewer
             modelContext.insert(newApproval)
@@ -1143,6 +1153,14 @@ struct ApprovalRowView: View {
                 approval: approval,
                 reviewerUserId: reviewerUserId
             )
+            
+            // Mark as synced
+            await MainActor.run {
+                approval.needsUpload = false
+                approval.lastSyncedAt = Date()
+                try? modelContext.save()
+            }
+            
             print("✅ Approval synced to Firestore with ID: \(approvalId)")
         } catch {
             print("❌ Failed to sync approval to Firestore: \(error)")

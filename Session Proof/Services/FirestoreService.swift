@@ -179,7 +179,14 @@ class FirestoreService {
         projectId: String,
         song: Song
     ) async throws -> String {
+        print("🔥 FirestoreService.createSong called")
+        print("   - projectId: \(projectId)")
+        print("   - song.name: \(song.name)")
+        
         let songRef = db.collection("projects").document(projectId).collection("songs").document()
+        
+        print("   - Generated songRef.documentID: \(songRef.documentID)")
+        print("   - Full path: projects/\(projectId)/songs/\(songRef.documentID)")
         
         let data: [String: Any] = [
             "name": song.name,
@@ -191,16 +198,43 @@ class FirestoreService {
             "updatedAt": Timestamp(date: song.updatedAt)
         ]
         
+        print("   - About to call setData with data: \(data)")
         try await songRef.setData(data)
+        print("   - setData completed successfully")
+        
         return songRef.documentID
     }
     
     func updateSong(projectId: String, songId: String, data: [String: Any]) async throws {
+        print("🔥 FirestoreService.updateSong called")
+        print("   - projectId: \(projectId)")
+        print("   - songId: \(songId)")
+        print("   - Full path: projects/\(projectId)/songs/\(songId)")
+        print("   - data: \(data)")
+        
         var updateData = data
         updateData["updatedAt"] = Timestamp(date: Date())
+        
+        print("   - About to call setData with merge: true")
+        // Use setData with merge to create document if it doesn't exist
         try await db.collection("projects").document(projectId)
             .collection("songs").document(songId)
-            .updateData(updateData)
+            .setData(updateData, merge: true)
+        print("   - setData completed successfully")
+    }
+    
+    func songExists(projectId: String, songId: String) async throws -> Bool {
+        print("🔥 FirestoreService.songExists called")
+        print("   - Checking path: projects/\(projectId)/songs/\(songId)")
+        
+        let snapshot = try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .getDocument()
+        
+        print("   - snapshot.exists: \(snapshot.exists)")
+        print("   - snapshot.data: \(snapshot.data() ?? [:])")
+        
+        return snapshot.exists
     }
     
     // MARK: - Mix Sync

@@ -73,6 +73,7 @@ struct MixApprovalRow: View {
     let mix: Mix
     let project: Project
     @Query private var allApprovals: [Approval]
+    @Environment(AuthenticationService.self) private var authService
     
     var allReviewers: [Reviewer] {
         project.reviewers
@@ -85,8 +86,25 @@ struct MixApprovalRow: View {
         allReviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
     }
     
+    // Get approval for producer (by userId, not reviewer record)
+    private var producerApproval: Approval? {
+        allApprovals.first { approval in
+            approval.mix?.id == mix.id && approval.reviewer?.userId == project.ownerUserID
+        }
+    }
+    
+    // Check if producer is already in reviewers list
+    private var producerInReviewers: Bool {
+        project.reviewers.contains { $0.userId == project.ownerUserID }
+    }
+    
+    // Total count including producer if not in reviewers
+    private var totalReviewerCount: Int {
+        producerInReviewers ? acceptedReviewers.count : acceptedReviewers.count + 1
+    }
+    
     var approvalStats: (approved: Int, pending: Int, changesRequested: Int, total: Int) {
-        let total = acceptedReviewers.count
+        let total = totalReviewerCount
         var approved = 0
         var changesRequested = 0
         var pending = 0
@@ -94,6 +112,24 @@ struct MixApprovalRow: View {
         // Get approvals for this specific mix
         let mixApprovals = allApprovals.filter { $0.mix?.id == mix.id }
         
+        // Count producer approval first if not in reviewers
+        if !producerInReviewers {
+            if let approval = producerApproval {
+                switch approval.status {
+                case .approved:
+                    approved += 1
+                case .changesRequested:
+                    changesRequested += 1
+                case .pending:
+                    pending += 1
+                }
+            } else {
+                // No approval record yet - count as pending
+                pending += 1
+            }
+        }
+        
+        // Count reviewer approvals
         for reviewer in acceptedReviewers {
             if let approval = mixApprovals.first(where: { $0.reviewer?.id == reviewer.id }) {
                 switch approval.status {
@@ -161,6 +197,16 @@ struct MixApprovalRow: View {
             
             // Individual reviewer status
             VStack(alignment: .leading, spacing: 6) {
+                // Show producer first if not already in reviewers
+                if !producerInReviewers {
+                    ProducerApprovalDisplayRow(
+                        mix: mix,
+                        project: project,
+                        approval: producerApproval
+                    )
+                }
+                
+                // Show all reviewers
                 ForEach(acceptedReviewers.sorted(by: { $0.displayName < $1.displayName })) { reviewer in
                     ReviewerApprovalRow(reviewer: reviewer, mix: mix)
                 }
@@ -352,6 +398,116 @@ struct MixApprovalBadge: View {
             .padding(.vertical, 4)
             .background(statusColor)
             .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+struct ProducerApprovalDisplayRow: View {
+    let mix: Mix
+    let project: Project
+    let approval: Approval?
+    
+    @Environment(AuthenticationService.self) private var authService
+    
+    // Get producer's display name from auth service or project
+    var producerDisplayName: String {
+        if let currentUser = authService.currentUser, currentUser.id == project.ownerUserID {
+            return currentUser.displayName
+        }
+        return project.producerName ?? "Producer"
+    }
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            // Status icon
+            Image(systemName: statusIcon)
+                .foregroundStyle(statusColor)
+                .frame(width: 20)
+            
+            // Producer name with producer label
+            HStack(spacing: 4) {
+                Text(producerDisplayName)
+                    .font(.caption)
+                
+                Text("(Producer)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            // Status text with timestamp
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                if let approval = approval, approval.status == .approved {
+                    Text(formatDate(approval.updatedAt))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+    
+    private var statusIcon: String {
+        if let approval = approval {
+            switch approval.status {
+            case .approved:
+                return "checkmark.circle.fill"
+            case .changesRequested:
+                return "exclamationmark.circle.fill"
+            case .pending:
+                return "clock"
+            }
+        } else {
+            // No approval record yet - pending
+            return "clock"
+        }
+    }
+    
+    private var statusColor: Color {
+        if let approval = approval {
+            switch approval.status {
+            case .approved:
+                return .green
+            case .changesRequested:
+                return .red
+            case .pending:
+                return .orange
+            }
+        } else {
+            return .orange
+        }
+    }
+    
+    private var statusText: String {
+        if let approval = approval {
+            switch approval.status {
+            case .approved:
+                return "Approved"
+            case .changesRequested:
+                return "Changes Requested"
+            case .pending:
+                return "Pending Review"
+            }
+        } else {
+            // No approval record - show based on mix status
+            switch mix.approvalStatus {
+            case .draft:
+                return "Not Shared Yet"
+            case .shared, .inReview:
+                return "Pending Review"
+            case .approved, .superseded:
+                return "Pending Review"
+            }
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

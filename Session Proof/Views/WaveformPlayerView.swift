@@ -49,6 +49,7 @@ struct WaveformPlayerView: View {
                         zoomLevel: zoomLevel,
                         verticalScale: verticalScale,
                         comments: mix.song?.comments.filter { $0.mix?.id == mix.id } ?? [],
+                        mix: mix,
                         onSeek: { time in
                             audioPlayerService.seek(to: time)
                         }
@@ -304,6 +305,7 @@ struct WaveformView: View {
     let zoomLevel: Double
     let verticalScale: Double
     let comments: [Comment]
+    let mix: Mix
     let onSeek: (TimeInterval) -> Void
     
     @State private var selectedComment: Comment?
@@ -314,6 +316,9 @@ struct WaveformView: View {
     @State private var isSelectingRange = false
     @State private var rangeSelectionStart: TimeInterval?
     @State private var rangeSelectionEnd: TimeInterval?
+    @State private var showNewCommentSheet = false
+    @State private var newCommentTimestamp: TimeInterval?
+    @State private var newCommentEndTimestamp: TimeInterval?
     
     // Pre-calculate expensive values to avoid recalculating in body
     private var playbackPosition: Double {
@@ -522,26 +527,69 @@ struct WaveformView: View {
                     .zIndex(101)
                     .transition(.scale.combined(with: .opacity))
                 }
+                
+                #if os(macOS)
+                // Range selection mode hint (shows when Cmd is pressed)
+                if isSelectingRange {
+                    VStack {
+                        Spacer()
+                        
+                        HStack {
+                            Spacer()
+                            
+                            Text("⌘ Drag to select time range")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.blue.opacity(0.9))
+                                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                                )
+                            
+                            Spacer()
+                        }
+                    }
+                    .padding(.bottom, 8)
+                    .zIndex(101)
+                    .transition(.scale.combined(with: .opacity))
+                }
+                #endif
             }
             .contentShape(Rectangle())
+            #if os(iOS)
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
                     .onEnded { _ in
-                        // Enter range selection mode
+                        // Enter range selection mode on iOS
                         isSelectingRange = true
                         rangeSelectionStart = currentTime
                         rangeSelectionEnd = currentTime
                         
-                        #if os(iOS)
-                        // Haptic feedback on iOS
+                        // Haptic feedback
                         let generator = UIImpactFeedbackGenerator(style: .medium)
                         generator.impactOccurred()
-                        #endif
                     }
             )
+            #endif
             .gesture(
                 DragGesture(minimumDistance: 5)
                     .onChanged { value in
+                        #if os(macOS)
+                        // On macOS: Check if Command key is pressed for range selection
+                        let modifiers = NSEvent.modifierFlags
+                        let isCommandPressed = modifiers.contains(.command)
+                        
+                        if isCommandPressed && !isSelectingRange && !isScrubbing {
+                            // Start range selection mode
+                            isSelectingRange = true
+                            rangeSelectionStart = currentTime
+                            rangeSelectionEnd = currentTime
+                        }
+                        #endif
+                        
                         if isSelectingRange {
                             // Update range selection end time
                             let dragDistance = value.translation.width
@@ -580,15 +628,28 @@ struct WaveformView: View {
                     }
                     .onEnded { _ in
                         if isSelectingRange {
-                            // Range selection completed - show comment sheet
-                            // TODO: Need to pass range to comment sheet
+                            // Range selection completed - show comment sheet with range
+                            if let start = rangeSelectionStart, let end = rangeSelectionEnd {
+                                let startTime = min(start, end)
+                                let endTime = max(start, end)
+                                
+                                // Only create range comment if range is at least 0.1 seconds
+                                if abs(endTime - startTime) >= 0.1 {
+                                    newCommentTimestamp = startTime
+                                    newCommentEndTimestamp = endTime
+                                    showNewCommentSheet = true
+                                    
+                                    #if os(macOS)
+                                    print("📝 Range comment created: \(formatTime(startTime)) - \(formatTime(endTime))")
+                                    #endif
+                                }
+                            }
+                            
                             isSelectingRange = false
-                            // For now, just clear the selection
-                            // In a full implementation, this would open NewCommentSheet with the range
                             rangeSelectionStart = nil
                             rangeSelectionEnd = nil
-                        } else {
-                            // Seek to the scrubbed position
+                        } else if isScrubbing {
+                            // Normal scrubbing - seek to the scrubbed position
                             if let time = scrubbingTime {
                                 onSeek(time)
                             }
@@ -601,6 +662,15 @@ struct WaveformView: View {
         }
         .sheet(item: $commentToEdit) { comment in
             CommentDetailSheet(comment: comment, onSeek: onSeek)
+        }
+        .sheet(isPresented: $showNewCommentSheet) {
+            if let timestamp = newCommentTimestamp {
+                NewCommentSheet(
+                    mix: mix,
+                    timestamp: timestamp,
+                    endTimestamp: newCommentEndTimestamp
+                )
+            }
         }
     }
     

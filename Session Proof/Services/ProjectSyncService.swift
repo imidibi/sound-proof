@@ -181,6 +181,8 @@ class ProjectSyncService {
             
             await MainActor.run {
                 song.firestoreId = firestoreId
+                song.needsUpload = false
+                song.lastSyncedAt = Date()
                 try? modelContext.save()
             }
             
@@ -1021,8 +1023,40 @@ class ProjectSyncService {
         print("📥 Processing approval from cloud for user: \(reviewerUserId)")
         
         // Find the reviewer by userId
-        guard let reviewer = project.reviewers.first(where: { $0.userId == reviewerUserId }) else {
-            print("⚠️ Reviewer not found for userId: \(reviewerUserId)")
+        var reviewer = project.reviewers.first(where: { $0.userId == reviewerUserId })
+        
+        // If not found by userId, try to find by matching the userId from Firestore reviewer doc
+        if reviewer == nil {
+            print("⚠️ Reviewer not found by userId, checking Firestore for match...")
+            
+            // Try to find the reviewer in Firestore by userId and link it
+            if let projectId = project.firestoreId {
+                do {
+                    let cloudReviewers = try await firestoreService.getProjectReviewers(projectId: projectId)
+                    
+                    // Find the cloud reviewer document that has this userId
+                    for (reviewerId, reviewerData) in cloudReviewers {
+                        if let cloudUserId = reviewerData["userId"] as? String,
+                           cloudUserId == reviewerUserId {
+                            // Found the matching reviewer - try to find locally by reviewerId
+                            if let reviewerUUID = UUID(uuidString: reviewerId),
+                               let localReviewer = project.reviewers.first(where: { $0.id == reviewerUUID }) {
+                                print("✅ Found reviewer by document ID, updating userId: \(localReviewer.displayName)")
+                                localReviewer.userId = reviewerUserId
+                                try? modelContext.save()
+                                reviewer = localReviewer
+                                break
+                            }
+                        }
+                    }
+                } catch {
+                    print("❌ Error fetching reviewers: \(error)")
+                }
+            }
+        }
+        
+        guard let reviewer = reviewer else {
+            print("⚠️ Reviewer not found for userId: \(reviewerUserId) - cannot sync approval")
             return
         }
         
@@ -1534,5 +1568,236 @@ class ProjectSyncService {
         }
         
         print("🎉 Auto-sync complete: \(successCount) uploaded, \(failCount) failed")
+    }
+    
+    // MARK: - Auto-Sync Unsyncced Approvals
+    
+    /// Automatically finds and uploads approvals that haven't been synced to the cloud yet
+    /// This runs on app launch and network reconnect to ensure all local approval changes are backed up
+    func syncUnsyncedApprovalsToCloud(modelContext: ModelContext) async throws {
+        guard let currentUserId = authService.currentUser?.id else {
+            print("⚠️ Cannot sync approvals - no authenticated user")
+            return
+        }
+        
+        print("🔄 Starting auto-sync of unsyncced approvals...")
+        
+        // Query for approvals that need upload AND belong to the current user
+        // Only reviewers can upload their own approvals (per Firestore security rules)
+        let descriptor = FetchDescriptor<Approval>(
+            predicate: #Predicate<Approval> { approval in
+                (approval.needsUpload == true || approval.lastSyncedAt == nil) &&
+                approval.reviewer != nil
+            }
+        )
+        
+        let unsyncedApprovals = try modelContext.fetch(descriptor)
+        
+        guard !unsyncedApprovals.isEmpty else {
+            print("✅ No unsyncced approvals found")
+            return
+        }
+        
+        print("📤 Found \(unsyncedApprovals.count) approval(s) that need uploading")
+        
+        var successCount = 0
+        var failCount = 0
+        
+        for approval in unsyncedApprovals {
+            // Get the mix, song, and project info
+            guard let mix = approval.mix,
+                  let song = mix.song,
+                  let project = song.project,
+                  let projectId = project.firestoreId,
+                  let songId = song.firestoreId,
+                  let mixId = mix.firestoreId else {
+                print("⚠️ Approval missing required project/song/mix info - skipping")
+                continue
+            }
+            
+            // Get reviewer info
+            guard let reviewer = approval.reviewer,
+                  let reviewerUserId = reviewer.userId else {
+                print("⚠️ Approval missing reviewer userId - skipping")
+                continue
+            }
+            
+            // Only sync approvals where the current user is the reviewer
+            // (Firestore security rules only allow reviewers to update their own approvals)
+            guard reviewerUserId == currentUserId else {
+                print("⏭️ Skipping approval from '\(reviewer.displayName)' - not current user's approval")
+                continue
+            }
+            
+            do {
+                print("📤 Syncing approval for mix '\(mix.name)' by reviewer '\(reviewer.displayName)'")
+                
+                // Sync to Firestore
+                _ = try await firestoreService.createOrUpdateApproval(
+                    projectId: projectId,
+                    songId: songId,
+                    mixId: mixId,
+                    approval: approval,
+                    reviewerUserId: reviewerUserId
+                )
+                
+                // Mark as synced
+                await MainActor.run {
+                    approval.needsUpload = false
+                    approval.lastSyncedAt = Date()
+                    try? modelContext.save()
+                }
+                
+                successCount += 1
+                print("✅ Successfully synced approval")
+                
+            } catch {
+                failCount += 1
+                print("❌ Failed to sync approval: \(error.localizedDescription)")
+                // Keep needsUpload = true so it retries later
+            }
+        }
+        
+        print("🎉 Approval sync complete: \(successCount) uploaded, \(failCount) failed")
+    }
+    
+    // MARK: - Auto-Sync Unsyncced Songs
+    
+    /// Automatically finds and uploads songs that haven't been synced to the cloud yet
+    /// This runs on app launch and network reconnect to ensure all local song changes are backed up
+    func syncUnsyncedSongsToCloud(modelContext: ModelContext) async throws {
+        guard authService.currentUser?.id != nil else {
+            print("⚠️ Cannot sync songs - no authenticated user")
+            return
+        }
+        
+        print("🔄 Starting auto-sync of unsyncced songs...")
+        
+        // Query ALL songs to verify they exist in Firestore (temporary debugging)
+        // TODO: Revert to optimized query once sync is verified working
+        let descriptor = FetchDescriptor<Song>()
+        
+        let unsyncedSongs = try modelContext.fetch(descriptor)
+        
+        guard !unsyncedSongs.isEmpty else {
+            print("✅ No unsyncced songs found")
+            return
+        }
+        
+        print("📤 Found \(unsyncedSongs.count) song(s) that need uploading")
+        
+        var successCount = 0
+        var failCount = 0
+        
+        for song in unsyncedSongs {
+            // Get the project info first
+            guard let project = song.project,
+                  let projectId = project.firestoreId else {
+                print("⚠️ Song '\(song.name)' missing required project info - skipping")
+                continue
+            }
+            
+            // If song has a firestoreId, verify it actually exists in Firestore
+            // This handles the case where a previous sync attempt set the ID but failed to create the document
+            var shouldSync = false
+            if let songId = song.firestoreId {
+                print("🔍 Checking song '\(song.name)' with firestoreId: \(songId)")
+                do {
+                    // Check if document exists
+                    let exists = try await firestoreService.songExists(projectId: projectId, songId: songId)
+                    print("   - Document exists in Firestore: \(exists)")
+                    print("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
+                    
+                    if !exists {
+                        print("⚠️ Song '\(song.name)' has firestoreId but document doesn't exist - forcing sync")
+                        shouldSync = true
+                    } else if let lastSync = song.lastSyncedAt,
+                              Date().timeIntervalSince(lastSync) < 3600 {
+                        let timeSinceSync = Date().timeIntervalSince(lastSync)
+                        print("⏭️ Skipping recently synced song: \(song.name) (synced \(Int(timeSinceSync))s ago)")
+                        continue
+                    } else {
+                        print("✅ Song exists and needs sync (not synced recently)")
+                        shouldSync = true
+                    }
+                } catch {
+                    print("⚠️ Error checking song existence: \(error.localizedDescription) - forcing sync")
+                    shouldSync = true
+                }
+            } else {
+                // No firestoreId means new song - always sync
+                print("📝 Song '\(song.name)' has no firestoreId - will create new")
+                shouldSync = true
+            }
+            
+            guard shouldSync else { continue }
+            
+            do {
+                print("📤 Syncing song: \(song.name)")
+                print("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
+                print("   - firestoreId: \(song.firestoreId ?? "nil")")
+                print("   - projectId: \(projectId)")
+                
+                // Check if this is an update to existing cloud song
+                if let songId = song.firestoreId {
+                    print("🔄 Calling updateSong with:")
+                    print("   - projectId: \(projectId)")
+                    print("   - songId: \(songId)")
+                    print("   - name: \(song.name)")
+                    
+                    try await firestoreService.updateSong(
+                        projectId: projectId,
+                        songId: songId,
+                        data: [
+                            "name": song.name,
+                            "artist": song.artist ?? "",
+                            "notes": song.notes ?? "",
+                            "status": song.status.rawValue,
+                            "sortOrder": song.sortOrder
+                        ]
+                    )
+                    
+                    print("✅ updateSong completed successfully")
+                    
+                    await MainActor.run {
+                        song.needsUpload = false
+                        song.lastSyncedAt = Date()
+                        try? modelContext.save()
+                    }
+                    
+                } else {
+                    // New song - create in Firestore
+                    print("📤 Creating new song with createSong()")
+                    print("   - projectId: \(projectId)")
+                    print("   - song.name: \(song.name)")
+                    
+                    let firestoreId = try await firestoreService.createSong(
+                        projectId: projectId,
+                        song: song
+                    )
+                    
+                    print("✅ createSong completed, got firestoreId: \(firestoreId)")
+                    
+                    await MainActor.run {
+                        song.firestoreId = firestoreId
+                        song.needsUpload = false
+                        song.lastSyncedAt = Date()
+                        try? modelContext.save()
+                    }
+                }
+                
+                successCount += 1
+                print("✅ Successfully synced song: \(song.name)")
+                
+            } catch {
+                failCount += 1
+                print("❌ Failed to sync song '\(song.name)': \(error.localizedDescription)")
+                print("❌ Full error: \(error)")
+                print("❌ Error type: \(type(of: error))")
+                // Keep needsUpload = true so it retries later
+            }
+        }
+        
+        print("🎉 Song sync complete: \(successCount) uploaded, \(failCount) failed")
     }
 }

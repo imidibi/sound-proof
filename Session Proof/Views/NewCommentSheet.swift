@@ -11,6 +11,7 @@ import SwiftData
 struct NewCommentSheet: View {
     let mix: Mix
     let timestamp: TimeInterval
+    let initialEndTimestamp: TimeInterval?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -26,10 +27,13 @@ struct NewCommentSheet: View {
     @State private var isSyncing = false
     @State private var syncError: String?
     
-    init(mix: Mix, timestamp: TimeInterval) {
+    init(mix: Mix, timestamp: TimeInterval, endTimestamp: TimeInterval? = nil) {
         self.mix = mix
         self.timestamp = timestamp
+        self.initialEndTimestamp = endTimestamp
         self._selectedTimestamp = State(initialValue: timestamp)
+        self._endTimestamp = State(initialValue: endTimestamp)
+        self._useTimeRange = State(initialValue: endTimestamp != nil)
     }
     
     var body: some View {

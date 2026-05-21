@@ -143,7 +143,8 @@ struct NewSongSheet: View {
             name: songName,
             artist: artist.isEmpty ? nil : artist,
             notes: notes.isEmpty ? nil : notes,
-            sortOrder: sortOrder
+            sortOrder: sortOrder,
+            needsUpload: true  // Mark for automatic upload
         )
         
         song.project = project

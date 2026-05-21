@@ -22,6 +22,10 @@ final class Approval {
     var createdAt: Date
     var updatedAt: Date
     
+    // Sync tracking fields
+    var needsUpload: Bool = false // Flag for pending upload to cloud
+    var lastSyncedAt: Date? // Last time synced to Firestore
+    
     var mix: Mix?
     var reviewer: Reviewer?
     
@@ -30,12 +34,16 @@ final class Approval {
         status: ApprovalStatus = .pending,
         note: String? = nil,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        needsUpload: Bool = false,
+        lastSyncedAt: Date? = nil
     ) {
         self.id = id
         self.status = status
         self.note = note
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.needsUpload = needsUpload
+        self.lastSyncedAt = lastSyncedAt
     }
 }

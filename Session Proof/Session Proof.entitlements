@@ -13,6 +13,9 @@
 	<true/>
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
+	<!-- Microphone access for voice notes -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.studioguru.approvl</string>
