@@ -1,9 +1,9 @@
 Audio Review & Approval App
 Product and MVP Specification for Mac, iPad, and iPhone
-App name: Sound Proof
+App name: Approvl
 A native Apple-first companion app for producers, engineers, studios, and clients to review audio, collect timestamped feedback, consolidate notes, and approve mix versions.
 1. Executive Summary
-Sound Proof is a native Apple app built from one shared SwiftUI codebase for macOS, iPadOS, and iOS. It is designed to solve the communication chaos around mix reviews, podcast edits, commercial audio, post-production, and studio approvals.
+Approvl is a native Apple app built from one shared SwiftUI codebase for macOS, iPadOS, and iOS. It is designed to solve the communication chaos around mix reviews, podcast edits, commercial audio, post-production, and studio approvals.
 •    Core promise: send a mix, collect timestamped notes, and get approval without email or text-message chaos.
 •    Primary buyer: producer, engineer, studio owner, podcast editor, composer, or post-audio team.
 •    Primary reviewer: artist, client, label, manager, director, agency stakeholder, or podcast host.

@@ -140,7 +140,7 @@ struct ProjectListView: View {
             #if os(macOS)
             .navigationSplitViewColumnWidth(min: 220, ideal: 280)
             #endif
-            .navigationTitle("Sound Proof")
+            .navigationTitle("Approvl")
             .toolbar {
                 #if os(macOS)
                 // Mac-specific toolbar layout
@@ -294,7 +294,7 @@ struct ProjectListView: View {
             } else if projects.isEmpty {
                 VStack(spacing: 20) {
                     ContentUnavailableView(
-                        "Welcome to Sound Proof",
+                        "Welcome to Approvl",
                         systemImage: "waveform.circle",
                         description: Text("Get started by creating a project")
                     )

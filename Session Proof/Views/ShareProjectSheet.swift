@@ -106,7 +106,7 @@ struct ShareProjectSheet: View {
                     HStack(alignment: .top, spacing: 12) {
                         Text("3.")
                             .fontWeight(.semibold)
-                        Text("They enter the code in Sound Proof to access the project")
+                        Text("They enter the code in Approvl to access the project")
                     }
                     .font(.subheadline)
                 }
