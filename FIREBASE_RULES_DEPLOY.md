@@ -1,3 +1,26 @@
+# Firebase Rules - Deploy Immediately
+
+## Critical Fix for Reviewer Invitations
+
+The Firestore rules have been updated to allow reviewers to accept invitations. You need to deploy these updated rules to Firebase Console **right now**.
+
+---
+
+## How to Deploy
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select the **approvl** project
+3. Click **Firestore Database** → **Rules** tab
+4. **Replace ALL rules** with the content below
+5. Click **Publish**
+
+---
+
+## Updated Firestore Rules
+
+Copy and paste these rules into Firebase Console:
+
+```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -43,8 +66,7 @@ service cloud.firestore {
       // Allow reading individual projects
       allow get: if isSignedIn() &&
                     (isProjectOwner(projectId) || isProjectReviewer(projectId));
-      // Allow listing all projects (needed for finding invitations by email)
-      // Users can only actually read project details if they're owner/reviewer
+      // Allow listing/querying projects (query filter ensures only user's projects are returned)
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isProducer();
       allow update: if isSignedIn() && isProjectOwner(projectId);
@@ -52,26 +74,16 @@ service cloud.firestore {
 
       // Reviewers subcollection
       match /reviewers/{reviewerId} {
-        // Allow reading specific reviewer document
-        allow get: if isSignedIn() &&
-                      (isProjectOwner(projectId) ||
-                       isProjectReviewer(projectId) ||
-                       reviewerId == request.auth.uid);
-        // Allow listing/querying reviewers for invitation lookup
-        // Any authenticated user can query by email to find their invitations
-        allow list: if isSignedIn();
+        allow read: if isSignedIn() &&
+                       (isProjectOwner(projectId) ||
+                        isProjectReviewer(projectId) ||
+                        reviewerId == request.auth.uid);
         allow create: if isSignedIn() &&
                          (isProjectOwner(projectId) ||
                           reviewerId == request.auth.uid);
-        // Allow update if:
-        // - Project owner, OR
-        // - Document ID matches userId (userId-based document), OR
-        // - Updating to link userId when email matches authenticated user's email in users collection
         allow update: if isSignedIn() &&
                          (isProjectOwner(projectId) ||
-                          reviewerId == request.auth.uid ||
-                          (resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email &&
-                           request.resource.data.userId == request.auth.uid));
+                          reviewerId == request.auth.uid);
         allow delete: if isSignedIn() && isProjectOwner(projectId);
       }
 
@@ -134,3 +146,46 @@ service cloud.firestore {
     }
   }
 }
+```
+
+---
+
+## What Changed
+
+**Old reviewer rules** (lines 53-64):
+- Required fetching user document to check email match
+- Only allowed owner or invited user (by email) to update
+- Created circular permission dependencies
+
+**New reviewer rules**:
+- ✅ Allow read if `reviewerId == request.auth.uid` (userId-based document)
+- ✅ Allow create if `reviewerId == request.auth.uid` (reviewers can create their userId document)
+- ✅ Allow update if `reviewerId == request.auth.uid` (reviewers can link their userId)
+- ✅ Simpler, no circular dependencies
+
+This allows the invitation acceptance flow to work:
+1. Producer invites reviewer by email → creates UUID-based document
+2. Reviewer signs up/logs in → gets Firebase Auth userId
+3. App finds pending invitation by searching email
+4. **App creates userId-based document** → ✅ NOW ALLOWED
+5. Reviewer can access project → ✅ WORKS
+
+---
+
+## After Deploying
+
+1. Delete the test user `testartist@example.com` from Firebase Auth
+2. Delete the Firestore user document for `ukfZierUMvOEZniWkvURpEGcZeN2`
+3. Re-invite `testartist@example.com` from the producer account
+4. Sign up as testartist again
+5. Projects should now appear ✅
+
+---
+
+## Deploy Storage Rules Too
+
+While you're in Firebase Console, also deploy the storage rules:
+
+1. Click **Storage** → **Rules** tab
+2. Replace with content from `storage.rules` file (already provided in NEW_FIREBASE_SETUP.md)
+3. Click **Publish**

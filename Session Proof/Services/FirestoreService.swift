@@ -224,7 +224,9 @@ class FirestoreService {
             "channels": mix.channels,
             "approvalStatus": mix.approvalStatus.rawValue,
             "notes": mix.notes ?? "",
-            "uploadedAt": Timestamp(date: Date())
+            "uploadedAt": Timestamp(date: Date()),
+            "updatedAt": Timestamp(date: mix.lastModifiedAt),
+            "isDeleted": mix.isDeleted
         ]
         
         try await mixRef.setData(data)
@@ -240,7 +242,49 @@ class FirestoreService {
         try await db.collection("projects").document(projectId)
             .collection("songs").document(songId)
             .collection("mixes").document(mixId)
-            .updateData(["approvalStatus": status.rawValue])
+            .updateData([
+                "approvalStatus": status.rawValue,
+                "updatedAt": Timestamp(date: Date())
+            ])
+    }
+    
+    func updateMix(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        mix: Mix
+    ) async throws {
+        let data: [String: Any] = [
+            "name": mix.name,
+            "versionNumber": mix.versionNumber,
+            "duration": mix.duration,
+            "sampleRate": mix.sampleRate,
+            "channels": mix.channels,
+            "approvalStatus": mix.approvalStatus.rawValue,
+            "notes": mix.notes ?? "",
+            "updatedAt": Timestamp(date: mix.lastModifiedAt),
+            "isDeleted": mix.isDeleted
+        ]
+        
+        try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .updateData(data)
+    }
+    
+    func deleteMix(
+        projectId: String,
+        songId: String,
+        mixId: String
+    ) async throws {
+        // Soft delete - mark as deleted instead of removing document
+        try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .updateData([
+                "isDeleted": true,
+                "updatedAt": Timestamp(date: Date())
+            ])
     }
     
     // MARK: - Comment Sync

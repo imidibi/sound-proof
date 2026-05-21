@@ -68,9 +68,11 @@ struct ProjectListView: View {
                                 
                                 // Expanded mixes as direct List children for swipe actions
                                 if expandedSongs.contains(song.id) {
-                                    ForEach(song.mixes.sorted { $0.versionNumber < $1.versionNumber }) { mix in
+                                    ForEach(song.mixes.filter { !$0.isDeleted }.sorted { $0.versionNumber < $1.versionNumber }) { mix in
                                         MixRow(mix: mix, isSelected: selectedMix?.id == mix.id, onSelect: {
                                             selectedMix = mix
+                                        }, onDelete: {
+                                            selectedMix = nil
                                         })
                                         .padding(.leading, 64)
                                     }
@@ -120,9 +122,11 @@ struct ProjectListView: View {
                                     
                                     // Expanded mixes as direct List children for swipe actions
                                     if expandedSongs.contains(song.id) {
-                                        ForEach(song.mixes.sorted { $0.versionNumber < $1.versionNumber }) { mix in
+                                        ForEach(song.mixes.filter { !$0.isDeleted }.sorted { $0.versionNumber < $1.versionNumber }) { mix in
                                             MixRow(mix: mix, isSelected: selectedMix?.id == mix.id, onSelect: {
                                                 selectedMix = mix
+                                            }, onDelete: {
+                                                selectedMix = nil
                                             })
                                             .padding(.leading, 64)
                                         }
@@ -539,7 +543,7 @@ struct SongFolderRow: View {
     }
     
     var sortedMixes: [Mix] {
-        song.mixes.sorted { $0.versionNumber < $1.versionNumber }
+        song.mixes.filter { !$0.isDeleted }.sorted { $0.versionNumber < $1.versionNumber }
     }
     
     var isSelected: Bool {
@@ -578,7 +582,7 @@ struct SongFolderRow: View {
                 
                 Spacer()
                 
-                Text("\(song.mixes.count)")
+                Text("\(song.mixes.filter { !$0.isDeleted }.count)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -674,10 +678,11 @@ struct MixRow: View {
     @Bindable var mix: Mix
     let isSelected: Bool
     let onSelect: () -> Void
-    
+    let onDelete: (() -> Void)?
+
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
-    
+
     @State private var isEditingName = false
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
@@ -767,12 +772,21 @@ struct MixRow: View {
     }
     
     private func deleteMix() {
-        modelContext.delete(mix)
-        
+        // Notify parent to clear selection if this mix is selected
+        if isSelected {
+            onDelete?()
+        }
+
+        // Use soft delete for cloud sync
+        mix.isDeleted = true
+        mix.needsUpload = true
+        mix.lastModifiedAt = Date()
+
         do {
             try modelContext.save()
+            print("✓ Mix marked for deletion and will sync to cloud")
         } catch {
-            print("Error deleting mix: \(error)")
+            print("Error marking mix for deletion: \(error)")
         }
     }
 }

@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the project
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+             firestore.get(/databases/(default)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+    }
+
+    // Helper function to check if user is a reviewer on the project
+    function isProjectReviewer(projectId) {
+      return isSignedIn() &&
+             firestore.exists(/databases/(default)/documents/projects/$(projectId)/reviewers/$(request.auth.uid));
+    }
+
+    // Audio files for mixes - stored under projects/{projectId}/mixes/{mixId}/
+    match /projects/{projectId}/mixes/{mixId}/{fileName} {
+      // Allow read if user is project owner or reviewer
+      allow read: if isSignedIn() &&
+                     (isProjectOwner(projectId) || isProjectReviewer(projectId));
+
+      // Only project owner can upload/update audio files
+      allow write: if isSignedIn() && isProjectOwner(projectId);
+
+      // Only project owner can delete audio files
+      allow delete: if isSignedIn() && isProjectOwner(projectId);
+    }
+
+    // Voice note comments - stored under projects/{projectId}/comments/{commentId}/
+    match /projects/{projectId}/comments/{commentId}/{fileName} {
+      // Allow read if user is project owner or reviewer
+      allow read: if isSignedIn() &&
+                     (isProjectOwner(projectId) || isProjectReviewer(projectId));
+
+      // Allow reviewers and owners to upload voice notes
+      allow write: if isSignedIn() &&
+                      (isProjectOwner(projectId) || isProjectReviewer(projectId));
+
+      // Allow comment author or project owner to delete
+      allow delete: if isSignedIn() &&
+                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
+    }
+
+    // Deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

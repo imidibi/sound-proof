@@ -236,7 +236,9 @@ struct ImportMixSheet: View {
                 versionNumber: versionNumber,
                 assetURL: destinationURL,
                 assetFileName: fileName, // Store relative filename for persistence
-                notes: notes.isEmpty ? nil : notes
+                notes: notes.isEmpty ? nil : notes,
+                lastModifiedAt: Date(),
+                needsUpload: true  // Mark for automatic upload
             )
             
             // Load audio properties

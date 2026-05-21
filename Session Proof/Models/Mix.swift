@@ -38,7 +38,10 @@ final class Mix {
     var firestoreId: String? // ID in Firebase
     var isUploaded: Bool = false // Whether uploaded to cloud
     var uploadedAt: Date?
-    
+    var lastModifiedAt: Date // Track last modification for sync conflict resolution
+    var needsUpload: Bool = false // Flag for pending upload to cloud
+    var isDeleted: Bool = false // Soft delete flag for sync
+
     var song: Song?
     
     // Computed property to get the current full URL from the relative filename
@@ -74,7 +77,10 @@ final class Mix {
         cloudURL: String? = nil,
         firestoreId: String? = nil,
         isUploaded: Bool = false,
-        uploadedAt: Date? = nil
+        uploadedAt: Date? = nil,
+        lastModifiedAt: Date = Date(),
+        needsUpload: Bool = false,
+        isDeleted: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -94,5 +100,8 @@ final class Mix {
         self.firestoreId = firestoreId
         self.isUploaded = isUploaded
         self.uploadedAt = uploadedAt
+        self.lastModifiedAt = lastModifiedAt
+        self.needsUpload = needsUpload
+        self.isDeleted = isDeleted
     }
 }

@@ -107,11 +107,19 @@ class ProjectSyncService {
                 mix.firestoreId = firestoreId
                 mix.isUploaded = true
                 mix.uploadedAt = Date()
-                
+                mix.needsUpload = false  // Successfully uploaded
+                mix.lastModifiedAt = Date()
+
                 try? modelContext.save()
             }
-            
+
         } catch {
+            // Mark for retry on next sync
+            await MainActor.run {
+                mix.needsUpload = true
+                try? modelContext.save()
+            }
+
             syncError = error.localizedDescription
             throw error
         }
@@ -629,7 +637,7 @@ class ProjectSyncService {
             } else {
                 print("✓ Song already exists locally: \(songData["name"] ?? "Unknown")")
                 
-                // Still sync mixes in case there are new ones
+                // Still sync mixes in case there are new ones or updates
                 if let existingSong = existingSongs.first {
                     try await syncSongMixesFromCloud(
                         projectId: projectId,
@@ -685,30 +693,80 @@ class ProjectSyncService {
             } else {
                 print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
                 
-                // Update the approval status in case it changed in Firestore
+                // Timestamp-based conflict resolution
                 if let existingMix = existingMixes.first {
-                    print("   Current local status: \(existingMix.approvalStatus.rawValue)")
-                    print("   Firestore data: \(mixData)")
+                    // Check if cloud version is deleted
+                    let isDeletedInCloud = mixData["isDeleted"] as? Bool ?? false
                     
-                    if let statusString = mixData["approvalStatus"] as? String {
-                        print("   Firestore status string: '\(statusString)'")
+                    if isDeletedInCloud && !existingMix.isDeleted {
+                        print("🗑️ Mix deleted in cloud - marking local copy as deleted")
+                        existingMix.isDeleted = true
+                        existingMix.lastModifiedAt = Date()
+                        try modelContext.save()
+                        continue
+                    }
+                    
+                    // Get cloud updated timestamp
+                    var cloudUpdatedAt: Date?
+                    if let timestamp = mixData["updatedAt"] as? Timestamp {
+                        cloudUpdatedAt = timestamp.dateValue()
+                    } else if let timestamp = mixData["uploadedAt"] as? Timestamp {
+                        // Fallback to uploadedAt for older mixes
+                        cloudUpdatedAt = timestamp.dateValue()
+                    }
+                    
+                    // Compare timestamps for conflict resolution
+                    if let cloudDate = cloudUpdatedAt {
+                        let localDate = existingMix.lastModifiedAt
                         
-                        if let status = MixStatus(rawValue: statusString) {
-                            print("   Parsed Firestore status: \(status.rawValue)")
+                        print("   Local lastModifiedAt: \(localDate)")
+                        print("   Cloud updatedAt: \(cloudDate)")
+                        
+                        // If local is newer and needs upload, skip cloud update
+                        if existingMix.needsUpload && localDate > cloudDate {
+                            print("   ℹ️ Local version is newer and needs upload - keeping local changes")
+                            continue
+                        }
+                        
+                        // If cloud is newer or same, update from cloud
+                        if cloudDate >= localDate {
+                            print("   🔄 Cloud version is newer or equal - updating from cloud")
                             
-                            if existingMix.approvalStatus != status {
-                                print("🔄 Updating mix approval status from \(existingMix.approvalStatus.rawValue) to \(status.rawValue)")
-                                existingMix.approvalStatus = status
-                                try modelContext.save()
-                                print("✅ Mix status updated and saved")
-                            } else {
-                                print("   ℹ️ Status already matches, no update needed")
+                            // Update mix properties from cloud
+                            if let name = mixData["name"] as? String {
+                                existingMix.name = name
                             }
-                        } else {
-                            print("   ⚠️ Failed to parse status from string: '\(statusString)'")
+                            
+                            if let statusString = mixData["approvalStatus"] as? String,
+                               let status = MixStatus(rawValue: statusString) {
+                                if existingMix.approvalStatus != status {
+                                    print("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
+                                    existingMix.approvalStatus = status
+                                }
+                            }
+                            
+                            if let notes = mixData["notes"] as? String, !notes.isEmpty {
+                                existingMix.notes = notes
+                            }
+                            
+                            // Update sync metadata
+                            existingMix.lastModifiedAt = cloudDate
+                            existingMix.needsUpload = false
+                            
+                            try modelContext.save()
+                            print("   ✅ Mix updated from cloud")
                         }
                     } else {
-                        print("   ⚠️ No approvalStatus field in Firestore data")
+                        // No timestamp in cloud - just update approval status as before
+                        print("   ⚠️ No timestamp in cloud data - updating approval status only")
+                        
+                        if let statusString = mixData["approvalStatus"] as? String,
+                           let status = MixStatus(rawValue: statusString),
+                           existingMix.approvalStatus != status {
+                            print("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
+                            existingMix.approvalStatus = status
+                            try modelContext.save()
+                        }
                     }
                 }
             }
@@ -1141,32 +1199,54 @@ class ProjectSyncService {
             print("🔍 Found \(pendingInvitations.count) reviewer record(s) with email: \(userEmail)")
             
             for invitation in pendingInvitations {
-                // Check if this reviewer has no userId (pending invitation)
-                // Note: Firestore null values come through as NSNull, not nil
+                // Check if userId-based document exists (for security rules)
+                let userIdReviewerRef = Firestore.firestore()
+                    .collection("projects")
+                    .document(invitation.projectId)
+                    .collection("reviewers")
+                    .document(userId)
+
+                let userIdDocSnapshot = try await userIdReviewerRef.getDocument()
+                let userIdDocExists = userIdDocSnapshot.exists
+
+                // Check if UUID-based document has userId linked
                 let userIdValue = invitation.data["userId"]
-                let hasNoUserId = userIdValue == nil || 
-                                 userIdValue is NSNull || 
+                let hasNoUserId = userIdValue == nil ||
+                                 userIdValue is NSNull ||
                                  (userIdValue as? String)?.isEmpty == true
-                
-                if hasNoUserId {
+
+                if hasNoUserId || !userIdDocExists {
                     print("✉️ Found pending invitation in project: \(invitation.projectId)")
                     print("   Reviewer email: \(invitation.data["email"] ?? ""), Document ID: \(invitation.reviewerId)")
-                    
-                    // Update reviewer with userId and accept status
-                    try await firestoreService.updateReviewer(
-                        projectId: invitation.projectId,
-                        reviewerId: invitation.reviewerId,
-                        data: [
+
+                    // Update UUID-based reviewer document with userId and accept status if needed
+                    if hasNoUserId {
+                        try await firestoreService.updateReviewer(
+                            projectId: invitation.projectId,
+                            reviewerId: invitation.reviewerId,
+                            data: [
+                                "userId": userId,
+                                "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
+                                "acceptedAt": Timestamp(date: Date())
+                            ]
+                        )
+                    }
+
+                    // Create userId-based reviewer document for security rules if it doesn't exist
+                    if !userIdDocExists {
+                        print("🔗 Creating userId-based reviewer document: \(userId)")
+                        try await userIdReviewerRef.setData([
+                            "email": invitation.data["email"] ?? userEmail,
                             "userId": userId,
                             "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
                             "acceptedAt": Timestamp(date: Date())
-                        ]
-                    )
-                    
+                        ])
+                    }
+
                     invitationsAccepted += 1
                     print("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
                 } else {
-                    print("✓ Reviewer already linked with userId in project: \(invitation.projectId)")
+                    print("✓ Reviewer already fully linked in project: \(invitation.projectId)")
                 }
             }
             
@@ -1181,5 +1261,138 @@ class ProjectSyncService {
             print("⚠️ Error checking for pending invitations: \(error)")
             print("   Error details: \(error.localizedDescription)")
         }
+    }
+    
+    // MARK: - Auto-Sync Unsyncced Mixes
+    
+    /// Automatically finds and uploads mixes that haven't been synced to the cloud yet
+    /// This runs on app launch and network reconnect to ensure all local changes are backed up
+    func syncUnsyncedMixesToCloud(modelContext: ModelContext) async throws {
+        guard let userId = authService.currentUser?.id else {
+            print("⚠️ Cannot sync - no authenticated user")
+            return
+        }
+        
+        print("🔄 Starting auto-sync of unsyncced mixes...")
+        
+        // Query for mixes that need upload
+        let descriptor = FetchDescriptor<Mix>(
+            predicate: #Predicate<Mix> { mix in
+                mix.needsUpload == true || (mix.isUploaded == false && mix.assetFileName != nil)
+            }
+        )
+        
+        let unsyncedMixes = try modelContext.fetch(descriptor)
+        
+        guard !unsyncedMixes.isEmpty else {
+            print("✅ No unsyncced mixes found")
+            return
+        }
+        
+        print("📤 Found \(unsyncedMixes.count) mix(es) that need uploading")
+        
+        var successCount = 0
+        var failCount = 0
+        
+        for mix in unsyncedMixes {
+            // Get the song and project info
+            guard let song = mix.song,
+                  let project = song.project,
+                  let projectId = project.firestoreId,
+                  let songId = song.firestoreId else {
+                print("⚠️ Mix '\(mix.name)' missing required project/song info - skipping")
+                continue
+            }
+            
+            // Handle deleted mixes - propagate deletion to cloud
+            if mix.isDeleted {
+                print("🗑️ Syncing deletion for mix: \(mix.name)")
+                
+                if let mixId = mix.firestoreId {
+                    do {
+                        try await firestoreService.deleteMix(
+                            projectId: projectId,
+                            songId: songId,
+                            mixId: mixId
+                        )
+                        
+                        // Mark as synced and actually delete locally
+                        await MainActor.run {
+                            modelContext.delete(mix)
+                            try? modelContext.save()
+                        }
+                        
+                        successCount += 1
+                        print("✅ Deletion synced and local copy removed: \(mix.name)")
+                        
+                    } catch {
+                        failCount += 1
+                        print("❌ Failed to sync deletion for '\(mix.name)': \(error.localizedDescription)")
+                    }
+                } else {
+                    // Mix was never uploaded, just delete locally
+                    print("   ℹ️ Mix was never uploaded - removing locally only")
+                    await MainActor.run {
+                        modelContext.delete(mix)
+                        try? modelContext.save()
+                    }
+                    successCount += 1
+                }
+                
+                continue
+            }
+            
+            // Verify local file exists for non-deleted mixes
+            guard mix.resolvedAssetURL != nil else {
+                print("⚠️ Mix '\(mix.name)' has no local file - skipping")
+                continue
+            }
+            
+            do {
+                // Check if this is an update to existing cloud mix
+                if let mixId = mix.firestoreId, mix.isUploaded {
+                    print("🔄 Updating existing mix: \(mix.name)")
+                    try await firestoreService.updateMix(
+                        projectId: projectId,
+                        songId: songId,
+                        mixId: mixId,
+                        mix: mix
+                    )
+                    
+                    await MainActor.run {
+                        mix.needsUpload = false
+                        try? modelContext.save()
+                    }
+                    
+                    successCount += 1
+                    print("✅ Successfully updated: \(mix.name)")
+                    
+                } else {
+                    // New mix - upload file and create in Firestore
+                    print("📤 Uploading new mix: \(mix.name)")
+                    try await uploadMix(
+                        mix: mix,
+                        projectId: projectId,
+                        songId: songId,
+                        modelContext: modelContext
+                    )
+                    
+                    await MainActor.run {
+                        mix.needsUpload = false
+                        try? modelContext.save()
+                    }
+                    
+                    successCount += 1
+                    print("✅ Successfully uploaded: \(mix.name)")
+                }
+                
+            } catch {
+                failCount += 1
+                print("❌ Failed to sync '\(mix.name)': \(error.localizedDescription)")
+                // Keep needsUpload = true so it retries later
+            }
+        }
+        
+        print("🎉 Auto-sync complete: \(successCount) uploaded, \(failCount) failed")
     }
 }

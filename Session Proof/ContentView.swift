@@ -16,6 +16,7 @@ struct ContentView: View {
     @Environment(SyncQueueService.self) private var syncQueueService
     
     @State private var hasSyncedOnce = false
+    @State private var syncTimer: Task<Void, Never>?
     
     var body: some View {
         ProjectListView()
@@ -49,6 +50,16 @@ struct ContentView: View {
                                 modelContext: modelContext
                             )
                             print("✅ Initial organization sync completed")
+                            
+                            // Auto-sync any unsyncced mixes
+                            do {
+                                try await syncService.syncUnsyncedMixesToCloud(
+                                    modelContext: modelContext
+                                )
+                                print("✅ Auto-sync of unsyncced mixes completed")
+                            } catch {
+                                print("❌ Auto-sync failed: \(error)")
+                            }
                         } catch {
                             print("❌ Initial sync failed: \(error)")
                         }
@@ -60,12 +71,74 @@ struct ContentView: View {
                     Task {
                         print("🔄 Network restored - processing pending syncs")
                         await syncQueueService.processPendingSyncs(modelContext: modelContext)
+                        
+                        // Also auto-sync any unsyncced mixes when network returns
+                        do {
+                            try await syncService.syncUnsyncedMixesToCloud(modelContext: modelContext)
+                            print("✅ Auto-sync on network restore completed")
+                        } catch {
+                            print("❌ Auto-sync on network restore failed: \(error)")
+                        }
                     }
                 }
                 
                 // Update pending sync count on app start
                 await syncQueueService.updatePendingCount(modelContext: modelContext)
+                
+                // Start periodic background sync timer
+                startPeriodicSync()
             }
+            .onDisappear {
+                // Cancel sync timer when view disappears
+                syncTimer?.cancel()
+            }
+    }
+    
+    // MARK: - Periodic Background Sync
+    
+    private func startPeriodicSync() {
+        // Cancel any existing timer
+        syncTimer?.cancel()
+        
+        // Start new periodic sync task
+        syncTimer = Task {
+            while !Task.isCancelled {
+                // Wait 5 minutes between syncs
+                try? await Task.sleep(for: .seconds(300))
+                
+                guard !Task.isCancelled else { break }
+                
+                // Only sync if user is authenticated and online
+                guard authService.currentUser != nil,
+                      networkMonitor.isConnected else {
+                    print("⏸️ Skipping periodic sync - user not authenticated or offline")
+                    continue
+                }
+                
+                print("🔄 Starting periodic background sync...")
+                
+                // Sync unsyncced mixes
+                do {
+                    try await syncService.syncUnsyncedMixesToCloud(modelContext: modelContext)
+                    print("✅ Periodic sync completed")
+                } catch {
+                    print("❌ Periodic sync failed: \(error.localizedDescription)")
+                }
+                
+                // Also sync projects from cloud to catch updates from other devices
+                if let userId = authService.currentUser?.id {
+                    do {
+                        try await syncService.syncUserProjectsFromCloud(
+                            userId: userId,
+                            modelContext: modelContext
+                        )
+                        print("✅ Periodic project sync completed")
+                    } catch {
+                        print("❌ Periodic project sync failed: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
     }
 }
 
