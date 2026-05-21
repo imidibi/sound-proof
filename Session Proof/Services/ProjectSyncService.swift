@@ -868,7 +868,8 @@ class ProjectSyncService {
         let reviewerId = document.documentID
         
         guard let reviewerUUID = UUID(uuidString: reviewerId) else {
-            print("⚠️ Skipping reviewer with invalid UUID format: \(reviewerId)")
+            // Skip userId-based documents (used for Firebase security rules)
+            // These are intentionally created with userId as document ID for rule matching
             return
         }
         
@@ -962,7 +963,8 @@ class ProjectSyncService {
         for (reviewerId, reviewerData) in cloudReviewers {
             // Convert reviewerId string to UUID
             guard let reviewerUUID = UUID(uuidString: reviewerId) else {
-                print("⚠️ Skipping reviewer with invalid UUID format: \(reviewerId)")
+                // Skip userId-based documents (used for Firebase security rules)
+                // These are intentionally created with userId as document ID for rule matching
                 continue
             }
             
