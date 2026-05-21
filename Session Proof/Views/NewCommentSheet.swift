@@ -15,6 +15,7 @@ struct NewCommentSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(ProjectSyncService.self) private var syncService
+    @Environment(AuthenticationService.self) private var authService
     
     @State private var commentText = ""
     @State private var selectedTimestamp: TimeInterval
@@ -363,8 +364,8 @@ struct NewCommentSheet: View {
             text: commentText,
             voiceNoteURL: recordedVoiceNoteURL,
             voiceNoteFileName: fileName,
-            authorID: "current-user",
-            authorName: "You"
+            authorID: authService.currentUser?.id ?? "unknown",
+            authorName: authService.currentUser?.displayName ?? authService.currentUser?.email ?? "Unknown User"
         )
         
         comment.mix = mix

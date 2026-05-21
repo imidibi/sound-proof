@@ -35,7 +35,10 @@ struct CommentDetailSheet: View {
     }
     
     var canEdit: Bool {
-        authService.currentUser?.role == .producer
+        // Producers can edit/delete any comment
+        // Users can edit/delete their own comments
+        authService.currentUser?.role == .producer || 
+        authService.currentUser?.id == comment.authorID
     }
     
     var body: some View {
@@ -387,7 +390,16 @@ struct CommentDetailSheet: View {
         }
         
         do {
+            // Configure audio session for playback on iOS
+            #if os(iOS)
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default)
+            try audioSession.setActive(true)
+            #endif
+            
             audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer?.prepareToPlay()
+            
             let delegate = VoiceNotePlayerDelegate(onFinish: {
                 isPlayingVoiceNote = false
                 voiceNoteProgress = 0
@@ -398,14 +410,21 @@ struct CommentDetailSheet: View {
             audioPlayer?.delegate = delegate
             
             print("✅ Audio player created, duration: \(audioPlayer?.duration ?? 0)s")
-            audioPlayer?.play()
-            isPlayingVoiceNote = true
             
-            // Start progress timer
-            voiceNoteTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                if let player = audioPlayer, player.duration > 0 {
-                    voiceNoteProgress = player.currentTime / player.duration
+            let playSuccess = audioPlayer?.play() ?? false
+            print("   Play initiated: \(playSuccess)")
+            
+            if playSuccess {
+                isPlayingVoiceNote = true
+                
+                // Start progress timer
+                voiceNoteTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    if let player = audioPlayer, player.duration > 0 {
+                        voiceNoteProgress = player.currentTime / player.duration
+                    }
                 }
+            } else {
+                print("❌ AVAudioPlayer.play() returned false")
             }
         } catch {
             print("❌ Error creating/playing voice note:")

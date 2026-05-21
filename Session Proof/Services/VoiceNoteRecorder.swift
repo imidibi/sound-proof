@@ -47,6 +47,13 @@ final class VoiceNoteRecorder: NSObject {
         } catch {
             print("Failed to set up recording session: \(error)")
         }
+        #elseif os(macOS)
+        // Request microphone permission on macOS
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            if !granted {
+                print("Recording permission denied on macOS")
+            }
+        }
         #endif
     }
     
