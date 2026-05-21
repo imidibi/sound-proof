@@ -311,6 +311,9 @@ struct WaveformView: View {
     @State private var isScrubbing = false
     @State private var scrubbingTime: TimeInterval?
     @State private var dragStartTime: TimeInterval?
+    @State private var isSelectingRange = false
+    @State private var rangeSelectionStart: TimeInterval?
+    @State private var rangeSelectionEnd: TimeInterval?
     
     // Pre-calculate expensive values to avoid recalculating in body
     private var playbackPosition: Double {
@@ -388,6 +391,60 @@ struct WaveformView: View {
                 }
                 .frame(width: totalWaveformWidth, height: geometry.size.height, alignment: .leading)
                 .offset(x: playheadX - scrollOffset)
+                
+                // Comment time range highlights (drawn behind markers)
+                ForEach(comments.filter { $0.endTimestamp != nil }, id: \.id) { comment in
+                    if let endTime = comment.endTimestamp {
+                        let startPosition = (comment.timestamp / max(duration, 0.001)) * totalWaveformWidth
+                        let endPosition = (endTime / max(duration, 0.001)) * totalWaveformWidth
+                        let rangeWidth = endPosition - startPosition
+                        
+                        Rectangle()
+                            .fill(Color.orange.opacity(0.15))
+                            .frame(width: max(2, rangeWidth), height: geometry.size.height)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(Color.orange.opacity(0.4), lineWidth: 2)
+                            )
+                            .offset(x: playheadX + (startPosition - scrollOffset))
+                            .zIndex(0)
+                    }
+                }
+                
+                // Range selection overlay (when user is dragging to select)
+                if isSelectingRange, let start = rangeSelectionStart, let end = rangeSelectionEnd {
+                    let startPos = min(start, end)
+                    let endPos = max(start, end)
+                    let startPosition = (startPos / max(duration, 0.001)) * totalWaveformWidth
+                    let endPosition = (endPos / max(duration, 0.001)) * totalWaveformWidth
+                    let rangeWidth = endPosition - startPosition
+                    
+                    Rectangle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: max(2, rangeWidth), height: geometry.size.height)
+                        .overlay(
+                            Rectangle()
+                                .stroke(Color.blue, lineWidth: 3)
+                                .overlay(
+                                    VStack {
+                                        Text("Range: \(formatTimeDifference(from: startPos, to: endPos))")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(.blue)
+                                            )
+                                            .padding(.top, 8)
+                                        Spacer()
+                                    }
+                                )
+                        )
+                        .offset(x: playheadX + (startPosition - scrollOffset))
+                        .zIndex(50)
+                }
                 
                 // Comment markers
                 ForEach(Array(comments.enumerated()), id: \.element.id) { index, comment in
@@ -467,40 +524,78 @@ struct WaveformView: View {
                 }
             }
             .contentShape(Rectangle())
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in
+                        // Enter range selection mode
+                        isSelectingRange = true
+                        rangeSelectionStart = currentTime
+                        rangeSelectionEnd = currentTime
+                        
+                        #if os(iOS)
+                        // Haptic feedback on iOS
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        #endif
+                    }
+            )
             .gesture(
                 DragGesture(minimumDistance: 5)
                     .onChanged { value in
-                        if !isScrubbing {
-                            // Starting new drag
-                            isScrubbing = true
-                            dragStartTime = currentTime
+                        if isSelectingRange {
+                            // Update range selection end time
+                            let dragDistance = value.translation.width
+                            let timePerPixel = duration / totalWaveformWidth
+                            let timeChange = dragDistance * timePerPixel
+                            
+                            if let startTime = rangeSelectionStart {
+                                let newEndTime = startTime + timeChange
+                                rangeSelectionEnd = max(0, min(duration, newEndTime))
+                            }
+                        } else {
+                            // Normal scrubbing mode
+                            if !isScrubbing {
+                                // Starting new drag
+                                isScrubbing = true
+                                dragStartTime = currentTime
+                            }
+                            
+                            guard let startTime = dragStartTime else { return }
+                            
+                            // Simple approach: drag distance directly maps to time
+                            // Dragging right = moving forward in time
+                            // Dragging left = moving backward in time
+                            let dragDistance = value.translation.width
+                            
+                            // Scale factor: how much time per pixel of drag
+                            // At 1x zoom, totalWaveformWidth represents the full duration
+                            let timePerPixel = duration / totalWaveformWidth
+                            let timeChange = dragDistance * timePerPixel
+                            
+                            let newTime = startTime + timeChange
+                            let clampedTime = max(0, min(duration, newTime))
+                            
+                            scrubbingTime = clampedTime
                         }
-                        
-                        guard let startTime = dragStartTime else { return }
-                        
-                        // Simple approach: drag distance directly maps to time
-                        // Dragging right = moving forward in time
-                        // Dragging left = moving backward in time
-                        let dragDistance = value.translation.width
-                        
-                        // Scale factor: how much time per pixel of drag
-                        // At 1x zoom, totalWaveformWidth represents the full duration
-                        let timePerPixel = duration / totalWaveformWidth
-                        let timeChange = dragDistance * timePerPixel
-                        
-                        let newTime = startTime + timeChange
-                        let clampedTime = max(0, min(duration, newTime))
-                        
-                        scrubbingTime = clampedTime
                     }
                     .onEnded { _ in
-                        // Seek to the scrubbed position
-                        if let time = scrubbingTime {
-                            onSeek(time)
+                        if isSelectingRange {
+                            // Range selection completed - show comment sheet
+                            // TODO: Need to pass range to comment sheet
+                            isSelectingRange = false
+                            // For now, just clear the selection
+                            // In a full implementation, this would open NewCommentSheet with the range
+                            rangeSelectionStart = nil
+                            rangeSelectionEnd = nil
+                        } else {
+                            // Seek to the scrubbed position
+                            if let time = scrubbingTime {
+                                onSeek(time)
+                            }
+                            isScrubbing = false
+                            scrubbingTime = nil
+                            dragStartTime = nil
                         }
-                        isScrubbing = false
-                        scrubbingTime = nil
-                        dragStartTime = nil
                     }
             )
         }
@@ -536,6 +631,21 @@ struct WaveformView: View {
         let seconds = Int(time) % 60
         let centiseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
         return String(format: "%d:%02d.%02d", minutes, seconds, centiseconds)
+    }
+    
+    private func formatTimeDifference(from start: TimeInterval, to end: TimeInterval) -> String {
+        let diff = abs(end - start)
+        if diff < 1.0 {
+            return String(format: "%.1fs", diff)
+        } else {
+            let minutes = Int(diff) / 60
+            let seconds = Int(diff) % 60
+            if minutes > 0 {
+                return String(format: "%d:%02ds", minutes, seconds)
+            } else {
+                return String(format: "%ds", seconds)
+            }
+        }
     }
     
     /// Calculate vertical offset and color index for overlapping comments
