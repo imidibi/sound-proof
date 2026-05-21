@@ -38,7 +38,7 @@ final class Mix {
     var firestoreId: String? // ID in Firebase
     var isUploaded: Bool = false // Whether uploaded to cloud
     var uploadedAt: Date?
-    var lastModifiedAt: Date // Track last modification for sync conflict resolution
+    var lastModifiedAt: Date = Date() // Track last modification for sync conflict resolution
     var needsUpload: Bool = false // Flag for pending upload to cloud
     var isDeleted: Bool = false // Soft delete flag for sync
 
