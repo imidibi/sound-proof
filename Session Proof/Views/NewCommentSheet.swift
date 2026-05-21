@@ -139,19 +139,83 @@ struct NewCommentSheet: View {
                 }
             }
             .toggleStyle(.switch)
+            .onChange(of: useTimeRange) { oldValue, newValue in
+                if newValue && endTimestamp == nil {
+                    // Initialize end timestamp to 5 seconds after start
+                    endTimestamp = min(selectedTimestamp + 5.0, mix.duration)
+                }
+            }
             
             if useTimeRange {
-                HStack {
-                    Text("End time:")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(formatTime(endTimestamp ?? selectedTimestamp))
-                        .font(.headline)
-                        .monospacedDigit()
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "arrow.forward.to.line")
+                            .foregroundStyle(.orange)
+                        Text("End time:")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(formatTime(endTimestamp ?? selectedTimestamp))
+                            .font(.headline)
+                            .monospacedDigit()
+                    }
+                    
+                    // Time adjustment slider
+                    VStack(alignment: .leading, spacing: 6) {
+                        Slider(
+                            value: Binding(
+                                get: { endTimestamp ?? selectedTimestamp },
+                                set: { endTimestamp = max(selectedTimestamp, min($0, mix.duration)) }
+                            ),
+                            in: selectedTimestamp...mix.duration,
+                            step: 0.1
+                        )
+                        .tint(.orange)
+                        
+                        HStack {
+                            Text("Start: \(formatTime(selectedTimestamp))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("End of mix: \(formatTime(mix.duration))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    // Quick adjustment buttons
+                    HStack(spacing: 8) {
+                        Text("Quick adjust:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Button("+1s") {
+                            endTimestamp = min((endTimestamp ?? selectedTimestamp) + 1.0, mix.duration)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Button("+5s") {
+                            endTimestamp = min((endTimestamp ?? selectedTimestamp) + 5.0, mix.duration)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Button("+10s") {
+                            endTimestamp = min((endTimestamp ?? selectedTimestamp) + 10.0, mix.duration)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Spacer()
+                    }
                 }
                 .padding()
-                .background(Color.secondary.opacity(0.05))
+                .background(Color.orange.opacity(0.05))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
             }
         }
     }
