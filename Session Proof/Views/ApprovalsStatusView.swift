@@ -360,7 +360,7 @@ struct SongApprovalBadge: View {
     let project: Project
     
     var approvalStatus: String {
-        let mixes = song.mixes
+        let mixes = song.mixes.filter { !$0.isDeleted }
         guard !mixes.isEmpty else {
             return "No Mixes"
         }
@@ -370,12 +370,13 @@ struct SongApprovalBadge: View {
             return "No Reviewers"
         }
         
-        // Check if any mix is approved
-        if mixes.contains(where: { $0.approvalStatus == .approved }) {
+        // Song approval is based on the song's status field, 
+        // which is only set to .approved when a key approver/producer approves
+        if song.status == .approved {
             return "Approved"
         }
         
-        // Check if any mix is in review
+        // Check if any mix is in review or shared
         if mixes.contains(where: { $0.approvalStatus == .inReview || $0.approvalStatus == .shared }) {
             return "In Review"
         }
@@ -385,13 +386,12 @@ struct SongApprovalBadge: View {
     }
     
     var statusColor: Color {
-        let mixes = song.mixes
-        
-        // Check mix statuses
-        if mixes.contains(where: { $0.approvalStatus == .approved }) {
+        // Use song's actual approval status (set by key approver)
+        if song.status == .approved {
             return .green
         }
         
+        let mixes = song.mixes.filter { !$0.isDeleted }
         if mixes.contains(where: { $0.approvalStatus == .inReview || $0.approvalStatus == .shared }) {
             return .orange
         }

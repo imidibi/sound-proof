@@ -16,6 +16,7 @@ struct MixDetailView: View {
     @State private var showingInspector = false
     @State private var commentListener: ListenerRegistration?
     @State private var reviewerListener: ListenerRegistration?
+    @State private var approvalListener: ListenerRegistration?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(ProjectSyncService.self) private var syncService
@@ -203,14 +204,16 @@ struct MixDetailView: View {
         guard let song = mix.song,
               let project = song.project,
               let projectId = project.firestoreId,
+              let songId = song.firestoreId,
               let mixId = mix.firestoreId else {
-            print("📝 Mix not part of synced project - comment sync disabled")
+            print("📝 Mix not part of synced project - sync disabled")
             return
         }
         
-        print("🔄 Starting real-time comment sync for mix: \(mix.name)")
+        print("🔄 Starting real-time sync for mix: \(mix.name)")
         
         await MainActor.run {
+            // Start listening for comments
             commentListener = syncService.startListeningToComments(
                 projectId: projectId,
                 mixId: mixId,
@@ -218,10 +221,21 @@ struct MixDetailView: View {
                 modelContext: modelContext
             )
             
-            // Also start listening for reviewer changes
+            // Start listening for reviewer changes
             print("🔄 Starting real-time reviewer sync for project: \(project.name)")
             reviewerListener = syncService.startListeningToReviewers(
                 projectId: projectId,
+                project: project,
+                modelContext: modelContext
+            )
+            
+            // Start listening for approval changes
+            print("🔄 Starting real-time approval sync for mix: \(mix.name)")
+            approvalListener = syncService.startListeningToApprovals(
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId,
+                mix: mix,
                 project: project,
                 modelContext: modelContext
             )
@@ -233,7 +247,9 @@ struct MixDetailView: View {
         commentListener = nil
         reviewerListener?.remove()
         reviewerListener = nil
-        print("⏹️ Stopped comment and reviewer sync")
+        approvalListener?.remove()
+        approvalListener = nil
+        print("⏹️ Stopped all real-time sync")
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {

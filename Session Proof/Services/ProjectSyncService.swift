@@ -952,6 +952,94 @@ class ProjectSyncService {
         }
     }
     
+    // MARK: - Approval Real-time Sync
+    
+    func startListeningToApprovals(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        mix: Mix,
+        project: Project,
+        modelContext: ModelContext
+    ) -> FirebaseFirestore.ListenerRegistration {
+        print("👂 Setting up approval listener for mix: \(mixId)")
+        return firestoreService.setupApprovalsListener(
+            projectId: projectId,
+            songId: songId,
+            mixId: mixId
+        ) { [weak self] approvalDocs in
+            guard let self = self else { return }
+            
+            print("📬 Received \(approvalDocs.count) approval documents from Firestore")
+            
+            Task { @MainActor in
+                for approvalData in approvalDocs {
+                    await self.processApprovalFromCloud(
+                        approvalData: approvalData,
+                        mix: mix,
+                        project: project,
+                        modelContext: modelContext
+                    )
+                }
+            }
+        }
+    }
+    
+    private func processApprovalFromCloud(
+        approvalData: [String: Any],
+        mix: Mix,
+        project: Project,
+        modelContext: ModelContext
+    ) async {
+        guard let reviewerUserId = approvalData["reviewerUserId"] as? String,
+              let statusString = approvalData["status"] as? String,
+              let status = ApprovalStatus(rawValue: statusString) else {
+            print("⚠️ Invalid approval data")
+            return
+        }
+        
+        print("📥 Processing approval from cloud for user: \(reviewerUserId)")
+        
+        // Find the reviewer by userId
+        guard let reviewer = project.reviewers.first(where: { $0.userId == reviewerUserId }) else {
+            print("⚠️ Reviewer not found for userId: \(reviewerUserId)")
+            return
+        }
+        
+        // Check if approval already exists for this reviewer and mix
+        let existingApproval = mix.approvals.first(where: { $0.reviewer?.id == reviewer.id })
+        
+        if let approval = existingApproval {
+            // Update existing approval
+            approval.status = status
+            if let updatedTimestamp = approvalData["updatedAt"] as? Timestamp {
+                approval.updatedAt = updatedTimestamp.dateValue()
+            }
+            print("✅ Updated existing approval for \(reviewer.displayName)")
+        } else {
+            // Create new approval
+            let newApproval = Approval(status: status)
+            newApproval.mix = mix
+            newApproval.reviewer = reviewer
+            
+            if let createdTimestamp = approvalData["createdAt"] as? Timestamp {
+                newApproval.createdAt = createdTimestamp.dateValue()
+            }
+            if let updatedTimestamp = approvalData["updatedAt"] as? Timestamp {
+                newApproval.updatedAt = updatedTimestamp.dateValue()
+            }
+            
+            modelContext.insert(newApproval)
+            print("✅ Created new approval for \(reviewer.displayName)")
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Error saving approval: \(error)")
+        }
+    }
+    
     private func syncProjectReviewers(
         projectId: String,
         project: Project,

@@ -287,6 +287,80 @@ class FirestoreService {
             ])
     }
     
+    // MARK: - Approval Sync
+    
+    func createOrUpdateApproval(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        approval: Approval,
+        reviewerUserId: String
+    ) async throws -> String {
+        // Use reviewerUserId as the document ID for easy lookup
+        let approvalRef = db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .collection("approvals").document(reviewerUserId)
+        
+        let data: [String: Any] = [
+            "reviewerUserId": reviewerUserId,
+            "status": approval.status.rawValue,
+            "createdAt": Timestamp(date: approval.createdAt),
+            "updatedAt": Timestamp(date: approval.updatedAt)
+        ]
+        
+        try await approvalRef.setData(data, merge: true)
+        return approvalRef.documentID
+    }
+    
+    func getApprovals(
+        projectId: String,
+        songId: String,
+        mixId: String
+    ) async throws -> [(id: String, data: [String: Any])] {
+        let snapshot = try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .collection("approvals")
+            .getDocuments()
+        
+        return snapshot.documents.map { ($0.documentID, $0.data()) }
+    }
+    
+    func deleteApproval(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        reviewerUserId: String
+    ) async throws {
+        try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .collection("approvals").document(reviewerUserId)
+            .delete()
+    }
+    
+    func setupApprovalsListener(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        onChange: @escaping ([[String: Any]]) -> Void
+    ) -> ListenerRegistration {
+        return db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .collection("approvals")
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    print("❌ Error fetching approvals: \(error?.localizedDescription ?? "Unknown")")
+                    return
+                }
+                
+                let approvalsData = documents.map { $0.data() }
+                onChange(approvalsData)
+            }
+    }
+    
     // MARK: - Comment Sync
     
     func createComment(

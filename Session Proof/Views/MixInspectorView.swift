@@ -183,6 +183,19 @@ struct MixInfoSection: View {
     @Environment(FirestoreService.self) private var firestoreService
     @Environment(AuthenticationService.self) private var authService
     
+    // Check if current user can approve mixes (producer or key approver)
+    var canApproveMix: Bool {
+        guard let currentUserId = authService.currentUser?.id,
+              let project = mix.song?.project else {
+            return false
+        }
+        
+        let isProducer = authService.currentUser?.isProducer ?? false
+        let isKeyApprover = project.reviewers.first(where: { $0.userId == currentUserId })?.isKeyApprover ?? false
+        
+        return isProducer || isKeyApprover
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Mix Status")
@@ -190,12 +203,23 @@ struct MixInfoSection: View {
                 .fontWeight(.semibold)
             
             Picker("Status", selection: $mix.approvalStatus) {
-                ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
-                    Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
-                        .tag(status)
+                // Show all statuses to producers/key approvers
+                // Artists can only see non-approval statuses
+                if canApproveMix {
+                    ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
+                        Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
+                            .tag(status)
+                    }
+                } else {
+                    // Artists cannot set mix to approved
+                    ForEach([MixStatus.draft, .shared, .inReview, .superseded], id: \.self) { status in
+                        Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
+                            .tag(status)
+                    }
                 }
             }
             .pickerStyle(.menu)
+            .disabled(!canApproveMix && mix.approvalStatus == .approved) // Don't let artists change approved status
             .onChange(of: mix.approvalStatus) { oldValue, newValue in
                 Task {
                     await handleApprovalStatusChange(from: oldValue, to: newValue)
@@ -644,6 +668,7 @@ struct ApprovalsSection: View {
                 ForEach(project.reviewers) { reviewer in
                     ApprovalRowView(
                         reviewer: reviewer,
+                        mix: mix,
                         approval: approvalsByReviewer[reviewer.id]
                     )
                 }
@@ -655,7 +680,21 @@ struct ApprovalsSection: View {
 
 struct ApprovalRowView: View {
     let reviewer: Reviewer
+    @Bindable var mix: Mix
     let approval: Approval?
+    
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
+    @Environment(\.modelContext) private var modelContext
+    
+    // Check if this is the current user's approval row
+    var isCurrentUser: Bool {
+        guard let currentUserId = authService.currentUser?.id,
+              let reviewerUserId = reviewer.userId else {
+            return false
+        }
+        return currentUserId == reviewerUserId
+    }
     
     var body: some View {
         HStack {
@@ -677,11 +716,109 @@ struct ApprovalRowView: View {
             
             Spacer()
             
-            ApprovalStatusIcon(status: approval?.status ?? .pending)
+            // Show approval status icon for other reviewers
+            // Show action buttons for current user
+            if isCurrentUser {
+                HStack(spacing: 8) {
+                    // Show current status if already approved/requested changes
+                    if let approval = approval, approval.status != .pending {
+                        ApprovalStatusIcon(status: approval.status)
+                    }
+                    
+                    // Always show buttons for current user to change their mind
+                    Menu {
+                        Button {
+                            setApprovalStatus(.approved)
+                        } label: {
+                            Label("Approve", systemImage: "checkmark.circle.fill")
+                        }
+                        
+                        Button {
+                            setApprovalStatus(.changesRequested)
+                        } label: {
+                            Label("Request Changes", systemImage: "exclamationmark.circle.fill")
+                        }
+                        
+                        if approval?.status != .pending {
+                            Button {
+                                setApprovalStatus(.pending)
+                            } label: {
+                                Label("Reset to Pending", systemImage: "clock")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                ApprovalStatusIcon(status: approval?.status ?? .pending)
+            }
         }
         .padding(8)
         .background(Color.secondary.opacity(0.1))
         .cornerRadius(6)
+    }
+    
+    private func setApprovalStatus(_ status: ApprovalStatus) {
+        print("🎯 Setting approval status to: \(status.rawValue)")
+        print("   Reviewer: \(reviewer.displayName)")
+        print("   Mix: \(mix.name)")
+        
+        let approvalToSync: Approval
+        
+        if let existingApproval = approval {
+            // Update existing approval
+            existingApproval.status = status
+            existingApproval.updatedAt = Date()
+            approvalToSync = existingApproval
+            print("✅ Updated existing approval")
+        } else {
+            // Create new approval
+            let newApproval = Approval(status: status)
+            newApproval.mix = mix
+            newApproval.reviewer = reviewer
+            modelContext.insert(newApproval)
+            approvalToSync = newApproval
+            print("✅ Created new approval")
+        }
+        
+        do {
+            try modelContext.save()
+            print("✅ Approval saved to local database")
+            
+            // Sync to Firestore
+            Task {
+                await syncApprovalToFirestore(approvalToSync)
+            }
+        } catch {
+            print("❌ Error saving approval: \(error)")
+        }
+    }
+    
+    private func syncApprovalToFirestore(_ approval: Approval) async {
+        guard let projectId = mix.song?.project?.firestoreId,
+              let songId = mix.song?.firestoreId,
+              let mixId = mix.firestoreId,
+              let reviewerUserId = reviewer.userId else {
+            print("⚠️ Cannot sync approval - missing required IDs")
+            return
+        }
+        
+        do {
+            print("🔄 Syncing approval to Firestore...")
+            let approvalId = try await firestoreService.createOrUpdateApproval(
+                projectId: projectId,
+                songId: songId,
+                mixId: mixId,
+                approval: approval,
+                reviewerUserId: reviewerUserId
+            )
+            print("✅ Approval synced to Firestore with ID: \(approvalId)")
+        } catch {
+            print("❌ Failed to sync approval to Firestore: \(error)")
+        }
     }
     
     private func approvalColor(_ status: ApprovalStatus) -> Color {
