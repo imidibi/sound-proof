@@ -12,6 +12,12 @@ import FirebaseMessaging
 
 @main
 struct Session_ProofApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
+    
     @State private var authService: AuthenticationService
     @State private var firestoreService: FirestoreService
     @State private var cloudStorageService: CloudStorageService

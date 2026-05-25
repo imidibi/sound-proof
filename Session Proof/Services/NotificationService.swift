@@ -61,8 +61,9 @@ class NotificationService: NSObject {
                     #endif
                 }
                 
-                // Get and save FCM token
-                await refreshFCMToken()
+                // Don't get FCM token immediately - wait for APNS token to be set
+                // The token will be fetched automatically via MessagingDelegate when APNS token is ready
+                print("✅ Registered for remote notifications - FCM token will be fetched when APNS token is ready")
             } else {
                 print("❌ Notification permissions denied")
             }

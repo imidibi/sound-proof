@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5F9AF0F22FC4E46500EC7E11 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 5F9AF0F12FC4E46500EC7E11 /* FirebaseMessaging */; };
+		5F9AF0F42FC4E67B00EC7E11 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9AF0F32FC4E67B00EC7E11 /* AppDelegate.swift */; };
 		5FAAE3FB2FAFD50800CBB63B /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 5FAAE3FA2FAFD50800CBB63B /* FirebaseAuth */; };
 		5FAAE3FD2FAFD50800CBB63B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 5FAAE3FC2FAFD50800CBB63B /* FirebaseFirestore */; };
 		5FAAE3FF2FAFD50800CBB63B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 5FAAE3FE2FAFD50800CBB63B /* FirebaseStorage */; };
@@ -15,6 +16,7 @@
 
 /* Begin PBXFileReference section */
 		5F4837862FAE7EA20072004D /* Approvl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Approvl.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5F9AF0F32FC4E67B00EC7E11 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +48,7 @@
 				5F4837882FAE7EA20072004D /* Session Proof */,
 				5F9AF0F02FC4E46500EC7E11 /* Frameworks */,
 				5F4837872FAE7EA20072004D /* Products */,
+				5F9AF0F32FC4E67B00EC7E11 /* AppDelegate.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -145,6 +148,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5F9AF0F42FC4E67B00EC7E11 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
