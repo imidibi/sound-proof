@@ -491,7 +491,7 @@ struct ProjectFolderRow: View {
                 Button {
                     showingReviewersSheet = true
                 } label: {
-                    Label("Manage Reviewers", systemImage: "person.2")
+                    Label("Manage Approvers", systemImage: "person.2")
                 }
                 
                 if canDelete {
