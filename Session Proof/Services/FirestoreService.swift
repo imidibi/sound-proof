@@ -743,6 +743,27 @@ class FirestoreService {
             .sorted { $0.projectCount > $1.projectCount } // Most frequent first
     }
     
+    // MARK: - FCM Token Management
+    
+    func updateUserFCMToken(userId: String, fcmToken: String) async throws {
+        try await db.collection("users").document(userId).updateData([
+            "fcmToken": fcmToken,
+            "fcmTokenUpdatedAt": Timestamp(date: Date())
+        ])
+    }
+    
+    func deleteUserFCMToken(userId: String) async throws {
+        try await db.collection("users").document(userId).updateData([
+            "fcmToken": FieldValue.delete(),
+            "fcmTokenUpdatedAt": FieldValue.delete()
+        ])
+    }
+    
+    func getUserFCMToken(userId: String) async throws -> String? {
+        let document = try await db.collection("users").document(userId).getDocument()
+        return document.data()?["fcmToken"] as? String
+    }
+    
     // MARK: - Organization Management
     
     func createOrganization(

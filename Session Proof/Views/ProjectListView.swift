@@ -27,6 +27,9 @@ struct ProjectListView: View {
     @State private var expandedSongs: Set<UUID> = []
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
+    // Notification deep link handling
+    @State private var pendingNavigation: (projectId: String, mixId: String)?
+    
     // Helper function to filter songs based on user role
     // Archived songs are hidden from non-producers
     private func visibleSongs(for project: Project) -> [Song] {
@@ -44,11 +47,19 @@ struct ProjectListView: View {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
     
+    private var activeProjects: [Project] {
+        projects.filter { $0.status != .archived }
+    }
+    
+    private var archivedProjects: [Project] {
+        projects.filter { $0.status == .archived }
+    }
+    
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $selectedMix) {
                 Section("Active Projects") {
-                    ForEach(projects.filter { $0.status != .archived }) { project in
+                    ForEach(activeProjects) { project in
                         ProjectFolderRow(
                             project: project,
                             isExpanded: expandedProjects.contains(project.id),

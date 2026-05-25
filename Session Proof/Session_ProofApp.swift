@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import FirebaseCore
+import FirebaseMessaging
 
 @main
 struct Session_ProofApp: App {
@@ -17,6 +18,7 @@ struct Session_ProofApp: App {
     @State private var syncService: ProjectSyncService
     @State private var networkMonitor: NetworkMonitor
     @State private var syncQueueService: SyncQueueService
+    @State private var notificationService: NotificationService
     @State private var pendingInvitationURL: URL?
     
     var sharedModelContainer: ModelContainer = {
@@ -68,6 +70,7 @@ struct Session_ProofApp: App {
         )
         let network = NetworkMonitor()
         let syncQueue = SyncQueueService(syncService: sync)
+        let notification = NotificationService(authService: auth, firestoreService: firestore)
         
         _authService = State(initialValue: auth)
         _firestoreService = State(initialValue: firestore)
@@ -75,6 +78,7 @@ struct Session_ProofApp: App {
         _syncService = State(initialValue: sync)
         _networkMonitor = State(initialValue: network)
         _syncQueueService = State(initialValue: syncQueue)
+        _notificationService = State(initialValue: notification)
     }
 
     var body: some Scene {
@@ -90,8 +94,13 @@ struct Session_ProofApp: App {
                     .environment(syncService)
                     .environment(networkMonitor)
                     .environment(syncQueueService)
+                    .environment(notificationService)
                     .onOpenURL { url in
                         handleIncomingURL(url)
+                    }
+                    .task {
+                        // Request notification permissions after user is authenticated
+                        await notificationService.requestPermissions()
                     }
             } else {
                 AuthenticationView()

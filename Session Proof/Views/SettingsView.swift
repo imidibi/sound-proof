@@ -7,6 +7,11 @@
 
 import SwiftUI
 import SwiftData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -14,6 +19,7 @@ struct SettingsView: View {
     @Environment(AuthenticationService.self) private var authService
     @Environment(ProjectSyncService.self) private var syncService
     @Environment(FirestoreService.self) private var firestoreService
+    @Environment(NotificationService.self) private var notificationService
     
     @Query private var organizations: [Organization]
     
@@ -140,6 +146,47 @@ struct SettingsView: View {
                         Text("Organization")
                             .font(.subheadline)
                             .fontWeight(.semibold)
+                    }
+                }
+                
+                // Notifications section
+                Section {
+                    HStack {
+                        Label("Push Notifications", systemImage: "bell.badge")
+                        Spacer()
+                        if notificationService.isAuthorized {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    
+                    if !notificationService.isAuthorized {
+                        Button {
+                            Task {
+                                await notificationService.requestPermissions()
+                            }
+                        } label: {
+                            Label("Enable Notifications", systemImage: "bell.badge")
+                        }
+                    } else {
+                        Button {
+                            openNotificationSettings()
+                        } label: {
+                            Label("Notification Settings", systemImage: "gearshape")
+                        }
+                    }
+                } header: {
+                    Text("Notifications")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                } footer: {
+                    if !notificationService.isAuthorized {
+                        Text("Get notified when approvers comment or approve your mixes, or when new mixes are ready for review.")
+                    } else {
+                        Text("Notifications are enabled. You'll be notified of comments, approvals, and new mixes.")
                     }
                 }
                 
@@ -333,10 +380,25 @@ struct SettingsView: View {
         }
     }
     
+    private func openNotificationSettings() {
+        #if os(iOS)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #elseif os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
+    }
+    
     private func signOut() async {
         isLoggingOut = true
         
         do {
+            // Delete FCM token before signing out
+            await notificationService.deleteFCMToken()
+            
             // Sign out from Firebase
             try authService.signOut()
             
