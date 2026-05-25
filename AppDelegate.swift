@@ -5,10 +5,12 @@
 //  Handles APNS device token registration for Firebase Cloud Messaging
 //
 
-import UIKit
+import Foundation
 import FirebaseMessaging
 
 #if os(iOS)
+import UIKit
+
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -25,9 +27,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
     }
 }
-#endif
 
-#if os(macOS)
+#elseif os(macOS)
+import AppKit
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
