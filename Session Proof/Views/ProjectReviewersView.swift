@@ -218,11 +218,26 @@ struct ProjectReviewersView: View {
     }
     
     private func emailAllApprovers() {
-        // Get all accepted approvers' emails
-        let approverEmails = sortedReviewers
-            .filter { $0.inviteStatus == .accepted }
+        print("📧 emailAllApprovers() called")
+        print("   Total reviewers: \(sortedReviewers.count)")
+        
+        // Debug: Show all reviewers and their statuses
+        for (index, reviewer) in sortedReviewers.enumerated() {
+            print("   Reviewer \(index + 1): \(reviewer.displayName) - \(reviewer.email)")
+            print("      Status: \(reviewer.inviteStatus.rawValue)")
+        }
+        
+        // Get all accepted or invited approvers' emails
+        let acceptedApprovers = sortedReviewers.filter { 
+            $0.inviteStatus == .accepted || $0.inviteStatus == .sent 
+        }
+        print("   Accepted/Invited approvers: \(acceptedApprovers.count)")
+        
+        let approverEmails = acceptedApprovers
             .map { $0.email }
             .joined(separator: ",")
+        
+        print("   Email string: \(approverEmails)")
         
         guard !approverEmails.isEmpty else {
             print("⚠️ No accepted approvers to email")
@@ -234,13 +249,19 @@ struct ProjectReviewersView: View {
         let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let mailtoString = "mailto:\(approverEmails)?subject=\(encodedSubject)"
         
+        print("   Mailto URL: \(mailtoString)")
+        
         if let mailtoURL = URL(string: mailtoString) {
+            print("   ✅ URL created successfully")
             #if os(macOS)
-            NSWorkspace.shared.open(mailtoURL)
+            let result = NSWorkspace.shared.open(mailtoURL)
+            print("   NSWorkspace.open result: \(result)")
             #else
             UIApplication.shared.open(mailtoURL)
             #endif
-            print("📧 Opening email client with \(sortedReviewers.filter { $0.inviteStatus == .accepted }.count) approvers")
+            print("📧 Opening email client with \(acceptedApprovers.count) approvers")
+        } else {
+            print("❌ Failed to create mailto URL from string: \(mailtoString)")
         }
     }
 }

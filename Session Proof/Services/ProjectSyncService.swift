@@ -908,28 +908,32 @@ class ProjectSyncService {
         do {
             let existingReviewers = try modelContext.fetch(descriptor)
             
+            // Parse common data first (needed for both new and existing reviewers)
+            guard let displayName = data["displayName"] as? String,
+                  let email = data["email"] as? String,
+                  let roleString = data["role"] as? String,
+                  let role = ReviewerRole(rawValue: roleString) else {
+                print("⚠️ Invalid reviewer data for \(reviewerId)")
+                return
+            }
+            
+            // Handle inviteStatus with default fallback for legacy data
+            let status: ReviewerInviteStatus
+            var needsFirestoreUpdate = false
+            if let statusString = data["inviteStatus"] as? String,
+               let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
+                status = parsedStatus
+            } else {
+                // Default to .accepted for reviewers without inviteStatus (legacy data)
+                print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                status = .accepted
+                needsFirestoreUpdate = true
+            }
+            
+            let isKeyApprover = data["isKeyApprover"] as? Bool ?? false
+            
             if existingReviewers.isEmpty {
                 // Create new local reviewer
-                guard let displayName = data["displayName"] as? String,
-                      let email = data["email"] as? String,
-                      let roleString = data["role"] as? String,
-                      let role = ReviewerRole(rawValue: roleString) else {
-                    print("⚠️ Invalid reviewer data for \(reviewerId)")
-                    return
-                }
-                
-                // Handle inviteStatus with default fallback for legacy data
-                let status: ReviewerInviteStatus
-                var needsFirestoreUpdate = false
-                if let statusString = data["inviteStatus"] as? String,
-                   let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
-                    status = parsedStatus
-                } else {
-                    // Default to .accepted for reviewers without inviteStatus (legacy data)
-                    print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
-                    status = .accepted
-                    needsFirestoreUpdate = true
-                }
                 
                 let reviewer = Reviewer(
                     id: reviewerUUID,
@@ -938,7 +942,7 @@ class ProjectSyncService {
                     userId: data["userId"] as? String,
                     role: role,
                     inviteStatus: status,
-                    isKeyApprover: data["isKeyApprover"] as? Bool ?? false
+                    isKeyApprover: isKeyApprover
                 )
                 
                 if let acceptedTimestamp = data["acceptedAt"] as? Timestamp {
@@ -969,6 +973,35 @@ class ProjectSyncService {
                 }
             } else {
                 print("✓ Reviewer already exists locally: \(data["displayName"] ?? "Unknown")")
+                
+                // Update existing reviewer with latest data from Firestore
+                if let existingReviewer = existingReviewers.first(where: { $0.id.uuidString == reviewerId }) {
+                    print("   Updating existing reviewer with cloud data...")
+                    
+                    // Update fields that may have changed
+                    existingReviewer.displayName = displayName
+                    existingReviewer.email = email
+                    existingReviewer.role = role
+                    existingReviewer.inviteStatus = status
+                    existingReviewer.isKeyApprover = isKeyApprover
+                    
+                    // Update userId if it was linked
+                    if let userId = data["userId"] as? String, !userId.isEmpty {
+                        existingReviewer.userId = userId
+                    }
+                    
+                    // Update acceptedAt if present
+                    if let acceptedAtTimestamp = data["acceptedAt"] as? Timestamp {
+                        existingReviewer.acceptedAt = acceptedAtTimestamp.dateValue()
+                    }
+                    
+                    // Update invitedAt if present
+                    if let invitedAtTimestamp = data["invitedAt"] as? Timestamp {
+                        existingReviewer.invitedAt = invitedAtTimestamp.dateValue()
+                    }
+                    
+                    print("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
+                }
             }
         } catch {
             print("❌ Error processing reviewer: \(error)")
@@ -1141,6 +1174,30 @@ class ProjectSyncService {
                 continue
             }
             
+            // Parse common data first (needed for both new and existing reviewers)
+            guard let displayName = reviewerData["displayName"] as? String,
+                  let email = reviewerData["email"] as? String,
+                  let roleString = reviewerData["role"] as? String,
+                  let role = ReviewerRole(rawValue: roleString) else {
+                print("⚠️ Invalid reviewer data for \(reviewerId)")
+                continue
+            }
+            
+            // Handle inviteStatus with default fallback for legacy data
+            let status: ReviewerInviteStatus
+            var needsFirestoreUpdate = false
+            if let statusString = reviewerData["inviteStatus"] as? String,
+               let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
+                status = parsedStatus
+            } else {
+                // Default to .accepted for reviewers without inviteStatus (legacy data)
+                print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                status = .accepted
+                needsFirestoreUpdate = true
+            }
+            
+            let isKeyApprover = reviewerData["isKeyApprover"] as? Bool ?? false
+            
             // Check if reviewer already exists locally
             let descriptor = FetchDescriptor<Reviewer>(
                 predicate: #Predicate { $0.id == reviewerUUID }
@@ -1148,28 +1205,7 @@ class ProjectSyncService {
             let existingReviewers = try modelContext.fetch(descriptor)
             
             if existingReviewers.isEmpty {
-                print("✨ Creating new local reviewer: \(reviewerData["displayName"] ?? "Unknown")")
-                
-                guard let displayName = reviewerData["displayName"] as? String,
-                      let email = reviewerData["email"] as? String,
-                      let roleString = reviewerData["role"] as? String,
-                      let role = ReviewerRole(rawValue: roleString) else {
-                    print("⚠️ Invalid reviewer data for \(reviewerId)")
-                    continue
-                }
-                
-                // Handle inviteStatus with default fallback for legacy data
-                let status: ReviewerInviteStatus
-                var needsFirestoreUpdate = false
-                if let statusString = reviewerData["inviteStatus"] as? String,
-                   let parsedStatus = ReviewerInviteStatus(rawValue: statusString) {
-                    status = parsedStatus
-                } else {
-                    // Default to .accepted for reviewers without inviteStatus (legacy data)
-                    print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
-                    status = .accepted
-                    needsFirestoreUpdate = true
-                }
+                print("✨ Creating new local reviewer: \(displayName)")
                 
                 let reviewer = Reviewer(
                     id: reviewerUUID,
@@ -1177,7 +1213,8 @@ class ProjectSyncService {
                     email: email,
                     userId: reviewerData["userId"] as? String,
                     role: role,
-                    inviteStatus: status
+                    inviteStatus: status,
+                    isKeyApprover: isKeyApprover
                 )
                 
                 if let acceptedTimestamp = reviewerData["acceptedAt"] as? Timestamp {
@@ -1208,6 +1245,35 @@ class ProjectSyncService {
                 }
             } else {
                 print("✓ Reviewer already exists locally: \(reviewerData["displayName"] ?? "Unknown")")
+                
+                // Update existing reviewer with latest data from Firestore
+                if let existingReviewer = existingReviewers.first(where: { $0.id.uuidString == reviewerId }) {
+                    print("   Updating existing reviewer with cloud data...")
+                    
+                    // Update fields that may have changed
+                    existingReviewer.displayName = displayName
+                    existingReviewer.email = email
+                    existingReviewer.role = role
+                    existingReviewer.inviteStatus = status
+                    existingReviewer.isKeyApprover = isKeyApprover
+                    
+                    // Update userId if it was linked
+                    if let userId = reviewerData["userId"] as? String, !userId.isEmpty {
+                        existingReviewer.userId = userId
+                    }
+                    
+                    // Update acceptedAt if present
+                    if let acceptedAtTimestamp = reviewerData["acceptedAt"] as? Timestamp {
+                        existingReviewer.acceptedAt = acceptedAtTimestamp.dateValue()
+                    }
+                    
+                    // Update invitedAt if present
+                    if let invitedAtTimestamp = reviewerData["invitedAt"] as? Timestamp {
+                        existingReviewer.invitedAt = invitedAtTimestamp.dateValue()
+                    }
+                    
+                    print("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
+                }
             }
         }
     }
