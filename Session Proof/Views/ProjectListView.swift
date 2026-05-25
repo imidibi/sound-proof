@@ -20,7 +20,8 @@ struct ProjectListView: View {
     @State private var showingNewProjectSheet = false
     @State private var showingNewSongSheet = false
     @State private var showingImportMixSheet = false
-    @State private var showingJoinProjectSheet = false
+    // DISABLED: Share code functionality removed - use email invitations only
+    // @State private var showingJoinProjectSheet = false
     @State private var showingSettings = false
     @State private var expandedProjects: Set<UUID> = []
     @State private var expandedSongs: Set<UUID> = []
@@ -176,14 +177,15 @@ struct ProjectListView: View {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
                         
+                        // DISABLED: Share code functionality removed - use email invitations only
                         // Show Join Project for artists
-                        if authService.currentUser?.role == .artist {
-                            Button {
-                                showingJoinProjectSheet = true
-                            } label: {
-                                Label("Join Project", systemImage: "link")
-                            }
-                        }
+                        // if authService.currentUser?.role == .artist {
+                        //     Button {
+                        //         showingJoinProjectSheet = true
+                        //     } label: {
+                        //         Label("Join Project", systemImage: "link")
+                        //     }
+                        // }
                         
                         // Context-aware options based on selection
                         if let selectedProject = selectedProjectForMenu {
@@ -218,14 +220,15 @@ struct ProjectListView: View {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
                         
+                        // DISABLED: Share code functionality removed - use email invitations only
                         // Show Join Project for artists
-                        if authService.currentUser?.role == .artist {
-                            Button {
-                                showingJoinProjectSheet = true
-                            } label: {
-                                Label("Join Project", systemImage: "link")
-                            }
-                        }
+                        // if authService.currentUser?.role == .artist {
+                        //     Button {
+                        //         showingJoinProjectSheet = true
+                        //     } label: {
+                        //         Label("Join Project", systemImage: "link")
+                        //     }
+                        // }
                         
                         // Context-aware options based on selection
                         if let selectedProject = selectedProjectForMenu {
@@ -299,9 +302,10 @@ struct ProjectListView: View {
                     ImportMixSheet(song: song)
                 }
             }
-            .sheet(isPresented: $showingJoinProjectSheet) {
-                JoinProjectSheet()
-            }
+            // DISABLED: Share code functionality removed - use email invitations only
+            // .sheet(isPresented: $showingJoinProjectSheet) {
+            //     JoinProjectSheet()
+            // }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }

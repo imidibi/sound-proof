@@ -13,6 +13,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
     @Environment(ProjectSyncService.self) private var syncService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @Query private var organizations: [Organization]
     
@@ -256,6 +257,7 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingOrganizationManagement) {
                 OrganizationManagementView()
+                    .environment(firestoreService)
             }
             .sheet(isPresented: $showingHelp) {
                 HelpView()

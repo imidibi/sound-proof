@@ -150,7 +150,15 @@ struct MixApprovalRow: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let _ = print("🔍 MixApprovalRow for \(mix.name):")
+        let _ = print("   - Producer ID: \(project.ownerUserID)")
+        let _ = print("   - Producer in reviewers: \(producerInReviewers)")
+        let _ = print("   - Total reviewers: \(project.reviewers.count)")
+        let _ = print("   - Accepted reviewers: \(acceptedReviewers.count)")
+        let _ = print("   - Reviewer user IDs: \(project.reviewers.map { $0.userId ?? "nil" })")
+        let _ = print("   - Should show producer row: \(!producerInReviewers)")
+        
+        return VStack(alignment: .leading, spacing: 12) {
             // Mix header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -206,7 +214,7 @@ struct MixApprovalRow: View {
                     )
                 }
                 
-                // Show all reviewers
+                // Show all approvers
                 ForEach(acceptedReviewers.sorted(by: { $0.displayName < $1.displayName })) { reviewer in
                     ReviewerApprovalRow(reviewer: reviewer, mix: mix)
                 }
@@ -243,7 +251,7 @@ struct ReviewerApprovalRow: View {
                 .foregroundStyle(statusColor)
                 .frame(width: 20)
             
-            // Reviewer name with key approver indicator (only visible to producers)
+            // Approver name with key approver indicator (only visible to producers)
             HStack(spacing: 4) {
                 Text(reviewer.displayName)
                     .font(.caption)
@@ -358,7 +366,7 @@ struct MixApprovalBadge: View {
         let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
         
         guard reviewers.count > 0 else {
-            return "No Reviewers"
+            return "No Approvers"
         }
         
         // Use mix's overall status
@@ -523,7 +531,7 @@ struct SongApprovalBadge: View {
         
         let reviewers = project.reviewers.filter { $0.inviteStatus == .accepted || $0.inviteStatus == .sent }
         guard !reviewers.isEmpty else {
-            return "No Reviewers"
+            return "No Approvers"
         }
         
         // Song approval is based on the song's status field, 

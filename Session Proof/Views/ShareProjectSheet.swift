@@ -34,86 +34,88 @@ struct ShareProjectSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 
+                // DISABLED: Share code functionality removed - use email invitations only
                 // Share code display
-                if let shareCode = project.shareCode {
-                    VStack(spacing: 16) {
-                        Text("Share Code")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        
-                        HStack(spacing: 4) {
-                            ForEach(Array(shareCode.enumerated()), id: \.offset) { index, char in
-                                Text(String(char))
-                                    .font(.system(size: 48, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(.primary)
-                                    .frame(width: 50, height: 70)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.blue.opacity(0.1))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(Color.blue.opacity(0.3), lineWidth: 2)
-                                    )
-                            }
-                        }
-                        
-                        Button {
-                            copyShareCode()
-                        } label: {
-                            HStack {
-                                Image(systemName: showCopiedConfirmation ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                                Text(showCopiedConfirmation ? "Copied!" : "Copy Code")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(showCopiedConfirmation ? Color.green : Color.blue)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .animation(.easeInOut, value: showCopiedConfirmation)
-                    }
-                    .padding(.horizontal)
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Generating share code...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                // if let shareCode = project.shareCode {
+                //     VStack(spacing: 16) {
+                //         Text("Share Code")
+                //             .font(.caption)
+                //             .foregroundStyle(.secondary)
+                //             .textCase(.uppercase)
+                //         
+                //         HStack(spacing: 4) {
+                //             ForEach(Array(shareCode.enumerated()), id: \.offset) { index, char in
+                //                 Text(String(char))
+                //                     .font(.system(size: 48, weight: .bold, design: .monospaced))
+                //                     .foregroundStyle(.primary)
+                //                     .frame(width: 50, height: 70)
+                //                     .background(
+                //                         RoundedRectangle(cornerRadius: 12)
+                //                             .fill(Color.blue.opacity(0.1))
+                //                     )
+                //                     .overlay(
+                //                         RoundedRectangle(cornerRadius: 12)
+                //                             .stroke(Color.blue.opacity(0.3), lineWidth: 2)
+                //                     )
+                //             }
+                //         }
+                //         
+                //         Button {
+                //             copyShareCode()
+                //         } label: {
+                //             HStack {
+                //                 Image(systemName: showCopiedConfirmation ? "checkmark.circle.fill" : "doc.on.doc.fill")
+                //                 Text(showCopiedConfirmation ? "Copied!" : "Copy Code")
+                //             }
+                //             .frame(maxWidth: .infinity)
+                //             .padding()
+                //             .background(showCopiedConfirmation ? Color.green : Color.blue)
+                //             .foregroundStyle(.white)
+                //             .clipShape(RoundedRectangle(cornerRadius: 12))
+                //         }
+                //         .animation(.easeInOut, value: showCopiedConfirmation)
+                //     }
+                //     .padding(.horizontal)
+                // } else {
+                //     VStack(spacing: 12) {
+                //         ProgressView()
+                //         Text("Generating share code...")
+                //             .font(.caption)
+                //             .foregroundStyle(.secondary)
+                //     }
+                // }
                 
+                // DISABLED: Instructions for share code (no longer used)
                 // Instructions
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("How to share:")
-                        .font(.headline)
-                    
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("1.")
-                            .fontWeight(.semibold)
-                        Text("Copy the code above")
-                    }
-                    .font(.subheadline)
-                    
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("2.")
-                            .fontWeight(.semibold)
-                        Text("Send it to your client via email or message")
-                    }
-                    .font(.subheadline)
-                    
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("3.")
-                            .fontWeight(.semibold)
-                        Text("They enter the code in Approvl to access the project")
-                    }
-                    .font(.subheadline)
-                }
-                .padding()
-                .background(Color.secondary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
+                // VStack(alignment: .leading, spacing: 12) {
+                //     Text("How to share:")
+                //         .font(.headline)
+                //     
+                //     HStack(alignment: .top, spacing: 12) {
+                //         Text("1.")
+                //             .fontWeight(.semibold)
+                //         Text("Copy the code above")
+                //     }
+                //     .font(.subheadline)
+                //     
+                //     HStack(alignment: .top, spacing: 12) {
+                //         Text("2.")
+                //             .fontWeight(.semibold)
+                //         Text("Send it to your client via email or message")
+                //     }
+                //     .font(.subheadline)
+                //     
+                //     HStack(alignment: .top, spacing: 12) {
+                //         Text("3.")
+                //             .fontWeight(.semibold)
+                //         Text("They enter the code in Approvl to access the project")
+                //     }
+                //     .font(.subheadline)
+                // }
+                // .padding()
+                // .background(Color.secondary.opacity(0.1))
+                // .clipShape(RoundedRectangle(cornerRadius: 12))
+                // .padding(.horizontal)
                 
                 Spacer()
             }

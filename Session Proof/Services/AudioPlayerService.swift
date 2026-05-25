@@ -19,7 +19,32 @@ final class AudioPlayerService {
     var duration: TimeInterval = 0
     var audioURL: URL?
     
-    init() {}
+    init() {
+        configureAudioSession()
+    }
+    
+    private func configureAudioSession() {
+        #if os(iOS)
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // Set category to playback with options for routing to external devices
+            try audioSession.setCategory(
+                .playback,
+                mode: .default,
+                options: [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
+            )
+            
+            // Activate the audio session
+            try audioSession.setActive(true)
+            
+            print("✅ Audio session configured for playback with external device support")
+            print("   Available outputs: \(audioSession.currentRoute.outputs.map { $0.portType.rawValue })")
+        } catch {
+            print("❌ Failed to configure audio session: \(error.localizedDescription)")
+        }
+        #endif
+    }
     
     func loadAudio(from url: URL) throws {
         audioURL = url
@@ -37,6 +62,16 @@ final class AudioPlayerService {
     
     func play() {
         guard let player = audioPlayer else { return }
+        
+        #if os(iOS)
+        // Ensure audio session is active before playing
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ Failed to activate audio session: \(error.localizedDescription)")
+        }
+        #endif
+        
         player.play()
         isPlaying = true
         startTimeObserver()
@@ -54,6 +89,15 @@ final class AudioPlayerService {
         currentTime = 0
         isPlaying = false
         stopTimeObserver()
+        
+        #if os(iOS)
+        // Deactivate audio session to allow other apps to play audio
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("⚠️ Failed to deactivate audio session: \(error.localizedDescription)")
+        }
+        #endif
     }
     
     func seek(to time: TimeInterval) {

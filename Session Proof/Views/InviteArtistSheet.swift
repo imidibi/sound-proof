@@ -37,7 +37,7 @@ struct InviteArtistSheet: View {
             Form {
 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        TextField("Name", text: $artistName, prompt: Text("Artist or client name"))
+                        TextField("Name", text: $artistName, prompt: Text("Approver name"))
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.name)
                         
@@ -99,7 +99,7 @@ Section {
                     }
                     .padding(.vertical, 4)
                 } header: {
-                    Text("Artist Information")
+                    Text("Approver Information")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 } footer: {
@@ -111,7 +111,7 @@ Section {
                                 .font(.caption)
                         }
                     } else {
-                        Text("An invitation will be sent. The artist can accept it by signing in or creating an account.")
+                        Text("An invitation will be sent. They can accept it by signing in or creating an account.")
                     }
                 }
                 .onChange(of: artistEmail) { _, newValue in
@@ -125,7 +125,7 @@ Section {
                 
                 Section {
                     Picker("Role", selection: $role) {
-                        Text("Reviewer").tag(ReviewerRole.reviewer)
+                        Text("Approver").tag(ReviewerRole.reviewer)
                         Text("Viewer").tag(ReviewerRole.viewer)
                     }
                     .pickerStyle(.segmented)
@@ -137,7 +137,7 @@ Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top, spacing: 8) {
                             Text("•")
-                            Text("Reviewer: Can add comments and approve mixes")
+                            Text("Approver: Can add comments and approve mixes")
                         }
                         HStack(alignment: .top, spacing: 8) {
                             Text("•")
@@ -160,7 +160,7 @@ Section {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Invite Artist")
+            .navigationTitle("Invite Approver")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

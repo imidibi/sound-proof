@@ -364,7 +364,7 @@ struct SignUpView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
-                                Text("Account Type: Artist/Approver")
+                                Text("Account Type: Approver")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                             }
@@ -386,7 +386,7 @@ struct SignUpView: View {
                             Picker("Role", selection: $selectedRole) {
                                 Label("Producer/Engineer", systemImage: "music.note.list")
                                     .tag(UserRole.producer)
-                                Label("Artist/Approver", systemImage: "person.fill")
+                                Label("Approver", systemImage: "person.fill")
                                     .tag(UserRole.artist)
                             }
                             .pickerStyle(.segmented)

@@ -844,6 +844,7 @@ class FirestoreService {
     }
     
     // MARK: - Share Code
+    // DEPRECATED: Share code functionality disabled - use email invitations only
     
     private func generateShareCode() -> String {
         let letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // No confusing chars like O/0, I/1

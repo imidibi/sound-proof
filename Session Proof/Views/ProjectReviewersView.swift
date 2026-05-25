@@ -44,46 +44,13 @@ struct ProjectReviewersView: View {
                 Section {
                     ForEach(sortedReviewers) { reviewer in
                         ReviewerRow(reviewer: reviewer, isProducerView: authService.currentUser?.isProducer == true)
-                            #if os(iOS)
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if reviewer.role != .owner && authService.currentUser?.isProducer == true {
-                                    Button {
-                                        toggleKeyApprover(reviewer)
-                                    } label: {
-                                        Label(
-                                            reviewer.isKeyApprover ? "Remove Key" : "Set Key",
-                                            systemImage: reviewer.isKeyApprover ? "crown.fill" : "crown"
-                                        )
-                                    }
-                                    .tint(.orange)
-                                    
-                                    Button {
-                                        reviewerToEdit = reviewer
-                                        showingEditSheet = true
-                                    } label: {
-                                        Label("Edit", systemImage: "pencil")
-                                    }
-                                    .tint(.blue)
-                                }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                if reviewer.role != .owner && authService.currentUser?.isProducer == true {
-                                    Button(role: .destructive) {
-                                        reviewerToDelete = reviewer
-                                        showingDeleteConfirmation = true
-                                    } label: {
-                                        Label("Remove", systemImage: "trash")
-                                    }
-                                }
-                            }
-                            #else
                             .contextMenu {
                                 if reviewer.role != .owner && authService.currentUser?.isProducer == true {
                                     Button {
                                         reviewerToEdit = reviewer
                                         showingEditSheet = true
                                     } label: {
-                                        Label("Edit Reviewer", systemImage: "pencil")
+                                        Label("Edit Approver", systemImage: "pencil")
                                     }
                                     
                                     Button {
@@ -101,28 +68,25 @@ struct ProjectReviewersView: View {
                                         reviewerToDelete = reviewer
                                         showingDeleteConfirmation = true
                                     } label: {
-                                        Label("Remove Reviewer", systemImage: "trash")
+                                        Label("Remove Approver", systemImage: "trash")
                                     }
                                 }
                             }
-                            #endif
                     }
                 } header: {
-                    Text("Artists & Reviewers")
+                    Text("Approvers")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 } footer: {
                     if project.reviewers.isEmpty {
-                        Text("No artists invited yet. Tap the + button to invite artists to review this project.")
-                    } else {
-                        Text("Share Code: \(project.shareCode ?? "Not available")")
+                        Text("No approvers invited yet. Tap the + button to invite approvers to this project.")
                     }
                 }
             }
             #if os(iOS)
             .listStyle(.insetGrouped)
             #endif
-            .navigationTitle("Manage Reviewers")
+            .navigationTitle("Manage Approvers")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -134,11 +98,19 @@ struct ProjectReviewersView: View {
                 }
                 
                 if authService.currentUser?.isProducer == true {
+                    ToolbarItem(placement: .automatic) {
+                        Button {
+                            emailAllApprovers()
+                        } label: {
+                            Label("Email Approvers", systemImage: "envelope")
+                        }
+                    }
+                    
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             showingInviteSheet = true
                         } label: {
-                            Label("Invite Artist", systemImage: "person.badge.plus")
+                            Label("Invite Approver", systemImage: "person.badge.plus")
                         }
                     }
                 }
@@ -150,7 +122,7 @@ struct ProjectReviewersView: View {
                 EditReviewerSheet(reviewer: reviewer, project: project)
             }
             .confirmationDialog(
-                "Remove Reviewer",
+                "Remove Approver",
                 isPresented: $showingDeleteConfirmation,
                 titleVisibility: .visible
             ) {
@@ -242,6 +214,33 @@ struct ProjectReviewersView: View {
             }
         } catch {
             print("❌ Error removing reviewer locally: \(error)")
+        }
+    }
+    
+    private func emailAllApprovers() {
+        // Get all accepted approvers' emails
+        let approverEmails = sortedReviewers
+            .filter { $0.inviteStatus == .accepted }
+            .map { $0.email }
+            .joined(separator: ",")
+        
+        guard !approverEmails.isEmpty else {
+            print("⚠️ No accepted approvers to email")
+            return
+        }
+        
+        // Create mailto URL with all approver emails
+        let subject = "Update on \(project.name)"
+        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let mailtoString = "mailto:\(approverEmails)?subject=\(encodedSubject)"
+        
+        if let mailtoURL = URL(string: mailtoString) {
+            #if os(macOS)
+            NSWorkspace.shared.open(mailtoURL)
+            #else
+            UIApplication.shared.open(mailtoURL)
+            #endif
+            print("📧 Opening email client with \(sortedReviewers.filter { $0.inviteStatus == .accepted }.count) approvers")
         }
     }
 }
@@ -396,7 +395,7 @@ struct ReviewerRow: View {
         .modelContainer(for: Project.self, inMemory: true)
 }
 
-// MARK: - Edit Reviewer Sheet
+// MARK: - Edit Approver Sheet
 
 struct EditReviewerSheet: View {
     @Bindable var reviewer: Reviewer
@@ -448,10 +447,10 @@ struct EditReviewerSheet: View {
                         .pickerStyle(.segmented)
                     }
                 } header: {
-                    Text("Reviewer Details")
+                    Text("Approver Details")
                 }
             }
-            .navigationTitle("Edit Reviewer")
+            .navigationTitle("Edit Approver")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

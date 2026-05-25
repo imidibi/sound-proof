@@ -193,6 +193,7 @@ class ProjectSyncService {
     }
     
     // MARK: - Join Project by Share Code
+    // DEPRECATED: Share code functionality disabled - use email invitations only
     
     func joinProjectByShareCode(
         shareCode: String,
