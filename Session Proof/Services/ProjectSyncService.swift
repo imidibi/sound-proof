@@ -601,18 +601,39 @@ class ProjectSyncService {
             
             // Clean up: Remove any locally cached archived projects that user is only a reviewer for
             // (Approvers should not see archived projects)
+            print("🧹 Starting cleanup: checking for archived projects to remove...")
             let allLocalProjects = try modelContext.fetch(FetchDescriptor<Project>())
+            print("🧹 Found \(allLocalProjects.count) local projects to check")
+            
+            var removedCount = 0
             for localProject in allLocalProjects {
+                print("🔍 Checking project: \(localProject.name)")
+                print("   - Status: \(localProject.status.rawValue)")
+                print("   - Owner: \(localProject.ownerUserID)")
+                print("   - Current user: \(userId)")
+                
                 // Check if this is an archived project
                 if localProject.status == .archived {
+                    print("   ⚠️ Project is archived")
                     // Check if user is only a reviewer (not the owner)
                     if localProject.ownerUserID != userId {
-                        print("🗑️ Removing archived project from approver's device: \(localProject.name)")
+                        print("   🗑️ User is not owner - REMOVING archived project: \(localProject.name)")
                         modelContext.delete(localProject)
+                        removedCount += 1
+                    } else {
+                        print("   ✓ User is owner - keeping archived project")
                     }
+                } else {
+                    print("   ✓ Project is not archived")
                 }
             }
-            try modelContext.save()
+            
+            if removedCount > 0 {
+                try modelContext.save()
+                print("🧹 Cleanup complete: removed \(removedCount) archived project(s)")
+            } else {
+                print("🧹 Cleanup complete: no archived projects to remove")
+            }
             
             print("✅ Finished syncing all projects")
             
