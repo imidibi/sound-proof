@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the project
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+    }
+
+    // Helper function to check if user is a reviewer on the project
+    function isProjectReviewer(projectId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/projects/$(projectId)/reviewers/$(request.auth.uid));
+    }
+
+    // Helper function to check if user is producer or studio
+    function isProducer() {
+      return isSignedIn() &&
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'producer' ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'studio');
+    }
+
+    // Helper function to check if user is a member of the organization
+    function isOrganizationMember(organizationId) {
+      return isSignedIn() &&
+             request.auth.uid in get(/databases/$(database)/documents/organizations/$(organizationId)).data.memberIds;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Projects collection
+    match /projects/{projectId} {
+      // Allow reading individual projects
+      // Reviewers cannot access archived projects
+      allow get: if isSignedIn() &&
+                    (isProjectOwner(projectId) ||
+                     (isProjectReviewer(projectId) &&
+                      (!('isArchived' in resource.data) || resource.data.isArchived == false)));
+      // Allow listing all projects (needed for finding invitations by email)
+      // Users can only actually read project details if they're owner/reviewer
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && isProjectOwner(projectId);
+      allow delete: if isSignedIn() && isProjectOwner(projectId);
+
+      // Reviewers subcollection
+      match /reviewers/{reviewerId} {
+        // Allow reading specific reviewer document
+        allow get: if isSignedIn() &&
+                      (isProjectOwner(projectId) ||
+                       isProjectReviewer(projectId) ||
+                       reviewerId == request.auth.uid);
+        // Allow listing/querying reviewers for invitation lookup
+        // Any authenticated user can query by email to find their invitations
+        allow list: if isSignedIn();
+        allow create: if isSignedIn() &&
+                         (isProjectOwner(projectId) ||
+                          reviewerId == request.auth.uid);
+        // Allow update if:
+        // - Project owner, OR
+        // - Document ID matches userId (userId-based document), OR
+        // - Updating to link userId when email matches authenticated user's email in users collection
+        allow update: if isSignedIn() &&
+                         (isProjectOwner(projectId) ||
+                          reviewerId == request.auth.uid ||
+                          (resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email &&
+                           request.resource.data.userId == request.auth.uid));
+        allow delete: if isSignedIn() && isProjectOwner(projectId);
+      }
+
+      // Songs subcollection
+      match /songs/{songId} {
+        // Reviewers cannot access archived songs
+        allow read: if isSignedIn() &&
+                       (isProjectOwner(projectId) ||
+                        (isProjectReviewer(projectId) &&
+                         (!('isArchived' in resource.data) || resource.data.isArchived == false)));
+        allow write: if isSignedIn() && isProjectOwner(projectId);
+
+        // Mixes subcollection
+        match /mixes/{mixId} {
+          allow read: if isSignedIn() &&
+                         (isProjectOwner(projectId) || isProjectReviewer(projectId));
+          allow create, delete: if isSignedIn() && isProjectOwner(projectId);
+          // Allow project owner to update any field
+          allow update: if isSignedIn() && isProjectOwner(projectId);
+          // Allow reviewers to update only the approvalStatus field
+          allow update: if isSignedIn() &&
+                           isProjectReviewer(projectId) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus']);
+
+          // Approvals subcollection
+          match /approvals/{approvalId} {
+            allow read: if isSignedIn() &&
+                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            // Allow reviewers to create their own approval records
+            allow create: if isSignedIn() && isProjectReviewer(projectId);
+            // Allow reviewers to update only their own approval records
+            allow update: if isSignedIn() &&
+                             isProjectReviewer(projectId) &&
+                             resource.data.reviewerUserId == request.auth.uid;
+            // Only project owner can delete approvals
+            allow delete: if isSignedIn() && isProjectOwner(projectId);
+          }
+
+          // Comments subcollection
+          match /comments/{commentId} {
+            allow read: if isSignedIn() &&
+                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            allow create: if isSignedIn() &&
+                             (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            allow update: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+            allow delete: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+          }
+        }
+      }
+    }
+
+    // Organizations collection
+    match /organizations/{organizationId} {
+      // Allow reading individual organizations
+      allow get: if isSignedIn() && isOrganizationMember(organizationId);
+      // Allow querying organizations (query filter ensures only user's orgs are returned)
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && isOrganizationMember(organizationId);
+      allow delete: if isSignedIn() && isOrganizationMember(organizationId);
+    }
+  }
+}

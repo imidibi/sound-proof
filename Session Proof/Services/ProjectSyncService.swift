@@ -609,22 +609,26 @@ class ProjectSyncService {
             for localProject in allLocalProjects {
                 print("🔍 Checking project: \(localProject.name)")
                 print("   - Status: \(localProject.status.rawValue)")
+                print("   - isArchived flag: \(localProject.isArchived)")
                 print("   - Owner: \(localProject.ownerUserID)")
                 print("   - Current user: \(userId)")
                 
-                // Check if this is an archived project
-                if localProject.status == .archived {
-                    print("   ⚠️ Project is archived")
-                    // Check if user is only a reviewer (not the owner)
-                    if localProject.ownerUserID != userId {
-                        print("   🗑️ User is not owner - REMOVING archived project: \(localProject.name)")
+                // Check if user is not the owner (i.e., they're only a reviewer)
+                if localProject.ownerUserID != userId {
+                    print("   ℹ️ User is a reviewer (not owner)")
+                    
+                    // For reviewers: check if project is archived (using either field)
+                    // The status might not be updated if Firestore blocked the sync,
+                    // so we also check the isArchived boolean
+                    if localProject.status == .archived || localProject.isArchived {
+                        print("   🗑️ REMOVING archived project from reviewer's device: \(localProject.name)")
                         modelContext.delete(localProject)
                         removedCount += 1
                     } else {
-                        print("   ✓ User is owner - keeping archived project")
+                        print("   ✓ Project is active - keeping")
                     }
                 } else {
-                    print("   ✓ Project is not archived")
+                    print("   ✓ User is owner - keeping project regardless of archive status")
                 }
             }
             
