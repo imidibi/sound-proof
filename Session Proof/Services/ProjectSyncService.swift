@@ -599,6 +599,21 @@ class ProjectSyncService {
                 }
             }
             
+            // Clean up: Remove any locally cached archived projects that user is only a reviewer for
+            // (Approvers should not see archived projects)
+            let allLocalProjects = try modelContext.fetch(FetchDescriptor<Project>())
+            for localProject in allLocalProjects {
+                // Check if this is an archived project
+                if localProject.status == .archived {
+                    // Check if user is only a reviewer (not the owner)
+                    if localProject.ownerUserID != userId {
+                        print("🗑️ Removing archived project from approver's device: \(localProject.name)")
+                        modelContext.delete(localProject)
+                    }
+                }
+            }
+            try modelContext.save()
+            
             print("✅ Finished syncing all projects")
             
         } catch {
