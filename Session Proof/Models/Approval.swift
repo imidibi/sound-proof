@@ -9,7 +9,7 @@ import Foundation
 import SwiftData
 
 enum ApprovalStatus: String, Codable {
-    case pending = "Pending"
+    case pending = "In Review"
     case approved = "Approved"
     case changesRequested = "Changes Requested"
 }
