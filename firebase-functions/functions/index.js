@@ -403,6 +403,165 @@ exports.onCommentCreated = onDocumentCreated(
 );
 
 /**
+ * Send notification when a new approval is created
+ * Notifies the producer when an approver sets their initial approval status
+ */
+exports.onApprovalCreated = onDocumentCreated(
+  {
+    document: "projects/{projectId}/songs/{songId}/mixes/{mixId}/approvals/{approvalId}",
+    database: "(default)",
+  },
+  async (event) => {
+    const approvalData = event.data.data();
+    const {projectId, songId, mixId} = event.params;
+
+    console.log(`New approval created with status ${approvalData.status} for mix ${mixId}`);
+
+    try {
+      // Get project details
+      const projectDoc = await getFirestore()
+        .collection("projects")
+        .doc(projectId)
+        .get();
+
+      if (!projectDoc.exists) {
+        console.log("Project not found");
+        return;
+      }
+
+      const projectData = projectDoc.data();
+      const producerId = projectData.ownerUserId;
+
+      // Don't notify if the producer set their own approval
+      if (approvalData.reviewerUserId === producerId) {
+        console.log("Producer set their own approval - skipping notification");
+        return;
+      }
+
+      // Only notify for Approved or Changes Requested status
+      if (approvalData.status !== "Approved" && approvalData.status !== "Changes Requested") {
+        console.log(`Status is ${approvalData.status} - skipping notification`);
+        return;
+      }
+
+      // Get mix and song details
+      const mixDoc = await getFirestore()
+        .collection("projects")
+        .doc(projectId)
+        .collection("songs")
+        .doc(songId)
+        .collection("mixes")
+        .doc(mixId)
+        .get();
+
+      const songDoc = await getFirestore()
+        .collection("projects")
+        .doc(projectId)
+        .collection("songs")
+        .doc(songId)
+        .get();
+
+      const mixName = mixDoc.exists ? mixDoc.data().name : "Mix";
+      const songName = songDoc.exists ? songDoc.data().name : "Song";
+
+      // Get reviewer name from the reviewerUserId
+      let reviewerName = "An approver";
+      if (approvalData.reviewerUserId) {
+        const reviewerUserDoc = await getFirestore()
+          .collection("users")
+          .doc(approvalData.reviewerUserId)
+          .get();
+
+        if (reviewerUserDoc.exists) {
+          reviewerName = reviewerUserDoc.data().displayName || reviewerName;
+        }
+      }
+
+      // Get producer's FCM tokens (all devices)
+      const producerDoc = await getFirestore()
+        .collection("users")
+        .doc(producerId)
+        .get();
+
+      if (!producerDoc.exists) {
+        console.log("Producer document not found");
+        return;
+      }
+
+      const producerData = producerDoc.data();
+      const tokens = [];
+
+      // New format: array of tokens for multiple devices
+      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
+        tokens.push(...producerData.fcmTokens);
+      }
+      // Legacy format: single token (for backward compatibility)
+      else if (producerData.fcmToken) {
+        tokens.push(producerData.fcmToken);
+      }
+
+      if (tokens.length === 0) {
+        console.log("Producer has no FCM tokens");
+        return;
+      }
+
+      // Create appropriate message based on status
+      let title, body;
+      if (approvalData.status === "Approved") {
+        title = `✅ ${mixName} Approved`;
+        body = `${reviewerName} approved ${songName} in ${projectData.name}`;
+      } else if (approvalData.status === "Changes Requested") {
+        title = `🔄 Changes Requested: ${mixName}`;
+        body = `${reviewerName} requested changes to ${songName} in ${projectData.name}`;
+      }
+
+      // Send notification to producer (all devices)
+      const message = {
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: {
+          type: "approval_status_changed",
+          projectId: projectId,
+          songId: songId,
+          mixId: mixId,
+          status: approvalData.status,
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: title,
+                body: body,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
+        tokens: tokens,
+      };
+
+      console.log(`Attempting to send approval notification to producer (${tokens.length} devices)`);
+      const response = await getMessaging().sendEachForMulticast(message);
+      console.log(`Sent approval notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+
+      if (response.failureCount > 0) {
+        console.log(`Failed to send ${response.failureCount} notifications`);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error(`Failed to send to token ${idx}:`, resp.error);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error sending approval notification:", error);
+    }
+  }
+);
+
+/**
  * Send notification when approval status changes
  * Notifies the producer when an approver approves or requests changes
  */
@@ -440,7 +599,7 @@ exports.onApprovalUpdated = onDocumentUpdated(
       const producerId = projectData.ownerUserId;
 
       // Don't notify if the producer changed their own approval
-      if (newData.userId === producerId) {
+      if (newData.reviewerUserId === producerId) {
         console.log("Producer changed their own approval - skipping notification");
         return;
       }
@@ -464,6 +623,19 @@ exports.onApprovalUpdated = onDocumentUpdated(
 
       const mixName = mixDoc.exists ? mixDoc.data().name : "Mix";
       const songName = songDoc.exists ? songDoc.data().name : "Song";
+
+      // Get reviewer name from the reviewerUserId
+      let reviewerName = "An approver";
+      if (newData.reviewerUserId) {
+        const reviewerUserDoc = await getFirestore()
+          .collection("users")
+          .doc(newData.reviewerUserId)
+          .get();
+
+        if (reviewerUserDoc.exists) {
+          reviewerName = reviewerUserDoc.data().displayName || reviewerName;
+        }
+      }
 
       // Get producer's FCM tokens (all devices)
       const producerDoc = await getFirestore()
@@ -497,10 +669,10 @@ exports.onApprovalUpdated = onDocumentUpdated(
       let title, body;
       if (newData.status === "Approved") {
         title = `✅ ${mixName} Approved`;
-        body = `${newData.userName} approved ${songName} in ${projectData.name}`;
-      } else if (newData.status === "NeedsRevision") {
+        body = `${reviewerName} approved ${songName} in ${projectData.name}`;
+      } else if (newData.status === "Changes Requested") {
         title = `🔄 Changes Requested: ${mixName}`;
-        body = `${newData.userName} requested changes to ${songName} in ${projectData.name}`;
+        body = `${reviewerName} requested changes to ${songName} in ${projectData.name}`;
       } else {
         // Pending or other status - skip notification
         return;
