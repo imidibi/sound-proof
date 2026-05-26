@@ -1545,6 +1545,13 @@ class ProjectSyncService {
                 continue
             }
             
+            // Only project owners can sync mixes to Firestore
+            // Approvers have read-only access to mixes
+            guard project.ownerUserID == authService.currentUser?.id else {
+                print("⏭️ Skipping mix '\(mix.name)' - user is not project owner")
+                continue
+            }
+            
             // Handle deleted mixes - propagate deletion to cloud
             if mix.isDeleted {
                 print("🗑️ Syncing deletion for mix: \(mix.name)")
@@ -1761,6 +1768,13 @@ class ProjectSyncService {
             guard let project = song.project,
                   let projectId = project.firestoreId else {
                 print("⚠️ Song '\(song.name)' missing required project info - skipping")
+                continue
+            }
+            
+            // Only project owners can sync songs to Firestore
+            // Approvers have read-only access to songs
+            guard project.ownerUserID == authService.currentUser?.id else {
+                print("⏭️ Skipping song '\(song.name)' - user is not project owner")
                 continue
             }
             

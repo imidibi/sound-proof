@@ -37,6 +37,19 @@ struct Session_ProofApp: App {
             Approval.self,
             Organization.self
         ])
+        
+        // Ensure Application Support directory exists before creating ModelConfiguration
+        // This prevents CoreData from hanging during directory creation
+        let appSupportURL = URL.applicationSupportDirectory
+        if !FileManager.default.fileExists(atPath: appSupportURL.path) {
+            do {
+                try FileManager.default.createDirectory(at: appSupportURL, withIntermediateDirectories: true)
+                print("📁 Created Application Support directory")
+            } catch {
+                print("⚠️ Failed to create Application Support directory: \(error)")
+            }
+        }
+        
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
