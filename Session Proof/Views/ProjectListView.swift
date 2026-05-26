@@ -52,7 +52,21 @@ struct ProjectListView: View {
     }
     
     private var activeProjects: [Project] {
-        let filtered = projects.filter { $0.status != .archived }
+        let filtered = projects.filter { project in
+            // Always filter out archived projects from active list
+            guard project.status != .archived else { return false }
+            
+            // For approvers, also exclude archived projects they might be reviewing
+            // (belt and suspenders approach - archived projects shouldn't sync to approvers,
+            // but this ensures they never appear even if they somehow do)
+            if let currentUserId = authService.currentUser?.id,
+               currentUserId != project.ownerUserID {
+                // User is an approver - double-check project isn't archived
+                return project.status != .archived
+            }
+            
+            return true
+        }
         
         // Apply sorting
         if projectSortOrder == "alphabetical" {
@@ -64,7 +78,12 @@ struct ProjectListView: View {
     }
     
     private var archivedProjects: [Project] {
-        let filtered = projects.filter { $0.status == .archived }
+        let filtered = projects.filter { project in
+            // Only show archived projects if user is the producer/owner
+            guard project.status == .archived else { return false }
+            guard let currentUserId = authService.currentUser?.id else { return false }
+            return currentUserId == project.ownerUserID
+        }
         
         // Apply sorting
         if projectSortOrder == "alphabetical" {
