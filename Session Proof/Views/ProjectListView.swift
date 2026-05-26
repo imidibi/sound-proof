@@ -27,6 +27,10 @@ struct ProjectListView: View {
     @State private var expandedSongs: Set<UUID> = []
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
+    // Display preferences
+    @AppStorage("showArchivedProjects") private var showArchivedProjects = false
+    @AppStorage("projectSortOrder") private var projectSortOrder = "lastActivity"
+    
     // Notification deep link handling
     @State private var pendingNavigation: (projectId: String, mixId: String)?
     
@@ -48,11 +52,35 @@ struct ProjectListView: View {
     }
     
     private var activeProjects: [Project] {
-        projects.filter { $0.status != .archived }
+        let filtered = projects.filter { $0.status != .archived }
+        
+        // Apply sorting
+        if projectSortOrder == "alphabetical" {
+            return filtered.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        } else {
+            // Default: lastActivity (already sorted by updatedAt from @Query)
+            return filtered
+        }
     }
     
     private var archivedProjects: [Project] {
-        projects.filter { $0.status == .archived }
+        let filtered = projects.filter { $0.status == .archived }
+        
+        // Apply sorting
+        if projectSortOrder == "alphabetical" {
+            return filtered.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        } else {
+            // Default: lastActivity
+            return filtered
+        }
+    }
+    
+    private var shouldShowArchivedSection: Bool {
+        // Only show archived section if:
+        // 1. There are archived projects
+        // 2. User is a producer (checked in the view)
+        // 3. User has enabled the setting
+        return !archivedProjects.isEmpty && showArchivedProjects
     }
     
     var body: some View {
@@ -111,9 +139,9 @@ struct ProjectListView: View {
                     }
                 }
                 
-                if !projects.filter({ $0.status == .archived }).isEmpty {
+                if shouldShowArchivedSection {
                     Section("Archived") {
-                        ForEach(projects.filter { $0.status == .archived }) { project in
+                        ForEach(archivedProjects) { project in
                             ProjectFolderRow(
                                 project: project,
                                 isExpanded: expandedProjects.contains(project.id),
@@ -384,6 +412,7 @@ struct ProjectFolderRow: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @State private var showingNewSongSheet = false
     @State private var showingEditProjectSheet = false
@@ -508,6 +537,21 @@ struct ProjectFolderRow: View {
                 if canDelete {
                     Divider()
                     
+                    // Archive/Reload option
+                    if project.status == .archived {
+                        Button {
+                            reloadProject()
+                        } label: {
+                            Label("Reload Project", systemImage: "arrow.counterclockwise")
+                        }
+                    } else {
+                        Button {
+                            archiveProject()
+                        } label: {
+                            Label("Archive Project", systemImage: "archivebox")
+                        }
+                    }
+                    
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
@@ -551,6 +595,56 @@ struct ProjectFolderRow: View {
             print("Error deleting project: \(error)")
         }
     }
+    
+    private func archiveProject() {
+        project.status = .archived
+        project.isArchived = true
+        project.archivedAt = Date()
+        
+        do {
+            try modelContext.save()
+            print("✅ Project archived locally: \(project.name)")
+            
+            // Sync to Firestore
+            if let projectId = project.firestoreId {
+                Task {
+                    do {
+                        try await firestoreService.archiveProject(projectId: projectId)
+                        print("✅ Project archive synced to Firestore")
+                    } catch {
+                        print("❌ Error syncing archive to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            print("❌ Error archiving project: \(error)")
+        }
+    }
+    
+    private func reloadProject() {
+        project.status = .draft
+        project.isArchived = false
+        project.archivedAt = nil
+        
+        do {
+            try modelContext.save()
+            print("✅ Project reloaded locally: \(project.name)")
+            
+            // Sync to Firestore
+            if let projectId = project.firestoreId {
+                Task {
+                    do {
+                        try await firestoreService.reloadProject(projectId: projectId)
+                        print("✅ Project reload synced to Firestore")
+                    } catch {
+                        print("❌ Error syncing reload to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            print("❌ Error reloading project: \(error)")
+        }
+    }
 }
 
 struct SongFolderRow: View {
@@ -563,6 +657,7 @@ struct SongFolderRow: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
     
     @State private var showingImportSheet = false
     @State private var showingApprovalsStatus = false
@@ -665,6 +760,21 @@ struct SongFolderRow: View {
                 if canDelete {
                     Divider()
                     
+                    // Archive/Reload option
+                    if song.status == .archived {
+                        Button {
+                            reloadSong()
+                        } label: {
+                            Label("Reload Song", systemImage: "arrow.counterclockwise")
+                        }
+                    } else {
+                        Button {
+                            archiveSong()
+                        } label: {
+                            Label("Archive Song", systemImage: "archivebox")
+                        }
+                    }
+                    
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
@@ -702,6 +812,58 @@ struct SongFolderRow: View {
             try modelContext.save()
         } catch {
             print("Error deleting song: \(error)")
+        }
+    }
+    
+    private func archiveSong() {
+        song.status = .archived
+        song.isArchived = true
+        song.archivedAt = Date()
+        
+        do {
+            try modelContext.save()
+            print("✅ Song archived locally: \(song.name)")
+            
+            // Sync to Firestore
+            if let projectId = song.project?.firestoreId,
+               let songId = song.firestoreId {
+                Task {
+                    do {
+                        try await firestoreService.archiveSong(projectId: projectId, songId: songId)
+                        print("✅ Song archive synced to Firestore")
+                    } catch {
+                        print("❌ Error syncing archive to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            print("❌ Error archiving song: \(error)")
+        }
+    }
+    
+    private func reloadSong() {
+        song.status = .draft
+        song.isArchived = false
+        song.archivedAt = nil
+        
+        do {
+            try modelContext.save()
+            print("✅ Song reloaded locally: \(song.name)")
+            
+            // Sync to Firestore
+            if let projectId = song.project?.firestoreId,
+               let songId = song.firestoreId {
+                Task {
+                    do {
+                        try await firestoreService.reloadSong(projectId: projectId, songId: songId)
+                        print("✅ Song reload synced to Firestore")
+                    } catch {
+                        print("❌ Error syncing reload to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            print("❌ Error reloading song: \(error)")
         }
     }
 }

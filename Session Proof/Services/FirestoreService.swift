@@ -40,6 +40,24 @@ class FirestoreService {
         try await db.collection("projects").document(projectId).updateData(updateData)
     }
     
+    func archiveProject(projectId: String) async throws {
+        let data: [String: Any] = [
+            "status": "Archived",
+            "isArchived": true,
+            "archivedAt": Timestamp(date: Date())
+        ]
+        try await updateProject(projectId: projectId, data: data)
+    }
+    
+    func reloadProject(projectId: String) async throws {
+        let data: [String: Any] = [
+            "status": "Draft",
+            "isArchived": false,
+            "archivedAt": NSNull()
+        ]
+        try await updateProject(projectId: projectId, data: data)
+    }
+    
     func getProject(projectId: String) async throws -> [String: Any]? {
         let document = try await db.collection("projects").document(projectId).getDocument()
         return document.data()
@@ -221,6 +239,24 @@ class FirestoreService {
             .collection("songs").document(songId)
             .setData(updateData, merge: true)
         print("   - setData completed successfully")
+    }
+    
+    func archiveSong(projectId: String, songId: String) async throws {
+        let data: [String: Any] = [
+            "status": "Archived",
+            "isArchived": true,
+            "archivedAt": Timestamp(date: Date())
+        ]
+        try await updateSong(projectId: projectId, songId: songId, data: data)
+    }
+    
+    func reloadSong(projectId: String, songId: String) async throws {
+        let data: [String: Any] = [
+            "status": "Draft",
+            "isArchived": false,
+            "archivedAt": NSNull()
+        ]
+        try await updateSong(projectId: projectId, songId: songId, data: data)
     }
     
     func songExists(projectId: String, songId: String) async throws -> Bool {

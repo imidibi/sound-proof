@@ -30,6 +30,10 @@ struct SettingsView: View {
     @State private var lastSyncTime: Date?
     @State private var showingHelp = false
     
+    // Display preferences
+    @AppStorage("showArchivedProjects") private var showArchivedProjects = false
+    @AppStorage("projectSortOrder") private var projectSortOrder = "lastActivity"
+    
     // Profile editing
     @State private var editedDisplayName = ""
     @State private var editedEmail = ""
@@ -221,6 +225,24 @@ struct SettingsView: View {
                         .fontWeight(.semibold)
                 } footer: {
                     Text("Manually sync your projects and organization with the cloud.")
+                }
+                
+                // Display preferences (only for producers)
+                if let user = authService.currentUser, user.isProducer {
+                    Section {
+                        Toggle("Show Archived Projects", isOn: $showArchivedProjects)
+                        
+                        Picker("Project Sort Order", selection: $projectSortOrder) {
+                            Text("Last Activity").tag("lastActivity")
+                            Text("Alphabetical").tag("alphabetical")
+                        }
+                    } header: {
+                        Text("Display")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    } footer: {
+                        Text("Control how projects are displayed in your project list.")
+                    }
                 }
                 
                 Section {

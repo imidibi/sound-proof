@@ -41,8 +41,11 @@ service cloud.firestore {
     // Projects collection
     match /projects/{projectId} {
       // Allow reading individual projects
+      // Reviewers cannot access archived projects
       allow get: if isSignedIn() &&
-                    (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                    (isProjectOwner(projectId) ||
+                     (isProjectReviewer(projectId) &&
+                      (!('isArchived' in resource.data) || resource.data.isArchived == false)));
       // Allow listing all projects (needed for finding invitations by email)
       // Users can only actually read project details if they're owner/reviewer
       allow list: if isSignedIn();
@@ -77,8 +80,11 @@ service cloud.firestore {
 
       // Songs subcollection
       match /songs/{songId} {
+        // Reviewers cannot access archived songs
         allow read: if isSignedIn() &&
-                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                       (isProjectOwner(projectId) ||
+                        (isProjectReviewer(projectId) &&
+                         (!('isArchived' in resource.data) || resource.data.isArchived == false)));
         allow write: if isSignedIn() && isProjectOwner(projectId);
 
         // Mixes subcollection

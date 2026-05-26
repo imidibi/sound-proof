@@ -296,27 +296,34 @@ struct MixInfoSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
-            Picker("Status", selection: $mix.approvalStatus) {
-                // Show all statuses to producers/key approvers
-                // Artists can only see non-approval statuses
-                if canApproveMix {
-                    ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
-                        Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
-                            .tag(status)
-                    }
-                } else {
-                    // Artists cannot set mix to approved
-                    ForEach([MixStatus.draft, .shared, .inReview, .superseded], id: \.self) { status in
+            // For producers/key approvers: Show dropdown with manual options (Superseded, Approved)
+            // For approvers: Show read-only text
+            if canApproveMix {
+                Picker("Status", selection: $mix.approvalStatus) {
+                    // Only show manual override options
+                    ForEach([MixStatus.superseded, .approved], id: \.self) { status in
                         Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
                             .tag(status)
                     }
                 }
-            }
-            .pickerStyle(.menu)
-            .disabled(!canApproveMix && mix.approvalStatus == .approved) // Don't let artists change approved status
-            .onChange(of: mix.approvalStatus) { oldValue, newValue in
-                Task {
-                    await handleApprovalStatusChange(from: oldValue, to: newValue)
+                .pickerStyle(.menu)
+                .onChange(of: mix.approvalStatus) { oldValue, newValue in
+                    Task {
+                        await handleApprovalStatusChange(from: oldValue, to: newValue)
+                    }
+                }
+            } else {
+                // Read-only status display for approvers
+                HStack(spacing: 8) {
+                    Text("\(mixStatusEmoji(for: mix.approvalStatus)) \(mix.approvalStatus.rawValue)")
+                        .font(.body)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(mixStatusColor(for: mix.approvalStatus).opacity(0.2))
+                        .foregroundStyle(mixStatusColor(for: mix.approvalStatus))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    
+                    Spacer()
                 }
             }
             
@@ -324,6 +331,11 @@ struct MixInfoSection: View {
             
             LabeledContent("Name", value: mix.name)
             LabeledContent("Version", value: "V\(mix.versionNumber)")
+            
+            Divider()
+            
+            // My Approval section - for all users to set their personal approval
+            MyApprovalSection(mix: mix)
             
             Divider()
             
@@ -579,6 +591,16 @@ struct MixInfoSection: View {
         }
     }
     
+    private func mixStatusColor(for status: MixStatus) -> Color {
+        switch status {
+        case .draft: return .secondary
+        case .shared: return .cyan
+        case .inReview: return .blue
+        case .approved: return .green
+        case .superseded: return .gray
+        }
+    }
+    
     private func formatDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
@@ -595,6 +617,102 @@ struct MixInfoSection: View {
         case 1: return "Mono"
         case 2: return "Stereo"
         default: return "\(channels) channels"
+        }
+    }
+}
+
+struct MyApprovalSection: View {
+    @Bindable var mix: Mix
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
+    
+    // Get current user's approval for this mix
+    private var myApproval: Approval? {
+        guard let currentUserId = authService.currentUser?.id else { return nil }
+        
+        return mix.approvals.first { approval in
+            approval.reviewer?.userId == currentUserId
+        }
+    }
+    
+    // Get current user's approval status
+    private var currentStatus: ApprovalStatus {
+        myApproval?.status ?? .pending
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("My Approval")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            
+            Picker("My Approval", selection: Binding(
+                get: { currentStatus },
+                set: { newStatus in
+                    Task {
+                        await setMyApproval(to: newStatus)
+                    }
+                }
+            )) {
+                Text("✅ Approve").tag(ApprovalStatus.approved)
+                Text("⚠️ Request Changes").tag(ApprovalStatus.changesRequested)
+                Text("👀 Reset to In Review").tag(ApprovalStatus.pending)
+            }
+            .pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private func setMyApproval(to status: ApprovalStatus) async {
+        guard let currentUserId = authService.currentUser?.id,
+              let project = mix.song?.project else {
+            print("⚠️ Cannot set approval - missing user or project")
+            return
+        }
+        
+        // Find the reviewer for this user
+        guard let reviewer = project.reviewers.first(where: { $0.userId == currentUserId }) else {
+            print("⚠️ Cannot set approval - user is not a reviewer")
+            return
+        }
+        
+        // Create or update approval
+        if let approval = myApproval {
+            // Update existing approval
+            approval.status = status
+            approval.updatedAt = Date()
+            print("✅ Updated my approval to: \(status.rawValue)")
+        } else {
+            // Create new approval
+            let approval = Approval(status: status)
+            approval.mix = mix
+            approval.reviewer = reviewer
+            approval.needsUpload = true
+            modelContext.insert(approval)
+            print("✅ Created new approval with status: \(status.rawValue)")
+        }
+        
+        // Save to local database
+        do {
+            try modelContext.save()
+            
+            // Sync to Firestore
+            if let projectId = project.firestoreId,
+               let songId = mix.song?.firestoreId,
+               let mixId = mix.firestoreId,
+               let approval = myApproval {
+                _ = try await firestoreService.createOrUpdateApproval(
+                    projectId: projectId,
+                    songId: songId,
+                    mixId: mixId,
+                    approval: approval,
+                    reviewerUserId: currentUserId
+                )
+                print("✅ Approval synced to Firestore")
+            }
+        } catch {
+            print("❌ Error saving approval: \(error)")
         }
     }
 }
@@ -1066,18 +1184,7 @@ struct ApprovalRowView: View {
     @Bindable var mix: Mix
     let approval: Approval?
     
-    @Environment(AuthenticationService.self) private var authService
-    @Environment(FirestoreService.self) private var firestoreService
-    @Environment(\.modelContext) private var modelContext
-    
-    // Check if this is the current user's approval row
-    var isCurrentUser: Bool {
-        guard let currentUserId = authService.currentUser?.id,
-              let reviewerUserId = reviewer.userId else {
-            return false
-        }
-        return currentUserId == reviewerUserId
-    }
+
     
     var body: some View {
         HStack {
@@ -1099,189 +1206,12 @@ struct ApprovalRowView: View {
             
             Spacer()
             
-            // Show approval status icon for other reviewers
-            // Show action buttons for current user
-            if isCurrentUser {
-                HStack(spacing: 8) {
-                    // Show current status if already approved/requested changes
-                    if let approval = approval, approval.status != .pending {
-                        ApprovalStatusIcon(status: approval.status)
-                    }
-                    
-                    // Always show buttons for current user to change their mind
-                    Menu {
-                        Button {
-                            setApprovalStatus(.approved)
-                        } label: {
-                            Label("Approve", systemImage: "checkmark.circle.fill")
-                        }
-                        
-                        Button {
-                            setApprovalStatus(.changesRequested)
-                        } label: {
-                            Label("Request Changes", systemImage: "exclamationmark.circle.fill")
-                        }
-                        
-                        if approval?.status != .pending {
-                            Button {
-                                setApprovalStatus(.pending)
-                            } label: {
-                                Label("Reset to Pending", systemImage: "clock")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } else {
-                ApprovalStatusIcon(status: approval?.status ?? .pending)
-            }
+            // Show approval status icon for all users
+            ApprovalStatusIcon(status: approval?.status ?? .pending)
         }
         .padding(8)
         .background(Color.secondary.opacity(0.1))
         .cornerRadius(6)
-    }
-    
-    private func setApprovalStatus(_ status: ApprovalStatus) {
-        print("🎯 Setting approval status to: \(status.rawValue)")
-        print("   Reviewer: \(reviewer.displayName)")
-        print("   Mix: \(mix.name)")
-        
-        // Enforce one approval per user per song
-        // If approving a mix, clear any other approvals by this user on other mixes of the same song
-        if status == .approved, let song = mix.song {
-            clearOtherMixApprovals(for: reviewer, in: song)
-        }
-        
-        let approvalToSync: Approval
-        
-        if let existingApproval = approval {
-            // Update existing approval
-            existingApproval.status = status
-            existingApproval.updatedAt = Date()
-            existingApproval.needsUpload = true // Mark for sync
-            approvalToSync = existingApproval
-            print("✅ Updated existing approval")
-        } else {
-            // Create new approval
-            let newApproval = Approval(status: status, needsUpload: true)
-            newApproval.mix = mix
-            newApproval.reviewer = reviewer
-            modelContext.insert(newApproval)
-            approvalToSync = newApproval
-            print("✅ Created new approval")
-        }
-        
-        do {
-            try modelContext.save()
-            print("✅ Approval saved to local database")
-            
-            // Check if song should be auto-approved (if this is a key approver)
-            if status == .approved && reviewer.isKeyApprover {
-                checkAndAutoApproveSong()
-            }
-            
-            // Sync to Firestore
-            Task {
-                await syncApprovalToFirestore(approvalToSync)
-            }
-        } catch {
-            print("❌ Error saving approval: \(error)")
-        }
-    }
-    
-    private func syncApprovalToFirestore(_ approval: Approval) async {
-        guard let projectId = mix.song?.project?.firestoreId,
-              let songId = mix.song?.firestoreId,
-              let mixId = mix.firestoreId,
-              let reviewerUserId = reviewer.userId else {
-            print("⚠️ Cannot sync approval - missing required IDs")
-            return
-        }
-        
-        do {
-            print("🔄 Syncing approval to Firestore...")
-            let approvalId = try await firestoreService.createOrUpdateApproval(
-                projectId: projectId,
-                songId: songId,
-                mixId: mixId,
-                approval: approval,
-                reviewerUserId: reviewerUserId
-            )
-            
-            // Mark as synced
-            await MainActor.run {
-                approval.needsUpload = false
-                approval.lastSyncedAt = Date()
-                try? modelContext.save()
-            }
-            
-            print("✅ Approval synced to Firestore with ID: \(approvalId)")
-        } catch {
-            print("❌ Failed to sync approval to Firestore: \(error)")
-        }
-    }
-    
-    private func clearOtherMixApprovals(for reviewer: Reviewer, in song: Song) {
-        // Find all approvals by this reviewer on other mixes in the same song
-        for otherMix in song.mixes where otherMix.id != mix.id {
-            if let otherApproval = otherMix.approvals.first(where: { $0.reviewer?.id == reviewer.id }) {
-                if otherApproval.status == .approved {
-                    print("🔄 Clearing previous approval on mix: \(otherMix.name)")
-                    otherApproval.status = .pending
-                    otherApproval.updatedAt = Date()
-                    
-                    // Sync to Firestore
-                    if let project = song.project,
-                       let projectId = project.firestoreId,
-                       let songId = song.firestoreId,
-                       let mixId = otherMix.firestoreId,
-                       let reviewerUserId = reviewer.userId {
-                        Task {
-                            do {
-                                _ = try await firestoreService.createOrUpdateApproval(
-                                    projectId: projectId,
-                                    songId: songId,
-                                    mixId: mixId,
-                                    approval: otherApproval,
-                                    reviewerUserId: reviewerUserId
-                                )
-                                print("✅ Cleared approval synced to Firestore")
-                            } catch {
-                                print("❌ Failed to sync cleared approval: \(error)")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func checkAndAutoApproveSong() {
-        guard let song = mix.song else { return }
-        
-        // Key approver approved mix - auto-approve the song
-        print("🎯 Key approver (\(reviewer.displayName)) approved mix - auto-approving song")
-        song.status = .approved
-        
-        do {
-            try modelContext.save()
-            print("✅ Song auto-approved")
-            
-            // Sync to Firestore if needed
-            if let project = song.project,
-               project.firestoreId != nil,
-               song.firestoreId != nil {
-                Task {
-                    // TODO: Add updateSongStatus to FirestoreService if needed
-                    print("📤 Syncing song status to Firestore (if implemented)")
-                }
-            }
-        } catch {
-            print("❌ Error auto-approving song: \(error)")
-        }
     }
     
     private func approvalColor(_ status: ApprovalStatus) -> Color {
