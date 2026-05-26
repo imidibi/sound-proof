@@ -57,7 +57,7 @@ struct InAppNotificationBanner: View {
 }
 
 struct InAppNotificationOverlay: View {
-    @Environment(InAppNotificationService.self) private var notificationService
+    var notificationService: InAppNotificationService
     
     var body: some View {
         if let notification = notificationService.currentNotification {

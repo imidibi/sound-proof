@@ -122,7 +122,7 @@ struct Session_ProofApp: App {
                     .environment(notificationService)
                     .environment(inAppNotificationService)
                     .overlay {
-                        InAppNotificationOverlay()
+                        InAppNotificationOverlay(notificationService: inAppNotificationService)
                     }
                     .onOpenURL { url in
                         handleIncomingURL(url)
