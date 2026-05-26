@@ -25,6 +25,7 @@ struct Session_ProofApp: App {
     @State private var networkMonitor: NetworkMonitor
     @State private var syncQueueService: SyncQueueService
     @State private var notificationService: NotificationService
+    @State private var inAppNotificationService = InAppNotificationService()
     @State private var pendingInvitationURL: URL?
     
     var sharedModelContainer: ModelContainer = {
@@ -82,11 +83,15 @@ struct Session_ProofApp: App {
         let auth = AuthenticationService()
         let firestore = FirestoreService()
         let cloudStorage = CloudStorageService()
+        let inAppNotification = InAppNotificationService()
         let sync = ProjectSyncService(
             firestoreService: firestore,
             cloudStorageService: cloudStorage,
             authService: auth
         )
+        // Inject the in-app notification service into sync service
+        sync.inAppNotificationService = inAppNotification
+        
         let network = NetworkMonitor()
         let syncQueue = SyncQueueService(syncService: sync)
         let notification = NotificationService(authService: auth, firestoreService: firestore)
@@ -98,6 +103,7 @@ struct Session_ProofApp: App {
         _networkMonitor = State(initialValue: network)
         _syncQueueService = State(initialValue: syncQueue)
         _notificationService = State(initialValue: notification)
+        _inAppNotificationService = State(initialValue: inAppNotification)
     }
 
     var body: some Scene {
@@ -114,6 +120,10 @@ struct Session_ProofApp: App {
                     .environment(networkMonitor)
                     .environment(syncQueueService)
                     .environment(notificationService)
+                    .environment(inAppNotificationService)
+                    .overlay {
+                        InAppNotificationOverlay()
+                    }
                     .onOpenURL { url in
                         handleIncomingURL(url)
                     }
@@ -121,6 +131,17 @@ struct Session_ProofApp: App {
                         // Request notification permissions after user is authenticated
                         await notificationService.requestPermissions()
                     }
+                    #if os(iOS)
+                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                        // Clear badge when app becomes active
+                        notificationService.clearBadge()
+                    }
+                    #elseif os(macOS)
+                    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                        // Clear badge when app becomes active
+                        notificationService.clearBadge()
+                    }
+                    #endif
             } else {
                 AuthenticationView()
                     .environment(authService)

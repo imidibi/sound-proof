@@ -151,6 +151,18 @@ class NotificationService: NSObject {
             print("❌ Error deleting FCM token: \(error.localizedDescription)")
         }
     }
+    
+    /// Clear the app badge count
+    func clearBadge() {
+        Task { @MainActor in
+            #if os(iOS)
+            UIApplication.shared.applicationIconBadgeNumber = 0
+            #elseif os(macOS)
+            NSApplication.shared.dockTile.badgeLabel = nil
+            #endif
+            print("✅ Cleared app badge")
+        }
+    }
 }
 
 // MARK: - MessagingDelegate

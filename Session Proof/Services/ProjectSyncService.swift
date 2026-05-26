@@ -14,6 +14,7 @@ class ProjectSyncService {
     private let firestoreService: FirestoreService
     private let cloudStorageService: CloudStorageService
     private let authService: AuthenticationService
+    var inAppNotificationService: InAppNotificationService?
     
     var isSyncing = false
     var syncError: String?
@@ -77,6 +78,11 @@ class ProjectSyncService {
         songId: String,
         modelContext: ModelContext
     ) async throws {
+        // Only producers and studios can upload mixes
+        guard authService.currentUser?.isProducer == true else {
+            throw NSError(domain: "ProjectSync", code: 403, userInfo: [NSLocalizedDescriptionKey: "Only producers can create mixes"])
+        }
+        
         guard let fileURL = mix.resolvedAssetURL else {
             throw NSError(domain: "ProjectSync", code: 400, userInfo: [NSLocalizedDescriptionKey: "Mix has no local file"])
         }
@@ -320,7 +326,15 @@ class ProjectSyncService {
         modelContext: ModelContext
     ) -> FirebaseFirestore.ListenerRegistration {
         print("👂 Setting up comment listener for project: \(projectId), mix: \(mixId)")
-        return firestoreService.listenToComments(projectId: projectId, mixId: mixId) { [weak self] documents in
+        
+        // Get songId from mix's song relationship
+        guard let song = mix.song, let songId = song.firestoreId else {
+            print("⚠️ Cannot set up comment listener: mix has no song or song has no firestoreId")
+            // Return a dummy listener that does nothing
+            return firestoreService.listenToComments(projectId: "", songId: "", mixId: "") { _ in }
+        }
+        
+        return firestoreService.listenToComments(projectId: projectId, songId: songId, mixId: mixId) { [weak self] documents in
             guard let self = self else { return }
             
             print("📬 Received \(documents.count) comment documents from Firestore")
@@ -1099,11 +1113,23 @@ class ProjectSyncService {
         
         if let approval = existingApproval {
             // Update existing approval
+            let oldStatus = approval.status
             approval.status = status
             if let updatedTimestamp = approvalData["updatedAt"] as? Timestamp {
                 approval.updatedAt = updatedTimestamp.dateValue()
             }
             print("✅ Updated existing approval for \(reviewer.displayName)")
+            
+            // Show in-app notification if status changed and user is producer
+            if oldStatus != status, authService.currentUser?.isProducer == true {
+                showApprovalNotification(
+                    reviewerName: reviewer.displayName,
+                    status: status,
+                    mixName: mix.name,
+                    songName: mix.song?.name ?? "Song",
+                    projectName: project.name
+                )
+            }
         } else {
             // Create new approval
             let newApproval = Approval(status: status)
@@ -1119,6 +1145,17 @@ class ProjectSyncService {
             
             modelContext.insert(newApproval)
             print("✅ Created new approval for \(reviewer.displayName)")
+            
+            // Show in-app notification for new approval if user is producer
+            if authService.currentUser?.isProducer == true {
+                showApprovalNotification(
+                    reviewerName: reviewer.displayName,
+                    status: status,
+                    mixName: mix.name,
+                    songName: mix.song?.name ?? "Song",
+                    projectName: project.name
+                )
+            }
         }
         
         do {
@@ -1880,5 +1917,39 @@ class ProjectSyncService {
         }
         
         print("🎉 Song sync complete: \(successCount) uploaded, \(failCount) failed")
+    }
+    
+    // MARK: - In-App Notifications
+    
+    private func showApprovalNotification(
+        reviewerName: String,
+        status: ApprovalStatus,
+        mixName: String,
+        songName: String,
+        projectName: String
+    ) {
+        guard let notificationService = inAppNotificationService else { return }
+        
+        let title: String
+        let message: String
+        
+        switch status {
+        case .approved:
+            title = "✅ Mix Approved"
+            message = "\(reviewerName) approved \(mixName) in \(songName)"
+        case .changesRequested:
+            title = "🔄 Changes Requested"
+            message = "\(reviewerName) requested changes to \(mixName) in \(songName)"
+        case .pending:
+            return // Don't notify for pending status
+        }
+        
+        Task { @MainActor in
+            notificationService.showNotification(
+                type: .approvalStatusChanged,
+                title: title,
+                message: message
+            )
+        }
     }
 }

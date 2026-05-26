@@ -441,6 +441,8 @@ class FirestoreService {
         voiceNoteURL: String? = nil
     ) async throws -> String {
         let commentRef = db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
             .collection("comments").document(comment.id.uuidString)
         
         var data: [String: Any] = [
@@ -468,22 +470,28 @@ class FirestoreService {
     
     func updateCommentStatus(
         projectId: String,
+        songId: String,
+        mixId: String,
         commentId: String,
         status: CommentStatus
     ) async throws {
         try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
             .collection("comments").document(commentId)
             .updateData(["status": status.rawValue])
     }
     
     func listenToComments(
         projectId: String,
+        songId: String,
         mixId: String,
         onChange: @escaping ([QueryDocumentSnapshot]) -> Void
     ) -> ListenerRegistration {
         return db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
             .collection("comments")
-            .whereField("mixId", isEqualTo: mixId)
             .addSnapshotListener { snapshot, error in
                 guard let documents = snapshot?.documents else {
                     print("Error fetching comments: \(error?.localizedDescription ?? "Unknown error")")

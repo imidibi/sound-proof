@@ -14,6 +14,7 @@ struct ContentView: View {
     @Environment(ProjectSyncService.self) private var syncService
     @Environment(NetworkMonitor.self) private var networkMonitor
     @Environment(SyncQueueService.self) private var syncQueueService
+    @Environment(NotificationService.self) private var notificationService
     
     @State private var hasSyncedOnce = false
     @State private var syncTimer: Task<Void, Never>?
@@ -51,6 +52,11 @@ struct ContentView: View {
                             )
                             print("✅ Initial organization sync completed")
                             
+                            // Refresh FCM token now that user is authenticated
+                            // This ensures the token gets saved even if it arrived before authentication
+                            await notificationService.refreshFCMToken()
+                            print("✅ FCM token refreshed after authentication")
+                            
                             // Auto-sync any unsyncced songs
                             do {
                                 try await syncService.syncUnsyncedSongsToCloud(
@@ -80,6 +86,10 @@ struct ContentView: View {
                             } catch {
                                 print("❌ Auto-sync of approvals failed: \(error)")
                             }
+                            
+                            // Auto-sync any unsyncced comments
+                            await syncQueueService.processPendingSyncs(modelContext: modelContext)
+                            print("✅ Auto-sync of unsyncced comments completed")
                         } catch {
                             print("❌ Initial sync failed: \(error)")
                         }

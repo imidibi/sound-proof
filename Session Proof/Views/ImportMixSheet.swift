@@ -17,6 +17,7 @@ struct ImportMixSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ProjectSyncService.self) private var syncService
     @Environment(CloudStorageService.self) private var cloudStorage
+    @Environment(AuthenticationService.self) private var authService
     
     @State private var mixName = ""
     @State private var notes = ""
@@ -205,6 +206,15 @@ struct ImportMixSheet: View {
     
     private func importMix() async {
         guard let sourceURL = selectedFileURL else { return }
+        
+        // Only producers can create mixes
+        guard authService.currentUser?.isProducer == true else {
+            await MainActor.run {
+                errorMessage = "Only producers can create mixes"
+                isImporting = false
+            }
+            return
+        }
         
         isImporting = true
         errorMessage = nil

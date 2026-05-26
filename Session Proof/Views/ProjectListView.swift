@@ -236,7 +236,7 @@ struct ProjectListView: View {
                             }
                         }
                         
-                        if let selectedSong = selectedSongForMenu {
+                        if let selectedSong = selectedSongForMenu, authService.currentUser?.isProducer == true {
                             Divider()
                             Button {
                                 showingImportMixSheet = true
@@ -279,7 +279,7 @@ struct ProjectListView: View {
                             }
                         }
                         
-                        if let selectedSong = selectedSongForMenu {
+                        if let selectedSong = selectedSongForMenu, authService.currentUser?.isProducer == true {
                             Divider()
                             Button {
                                 showingImportMixSheet = true
@@ -743,12 +743,14 @@ struct SongFolderRow: View {
                 
                 Divider()
                 
-                Button {
-                    selectedSongForMenu = song
-                    selectedProjectForMenu = nil
-                    showingImportSheet = true
-                } label: {
-                    Label("Import Mix", systemImage: "square.and.arrow.down")
+                if authService.currentUser?.isProducer == true {
+                    Button {
+                        selectedSongForMenu = song
+                        selectedProjectForMenu = nil
+                        showingImportSheet = true
+                    } label: {
+                        Label("Import Mix", systemImage: "square.and.arrow.down")
+                    }
                 }
                 
                 Button {
