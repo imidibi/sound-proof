@@ -15,6 +15,7 @@ enum SongStatus: String, Codable {
     case mixingComplete = "Mixing Complete"
     
     // New values
+    case shared = "Shared"
     case inReview = "In Review"
     case revisionsNeeded = "Revisions Needed"
     case approved = "Approved"
@@ -37,6 +38,10 @@ final class Song {
     var needsUpload: Bool = false // Flag for pending upload to cloud
     var lastSyncedAt: Date? // Last time synced to Firestore
     
+    // Archive fields
+    var isArchived: Bool = false
+    var archivedAt: Date?
+    
     var project: Project?
     
     @Relationship(deleteRule: .cascade, inverse: \Mix.song)
@@ -55,7 +60,9 @@ final class Song {
         updatedAt: Date = Date(),
         sortOrder: Int = 0,
         needsUpload: Bool = false,
-        lastSyncedAt: Date? = nil
+        lastSyncedAt: Date? = nil,
+        isArchived: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -67,5 +74,7 @@ final class Song {
         self.sortOrder = sortOrder
         self.needsUpload = needsUpload
         self.lastSyncedAt = lastSyncedAt
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
     }
 }

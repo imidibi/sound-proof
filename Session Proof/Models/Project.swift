@@ -74,6 +74,10 @@ final class Project {
     var isSynced: Bool = false // Whether synced to cloud
     var lastSyncedAt: Date?
     
+    // Archive fields
+    var isArchived: Bool = false
+    var archivedAt: Date?
+    
     @Relationship(deleteRule: .cascade, inverse: \Song.project)
     var songs: [Song] = []
     
@@ -100,7 +104,9 @@ final class Project {
         firestoreId: String? = nil,
         shareCode: String? = nil,
         isSynced: Bool = false,
-        lastSyncedAt: Date? = nil
+        lastSyncedAt: Date? = nil,
+        isArchived: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -122,5 +128,7 @@ final class Project {
         self.shareCode = shareCode
         self.isSynced = isSynced
         self.lastSyncedAt = lastSyncedAt
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
     }
 }

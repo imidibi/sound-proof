@@ -207,6 +207,7 @@ struct SongStatusSection: View {
     private func statusEmoji(for status: SongStatus) -> String {
         switch status {
         case .inReview: return "👀"
+        case .shared: return "📤"
         case .revisionsNeeded: return "⚠️"
         case .approved: return "✅"
         case .archived: return "📦"
@@ -219,6 +220,7 @@ struct SongStatusSection: View {
     private func statusColor(for status: SongStatus) -> Color {
         switch status {
         case .inReview: return .blue
+        case .shared: return .cyan
         case .revisionsNeeded: return .orange
         case .approved: return .green
         case .archived: return .gray
@@ -245,6 +247,7 @@ struct SongStatusBadge: View {
     private var statusColor: Color {
         switch status {
         case .inReview: return .blue
+        case .shared: return .cyan
         case .revisionsNeeded: return .orange
         case .approved: return .green
         case .archived: return .gray
@@ -257,6 +260,7 @@ struct SongStatusBadge: View {
     private var statusEmoji: String {
         switch status {
         case .inReview: return "🔵"
+        case .shared: return "📤"
         case .revisionsNeeded: return "🟠"
         case .approved: return "✅"
         case .archived: return "⚫"
