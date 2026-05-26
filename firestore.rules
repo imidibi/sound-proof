@@ -112,19 +112,19 @@ service cloud.firestore {
             // Only project owner can delete approvals
             allow delete: if isSignedIn() && isProjectOwner(projectId);
           }
-        }
-      }
 
-      // Comments subcollection
-      match /comments/{commentId} {
-        allow read: if isSignedIn() &&
-                       (isProjectOwner(projectId) || isProjectReviewer(projectId));
-        allow create: if isSignedIn() &&
-                         (isProjectOwner(projectId) || isProjectReviewer(projectId));
-        allow update: if isSignedIn() &&
-                         (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
-        allow delete: if isSignedIn() &&
-                         (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+          // Comments subcollection
+          match /comments/{commentId} {
+            allow read: if isSignedIn() &&
+                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            allow create: if isSignedIn() &&
+                             (isProjectOwner(projectId) || isProjectReviewer(projectId));
+            allow update: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+            allow delete: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+          }
+        }
       }
     }
 
