@@ -130,13 +130,14 @@ class NotificationService: NSObject {
     
     /// Delete FCM token when user signs out
     func deleteFCMToken() async {
-        guard let userId = authService.currentUser?.id else {
+        guard let userId = authService.currentUser?.id,
+              let token = fcmToken else {
             return
         }
         
         do {
-            // Delete from Firestore
-            try await firestoreService.deleteUserFCMToken(userId: userId)
+            // Delete from Firestore (remove this specific device's token)
+            try await firestoreService.deleteUserFCMToken(userId: userId, fcmToken: token)
             
             // Delete from FCM
             try await Messaging.messaging().deleteToken()
@@ -145,7 +146,7 @@ class NotificationService: NSObject {
                 self.fcmToken = nil
             }
             
-            print("✅ Deleted FCM token")
+            print("✅ Deleted FCM token for this device")
         } catch {
             print("❌ Error deleting FCM token: \(error.localizedDescription)")
         }

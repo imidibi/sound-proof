@@ -745,23 +745,34 @@ class FirestoreService {
     
     // MARK: - FCM Token Management
     
+    /// Add or update FCM token for a device
+    /// Stores tokens in an array to support multiple devices per user
     func updateUserFCMToken(userId: String, fcmToken: String) async throws {
+        // Use arrayUnion to add token only if it doesn't already exist
         try await db.collection("users").document(userId).updateData([
-            "fcmToken": fcmToken,
-            "fcmTokenUpdatedAt": Timestamp(date: Date())
+            "fcmTokens": FieldValue.arrayUnion([fcmToken]),
+            "fcmTokensUpdatedAt": Timestamp(date: Date())
         ])
     }
     
-    func deleteUserFCMToken(userId: String) async throws {
+    /// Remove a specific FCM token (when user signs out on one device)
+    func deleteUserFCMToken(userId: String, fcmToken: String) async throws {
         try await db.collection("users").document(userId).updateData([
-            "fcmToken": FieldValue.delete(),
-            "fcmTokenUpdatedAt": FieldValue.delete()
+            "fcmTokens": FieldValue.arrayRemove([fcmToken]),
+            "fcmTokensUpdatedAt": Timestamp(date: Date())
         ])
     }
     
-    func getUserFCMToken(userId: String) async throws -> String? {
+    /// Get all FCM tokens for a user (all their devices)
+    func getUserFCMTokens(userId: String) async throws -> [String] {
         let document = try await db.collection("users").document(userId).getDocument()
-        return document.data()?["fcmToken"] as? String
+        return document.data()?["fcmTokens"] as? [String] ?? []
+    }
+    
+    /// Legacy method for backward compatibility - returns first token
+    func getUserFCMToken(userId: String) async throws -> String? {
+        let tokens = try await getUserFCMTokens(userId: userId)
+        return tokens.first
     }
     
     // MARK: - Organization Management

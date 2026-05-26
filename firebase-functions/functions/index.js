@@ -76,15 +76,23 @@ exports.onMixCreated = onDocumentCreated(
           continue;
         }
 
-        // Get the user's FCM token
+        // Get the user's FCM tokens (supports multiple devices)
         if (reviewer.userId) {
           const userDoc = await getFirestore()
             .collection("users")
             .doc(reviewer.userId)
             .get();
 
-          if (userDoc.exists && userDoc.data().fcmToken) {
-            tokens.push(userDoc.data().fcmToken);
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            // New format: array of tokens for multiple devices
+            if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+              tokens.push(...userData.fcmTokens);
+            }
+            // Legacy format: single token (for backward compatibility)
+            else if (userData.fcmToken) {
+              tokens.push(userData.fcmToken);
+            }
           }
         }
       }
@@ -193,8 +201,16 @@ exports.onMixUpdated = onDocumentUpdated(
             .doc(reviewer.userId)
             .get();
 
-          if (userDoc.exists && userDoc.data().fcmToken) {
-            tokens.push(userDoc.data().fcmToken);
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            // New format: array of tokens for multiple devices
+            if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+              tokens.push(...userData.fcmTokens);
+            }
+            // Legacy format: single token (for backward compatibility)
+            else if (userData.fcmToken) {
+              tokens.push(userData.fcmToken);
+            }
           }
         }
       }
@@ -289,20 +305,35 @@ exports.onCommentCreated = onDocumentCreated(
       const mixName = mixDoc.exists ? mixDoc.data().name : "Mix";
       const songName = songDoc.exists ? songDoc.data().name : "Song";
 
-      // Get producer's FCM token
+      // Get producer's FCM tokens (all devices)
       const producerDoc = await getFirestore()
         .collection("users")
         .doc(producerId)
         .get();
 
-      if (!producerDoc.exists || !producerDoc.data().fcmToken) {
-        console.log("Producer has no FCM token");
+      if (!producerDoc.exists) {
+        console.log("Producer document not found");
         return;
       }
 
-      const token = producerDoc.data().fcmToken;
+      const producerData = producerDoc.data();
+      const tokens = [];
 
-      // Send notification to producer
+      // New format: array of tokens for multiple devices
+      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
+        tokens.push(...producerData.fcmTokens);
+      }
+      // Legacy format: single token (for backward compatibility)
+      else if (producerData.fcmToken) {
+        tokens.push(producerData.fcmToken);
+      }
+
+      if (tokens.length === 0) {
+        console.log("Producer has no FCM tokens");
+        return;
+      }
+
+      // Send notification to producer (all devices)
       const message = {
         notification: {
           title: `New Comment on ${mixName}`,
@@ -314,12 +345,12 @@ exports.onCommentCreated = onDocumentCreated(
           songId: songId,
           mixId: mixId,
         },
-        token: token,
+        tokens: tokens,
       };
 
-      console.log("Attempting to send comment notification to producer");
-      const response = await getMessaging().send(message);
-      console.log("Sent comment notification to producer:", response);
+      console.log(`Attempting to send comment notification to producer (${tokens.length} devices)`);
+      const response = await getMessaging().sendEachForMulticast(message);
+      console.log(`Sent comment notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
     } catch (error) {
       console.error("Error sending comment notification:", error);
     }
@@ -386,18 +417,33 @@ exports.onApprovalUpdated = onDocumentUpdated(
       const mixName = mixDoc.exists ? mixDoc.data().name : "Mix";
       const songName = songDoc.exists ? songDoc.data().name : "Song";
 
-      // Get producer's FCM token
+      // Get producer's FCM tokens (all devices)
       const producerDoc = await getFirestore()
         .collection("users")
         .doc(producerId)
         .get();
 
-      if (!producerDoc.exists || !producerDoc.data().fcmToken) {
-        console.log("Producer has no FCM token");
+      if (!producerDoc.exists) {
+        console.log("Producer document not found");
         return;
       }
 
-      const token = producerDoc.data().fcmToken;
+      const producerData = producerDoc.data();
+      const tokens = [];
+
+      // New format: array of tokens for multiple devices
+      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
+        tokens.push(...producerData.fcmTokens);
+      }
+      // Legacy format: single token (for backward compatibility)
+      else if (producerData.fcmToken) {
+        tokens.push(producerData.fcmToken);
+      }
+
+      if (tokens.length === 0) {
+        console.log("Producer has no FCM tokens");
+        return;
+      }
 
       // Create appropriate message based on status
       let title, body;
@@ -412,7 +458,7 @@ exports.onApprovalUpdated = onDocumentUpdated(
         return;
       }
 
-      // Send notification to producer
+      // Send notification to producer (all devices)
       const message = {
         notification: {
           title: title,
@@ -425,12 +471,12 @@ exports.onApprovalUpdated = onDocumentUpdated(
           mixId: mixId,
           status: newData.status,
         },
-        token: token,
+        tokens: tokens,
       };
 
-      console.log("Attempting to send approval notification to producer");
-      const response = await getMessaging().send(message);
-      console.log("Sent approval status notification to producer:", response);
+      console.log(`Attempting to send approval notification to producer (${tokens.length} devices)`);
+      const response = await getMessaging().sendEachForMulticast(message);
+      console.log(`Sent approval notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
     } catch (error) {
       console.error("Error sending approval notification:", error);
     }
