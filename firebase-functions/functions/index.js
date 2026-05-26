@@ -9,11 +9,15 @@
  */
 
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
-const {initializeApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
-const {getMessaging} = require("firebase-admin/messaging");
+const admin = require("firebase-admin");
 
-initializeApp();
+// Initialize Firebase Admin with explicit project ID
+admin.initializeApp({
+  projectId: "approvl",
+});
+
+const getFirestore = () => admin.firestore();
+const getMessaging = () => admin.messaging();
 
 /**
  * Send notification when a new mix is created
@@ -105,11 +109,17 @@ exports.onMixCreated = onDocumentCreated(
         tokens: tokens,
       };
 
+      console.log(`Attempting to send to ${tokens.length} tokens`);
       const response = await getMessaging().sendEachForMulticast(message);
       console.log(`Sent ${response.successCount} notifications`);
 
       if (response.failureCount > 0) {
         console.log(`Failed to send ${response.failureCount} notifications`);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error(`Failed to send to token ${idx}:`, resp.error);
+          }
+        });
       }
     } catch (error) {
       console.error("Error sending new mix notification:", error);
@@ -208,8 +218,18 @@ exports.onMixUpdated = onDocumentUpdated(
         tokens: tokens,
       };
 
+      console.log(`Attempting to send to ${tokens.length} tokens`);
       const response = await getMessaging().sendEachForMulticast(message);
       console.log(`Sent ${response.successCount} notifications`);
+
+      if (response.failureCount > 0) {
+        console.log(`Failed to send ${response.failureCount} notifications`);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error(`Failed to send to token ${idx}:`, resp.error);
+          }
+        });
+      }
     } catch (error) {
       console.error("Error sending mix update notification:", error);
     }
@@ -297,8 +317,9 @@ exports.onCommentCreated = onDocumentCreated(
         token: token,
       };
 
-      await getMessaging().send(message);
-      console.log("Sent comment notification to producer");
+      console.log("Attempting to send comment notification to producer");
+      const response = await getMessaging().send(message);
+      console.log("Sent comment notification to producer:", response);
     } catch (error) {
       console.error("Error sending comment notification:", error);
     }
@@ -407,8 +428,9 @@ exports.onApprovalUpdated = onDocumentUpdated(
         token: token,
       };
 
-      await getMessaging().send(message);
-      console.log("Sent approval status notification to producer");
+      console.log("Attempting to send approval notification to producer");
+      const response = await getMessaging().send(message);
+      console.log("Sent approval status notification to producer:", response);
     } catch (error) {
       console.error("Error sending approval notification:", error);
     }
