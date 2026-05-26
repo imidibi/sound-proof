@@ -179,12 +179,21 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         print("📱 Received notification while app in foreground")
+        print("   Title: \(notification.request.content.title)")
+        print("   Body: \(notification.request.content.body)")
+        print("   Sound: \(notification.request.content.sound?.description ?? "none")")
+        print("   Badge: \(notification.request.content.badge?.intValue ?? 0)")
         
         let userInfo = notification.request.content.userInfo
         print("   Notification data: \(userInfo)")
         
         // Show notification even when app is in foreground
+        #if os(iOS)
         completionHandler([.banner, .sound, .badge])
+        #elseif os(macOS)
+        completionHandler([.banner, .sound, .badge])
+        #endif
+        print("   ✅ Called completion handler with [.banner, .sound, .badge]")
     }
     
     /// Handle notification tap

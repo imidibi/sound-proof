@@ -24,7 +24,10 @@ const getMessaging = () => admin.messaging();
  * Notifies all accepted approvers that a new mix is ready for review
  */
 exports.onMixCreated = onDocumentCreated(
-  "projects/{projectId}/songs/{songId}/mixes/{mixId}",
+  {
+    document: "projects/{projectId}/songs/{songId}/mixes/{mixId}",
+    database: "(default)",
+  },
   async (event) => {
     const mixData = event.data.data();
     const {projectId, songId, mixId} = event.params;
@@ -114,6 +117,18 @@ exports.onMixCreated = onDocumentCreated(
           songId: songId,
           mixId: mixId,
         },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: `New Mix: ${mixData.name}`,
+                body: `${songName} - Ready for your review in ${projectData.name}`,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
         tokens: tokens,
       };
 
@@ -140,7 +155,10 @@ exports.onMixCreated = onDocumentCreated(
  * Notifies all accepted approvers that a mix has been updated
  */
 exports.onMixUpdated = onDocumentUpdated(
-  "projects/{projectId}/songs/{songId}/mixes/{mixId}",
+  {
+    document: "projects/{projectId}/songs/{songId}/mixes/{mixId}",
+    database: "(default)",
+  },
   async (event) => {
     const newData = event.data.after.data();
     const oldData = event.data.before.data();
@@ -231,6 +249,18 @@ exports.onMixUpdated = onDocumentUpdated(
           songId: songId,
           mixId: mixId,
         },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: `Mix Updated: ${newData.name}`,
+                body: `${songName} - New version available in ${projectData.name}`,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
         tokens: tokens,
       };
 
@@ -257,7 +287,10 @@ exports.onMixUpdated = onDocumentUpdated(
  * Notifies the producer when an approver comments
  */
 exports.onCommentCreated = onDocumentCreated(
-  "projects/{projectId}/songs/{songId}/mixes/{mixId}/comments/{commentId}",
+  {
+    document: "projects/{projectId}/songs/{songId}/mixes/{mixId}/comments/{commentId}",
+    database: "(default)",
+  },
   async (event) => {
     const commentData = event.data.data();
     const {projectId, songId, mixId} = event.params;
@@ -345,6 +378,18 @@ exports.onCommentCreated = onDocumentCreated(
           songId: songId,
           mixId: mixId,
         },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: `New Comment on ${mixName}`,
+                body: `${commentData.authorName}: ${commentData.text.substring(0, 100)}${commentData.text.length > 100 ? "..." : ""}`,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
         tokens: tokens,
       };
 
@@ -362,7 +407,10 @@ exports.onCommentCreated = onDocumentCreated(
  * Notifies the producer when an approver approves or requests changes
  */
 exports.onApprovalUpdated = onDocumentUpdated(
-  "projects/{projectId}/songs/{songId}/mixes/{mixId}/approvals/{approvalId}",
+  {
+    document: "projects/{projectId}/songs/{songId}/mixes/{mixId}/approvals/{approvalId}",
+    database: "(default)",
+  },
   async (event) => {
     const newData = event.data.after.data();
     const oldData = event.data.before.data();
@@ -470,6 +518,18 @@ exports.onApprovalUpdated = onDocumentUpdated(
           songId: songId,
           mixId: mixId,
           status: newData.status,
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: title,
+                body: body,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
         },
         tokens: tokens,
       };
