@@ -79,7 +79,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                                 Picker("Role", selection: $editedRole) {
                                     ForEach([UserRole.producer, .studio, .artist], id: \.self) { role in
-                                        Text(role.rawValue.capitalized).tag(role)
+                                        Text(role == .artist ? "Approver" : role.rawValue.capitalized).tag(role)
                                     }
                                 }
                                 .pickerStyle(.segmented)
@@ -106,7 +106,7 @@ struct SettingsView: View {
                             // Read-only display
                             LabeledContent("Name", value: user.displayName)
                             LabeledContent("Email", value: user.email)
-                            LabeledContent("Role", value: user.role.rawValue.capitalized)
+                            LabeledContent("Role", value: user.role == .artist ? "Approver" : user.role.rawValue.capitalized)
                             
                             if let orgName = user.organizationName {
                                 LabeledContent("Organization", value: orgName)

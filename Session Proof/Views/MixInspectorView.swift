@@ -14,12 +14,23 @@ struct MixInspectorView: View {
     var onClose: (() -> Void)? = nil
     
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var showingNewCommentSheet = false
+    @State private var showingCancelConfirmation = false
     
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
+                #if os(iOS)
+                Button("Cancel") {
+                    handleCancel()
+                }
+                .foregroundStyle(.red)
+                
+                Spacer()
+                #endif
+                
                 Text("Inspector")
                     .font(.headline)
                 
@@ -34,6 +45,15 @@ struct MixInspectorView: View {
                 .help("Add Comment")
                 
                 #if os(macOS)
+                Button {
+                    handleCancel()
+                } label: {
+                    Text("Cancel")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Discard Changes")
+                
                 if let onClose = onClose {
                     Button {
                         onClose()
@@ -83,6 +103,39 @@ struct MixInspectorView: View {
                 timestamp: audioPlayerService.currentTime
             )
         }
+        .confirmationDialog(
+            "Discard Changes?",
+            isPresented: $showingCancelConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Changes", role: .destructive) {
+                discardChanges()
+            }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("Any unsaved changes will be lost.")
+        }
+    }
+    
+    private func handleCancel() {
+        #if os(iOS)
+        showingCancelConfirmation = true
+        #elseif os(macOS)
+        showingCancelConfirmation = true
+        #endif
+    }
+    
+    private func discardChanges() {
+        // Rollback any changes made to the model context
+        modelContext.rollback()
+        
+        #if os(iOS)
+        dismiss()
+        #elseif os(macOS)
+        if let onClose = onClose {
+            onClose()
+        }
+        #endif
     }
 }
 
