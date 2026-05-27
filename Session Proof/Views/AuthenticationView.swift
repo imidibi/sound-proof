@@ -188,6 +188,7 @@ struct SignInView: View {
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .disabled(email.isEmpty || password.isEmpty || isLoading)
+            .buttonStyle(.borderless)
             
             HStack(spacing: 20) {
                 Button("Create an account") {
@@ -419,6 +420,7 @@ struct SignUpView: View {
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(!isFormValid || isLoading)
+                    .buttonStyle(.borderless)
                     
                     Button("Already have an account? Sign in") {
                         showSignIn()
