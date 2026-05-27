@@ -284,11 +284,13 @@ struct SettingsView: View {
                         Label("Support & Bug Reports", systemImage: "envelope")
                     }
                     
+                    #if DEBUG
                     NavigationLink {
                         NotificationDebugView()
                     } label: {
                         Label("Notification Debug", systemImage: "ladybug")
                     }
+                    #endif
                 } header: {
                     Text("Support")
                         .font(.subheadline)
