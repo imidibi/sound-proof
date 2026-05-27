@@ -685,6 +685,57 @@ class ProjectSyncService {
                 print("🧹 Inaccessible projects cleanup complete: all reviewer projects are accessible")
             }
             
+            // Final cleanup: Remove orphaned songs whose parent project no longer exists
+            // or whose project failed to sync from Firestore
+            print("🧹 Checking for orphaned songs without valid parent project...")
+            let allLocalSongs = try modelContext.fetch(FetchDescriptor<Song>())
+            print("🧹 Found \(allLocalSongs.count) local songs to check")
+            
+            var orphanedSongsRemoved = 0
+            for song in allLocalSongs {
+                let songProjectId = song.project?.firestoreId
+                let songOwner = song.project?.ownerUserID
+                
+                print("🔍 Checking song '\(song.name)'")
+                print("   - Project ID: \(songProjectId ?? "nil")")
+                print("   - Project owner: \(songOwner ?? "nil")")
+                
+                // Case 1: Song has no parent project at all
+                if song.project == nil {
+                    print("   🗑️ REMOVING orphaned song - no parent project")
+                    modelContext.delete(song)
+                    orphanedSongsRemoved += 1
+                    continue
+                }
+                
+                // Case 2: Song's parent project exists but belongs to someone else and wasn't synced
+                if let projectId = songProjectId, let owner = songOwner {
+                    if owner != userId {
+                        // Check if this project was successfully synced
+                        let wasProjectSynced = syncedProjectIds.contains(projectId)
+                        print("   - User is reviewer (not owner)")
+                        print("   - Project was synced: \(wasProjectSynced)")
+                        
+                        if !wasProjectSynced {
+                            print("   🗑️ REMOVING orphaned song - parent project not accessible")
+                            modelContext.delete(song)
+                            orphanedSongsRemoved += 1
+                        } else {
+                            print("   ✓ Song's project is accessible - keeping")
+                        }
+                    } else {
+                        print("   ✓ User owns parent project - keeping")
+                    }
+                }
+            }
+            
+            if orphanedSongsRemoved > 0 {
+                try modelContext.save()
+                print("🧹 Orphaned songs cleanup complete: removed \(orphanedSongsRemoved) song(s)")
+            } else {
+                print("🧹 Orphaned songs cleanup complete: no orphaned songs found")
+            }
+            
             print("✅ Finished syncing all projects")
             
         } catch {
