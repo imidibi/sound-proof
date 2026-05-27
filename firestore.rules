@@ -41,11 +41,10 @@ service cloud.firestore {
     // Projects collection
     match /projects/{projectId} {
       // Allow reading individual projects
-      // Reviewers cannot access archived projects
+      // Owner can always read, reviewers can read if they have a reviewer document
+      // Archived project filtering is handled in application code
       allow get: if isSignedIn() &&
-                    (isProjectOwner(projectId) ||
-                     (isProjectReviewer(projectId) &&
-                      (!('isArchived' in resource.data) || resource.data.isArchived == false)));
+                    (isProjectOwner(projectId) || isProjectReviewer(projectId));
       // Allow listing all projects (needed for finding invitations by email)
       // Users can only actually read project details if they're owner/reviewer
       allow list: if isSignedIn();
