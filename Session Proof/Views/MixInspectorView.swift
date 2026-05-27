@@ -655,9 +655,9 @@ struct MyApprovalSection: View {
                     }
                 }
             )) {
+                Text("👀 In Review").tag(ApprovalStatus.pending)
                 Text("✅ Approve").tag(ApprovalStatus.approved)
                 Text("⚠️ Request Changes").tag(ApprovalStatus.changesRequested)
-                Text("👀 Reset to In Review").tag(ApprovalStatus.pending)
             }
             .pickerStyle(.menu)
         }
