@@ -54,10 +54,12 @@ struct MixDetailView: View {
                             showingInspector.toggle()
                         }
                     } label: {
-                        Image(systemName: showingInspector ? "sidebar.right.fill" : "sidebar.right")
+                        // Use sidebar.right on macOS (sidebar.right.fill not available)
+                        Image(systemName: "sidebar.right")
                             .font(.title3)
                             .foregroundStyle(showingInspector ? .blue : .secondary)
                             .contentShape(Rectangle())
+                            .symbolVariant(showingInspector ? .fill : .none)
                     }
                     .buttonStyle(.plain)
                     .help(showingInspector ? "Hide Inspector (Cmd+I)" : "Show Inspector (Cmd+I)")

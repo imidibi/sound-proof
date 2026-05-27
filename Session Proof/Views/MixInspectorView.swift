@@ -296,12 +296,12 @@ struct MixInfoSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
-            // For producers/key approvers: Show dropdown with manual options (Superseded, Approved)
+            // For producers/key approvers: Show dropdown with manual options
             // For approvers: Show read-only text
             if canApproveMix {
                 Picker("Status", selection: $mix.approvalStatus) {
-                    // Only show manual override options
-                    ForEach([MixStatus.superseded, .approved], id: \.self) { status in
+                    // Include all mix statuses so the picker can handle any current value
+                    ForEach([MixStatus.draft, .shared, .inReview, .approved, .superseded], id: \.self) { status in
                         Text("\(mixStatusEmoji(for: status)) \(status.rawValue)")
                             .tag(status)
                     }
@@ -641,27 +641,40 @@ struct MyApprovalSection: View {
         myApproval?.status ?? .pending
     }
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("My Approval")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-            
-            Picker("My Approval", selection: Binding(
-                get: { currentStatus },
-                set: { newStatus in
-                    Task {
-                        await setMyApproval(to: newStatus)
-                    }
-                }
-            )) {
-                Text("👀 In Review").tag(ApprovalStatus.pending)
-                Text("✅ Approve").tag(ApprovalStatus.approved)
-                Text("⚠️ Request Changes").tag(ApprovalStatus.changesRequested)
-            }
-            .pickerStyle(.menu)
+    // Check if current user is a reviewer (not just a producer)
+    private var isReviewer: Bool {
+        guard let currentUserId = authService.currentUser?.id,
+              let project = mix.song?.project else {
+            return false
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        
+        return project.reviewers.contains { $0.userId == currentUserId }
+    }
+    
+    var body: some View {
+        // Only show this section if the user is an actual reviewer
+        if isReviewer {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("My Approval")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Picker("My Approval", selection: Binding(
+                    get: { currentStatus },
+                    set: { newStatus in
+                        Task {
+                            await setMyApproval(to: newStatus)
+                        }
+                    }
+                )) {
+                    Text("👀 In Review").tag(ApprovalStatus.pending)
+                    Text("✅ Approve").tag(ApprovalStatus.approved)
+                    Text("⚠️ Request Changes").tag(ApprovalStatus.changesRequested)
+                }
+                .pickerStyle(.menu)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
     
     private func setMyApproval(to status: ApprovalStatus) async {
