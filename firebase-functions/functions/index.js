@@ -714,3 +714,120 @@ exports.onApprovalUpdated = onDocumentUpdated(
     }
   }
 );
+
+/**
+ * Send notification when a reviewer is added to a project
+ * Notifies the invited reviewer that they've been added to a project
+ */
+exports.onReviewerAdded = onDocumentCreated(
+  {
+    document: "projects/{projectId}/reviewers/{reviewerId}",
+    database: "(default)",
+  },
+  async (event) => {
+    const reviewerData = event.data.data();
+    const {projectId, reviewerId} = event.params;
+
+    console.log(`New reviewer added: ${reviewerId} to project ${projectId}`);
+
+    try {
+      // Get project details
+      const projectDoc = await getFirestore()
+        .collection("projects")
+        .doc(projectId)
+        .get();
+
+      if (!projectDoc.exists) {
+        console.log("Project not found");
+        return;
+      }
+
+      const projectData = projectDoc.data();
+
+      // Get producer name
+      let producerName = "A producer";
+      if (projectData.ownerUserId) {
+        const producerDoc = await getFirestore()
+          .collection("users")
+          .doc(projectData.ownerUserId)
+          .get();
+
+        if (producerDoc.exists) {
+          producerName = producerDoc.data().displayName || producerName;
+        }
+      }
+
+      // Get reviewer's FCM tokens (all devices)
+      const tokens = [];
+
+      // Check if we have a userId (for registered users)
+      if (reviewerData.userId) {
+        const reviewerUserDoc = await getFirestore()
+          .collection("users")
+          .doc(reviewerData.userId)
+          .get();
+
+        if (reviewerUserDoc.exists) {
+          const userData = reviewerUserDoc.data();
+          // New format: array of tokens for multiple devices
+          if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+            tokens.push(...userData.fcmTokens);
+          }
+          // Legacy format: single token (for backward compatibility)
+          else if (userData.fcmToken) {
+            tokens.push(userData.fcmToken);
+          }
+        }
+      }
+
+      if (tokens.length === 0) {
+        console.log("Reviewer has no FCM tokens (may not be registered yet)");
+        return;
+      }
+
+      // Create notification message
+      const title = `🎵 New Project: ${projectData.name}`;
+      const body = `${producerName} invited you to review their project`;
+
+      // Send notification to reviewer (all devices)
+      const message = {
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: {
+          type: "project_invitation",
+          projectId: projectId,
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: title,
+                body: body,
+              },
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
+        tokens: tokens,
+      };
+
+      console.log(`Attempting to send invitation notification to reviewer (${tokens.length} devices)`);
+      const response = await getMessaging().sendEachForMulticast(message);
+      console.log(`Sent invitation notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+
+      if (response.failureCount > 0) {
+        console.log(`Failed to send ${response.failureCount} notifications`);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error(`Failed to send to token ${idx}:`, resp.error);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error sending reviewer invitation notification:", error);
+    }
+  }
+);

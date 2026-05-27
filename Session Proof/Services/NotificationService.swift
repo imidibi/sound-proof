@@ -19,21 +19,22 @@ class NotificationService: NSObject {
     var fcmToken: String?
     var isAuthorized: Bool = false
     var authorizationStatus: UNAuthorizationStatus = .notDetermined
-    
+
     private let authService: AuthenticationService
     private let firestoreService: FirestoreService
-    
+    var projectSyncService: ProjectSyncService?
+
     init(authService: AuthenticationService, firestoreService: FirestoreService) {
         self.authService = authService
         self.firestoreService = firestoreService
         super.init()
-        
+
         // Set up messaging delegate
         Messaging.messaging().delegate = self
-        
+
         // Set up notification center delegate
         UNUserNotificationCenter.current().delegate = self
-        
+
         // Check current authorization status
         checkAuthorizationStatus()
     }
@@ -163,6 +164,33 @@ class NotificationService: NSObject {
             print("✅ Cleared app badge")
         }
     }
+
+    /// Trigger background sync when certain notifications arrive
+    private func handleNotificationSync(userInfo: [AnyHashable: Any]) {
+        guard let notificationType = userInfo["type"] as? String else {
+            return
+        }
+
+        // Trigger sync for notifications that require updated data
+        let syncTriggeringTypes = [
+            "project_invitation",    // New project invitation
+            "new_mix",              // New mix uploaded
+            "mix_updated",          // Mix updated
+            "approval_status_changed", // Approval changed
+            "new_comment"           // New comment added
+        ]
+
+        if syncTriggeringTypes.contains(notificationType) {
+            print("📱 Notification type '\(notificationType)' requires sync - triggering background sync")
+
+            // Post notification to trigger sync in the main app with proper modelContext
+            NotificationCenter.default.post(
+                name: NSNotification.Name("TriggerBackgroundSync"),
+                object: nil,
+                userInfo: ["notificationType": notificationType]
+            )
+        }
+    }
 }
 
 // MARK: - MessagingDelegate
@@ -195,10 +223,13 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         print("   Body: \(notification.request.content.body)")
         print("   Sound: \(notification.request.content.sound?.description ?? "none")")
         print("   Badge: \(notification.request.content.badge?.intValue ?? 0)")
-        
+
         let userInfo = notification.request.content.userInfo
         print("   Notification data: \(userInfo)")
-        
+
+        // Trigger background sync if needed
+        handleNotificationSync(userInfo: userInfo)
+
         // Show notification even when app is in foreground
         #if os(iOS)
         completionHandler([.banner, .sound, .badge])
@@ -215,15 +246,18 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         print("📱 User tapped notification")
-        
+
         let userInfo = response.notification.request.content.userInfo
         print("   Notification data: \(userInfo)")
-        
+
+        // Trigger background sync if needed
+        handleNotificationSync(userInfo: userInfo)
+
         // Extract deep link data from notification
         if let projectId = userInfo["projectId"] as? String,
            let mixId = userInfo["mixId"] as? String {
             print("   Deep link to project: \(projectId), mix: \(mixId)")
-            
+
             // Post notification to handle deep link navigation
             NotificationCenter.default.post(
                 name: NSNotification.Name("NavigateToMix"),
@@ -231,7 +265,7 @@ extension NotificationService: UNUserNotificationCenterDelegate {
                 userInfo: ["projectId": projectId, "mixId": mixId]
             )
         }
-        
+
         completionHandler()
     }
 }

@@ -95,7 +95,9 @@ struct Session_ProofApp: App {
         let network = NetworkMonitor()
         let syncQueue = SyncQueueService(syncService: sync)
         let notification = NotificationService(authService: auth, firestoreService: firestore)
-        
+        // Inject the sync service into notification service for automatic syncing
+        notification.projectSyncService = sync
+
         _authService = State(initialValue: auth)
         _firestoreService = State(initialValue: firestore)
         _cloudStorageService = State(initialValue: cloudStorage)

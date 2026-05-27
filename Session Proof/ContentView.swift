@@ -138,6 +138,25 @@ struct ContentView: View {
                 // Cancel sync timer when view disappears
                 syncTimer?.cancel()
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TriggerBackgroundSync"))) { notification in
+                // Handle background sync triggered by push notification
+                guard let userId = authService.currentUser?.id else { return }
+
+                let notificationType = notification.userInfo?["notificationType"] as? String ?? "unknown"
+                print("🔄 Triggered background sync from notification: \(notificationType)")
+
+                Task {
+                    do {
+                        try await syncService.syncUserProjectsFromCloud(
+                            userId: userId,
+                            modelContext: modelContext
+                        )
+                        print("✅ Background sync completed after notification: \(notificationType)")
+                    } catch {
+                        print("❌ Background sync failed: \(error.localizedDescription)")
+                    }
+                }
+            }
     }
     
     // MARK: - Periodic Background Sync
