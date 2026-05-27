@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct NotificationDebugView: View {
     @Environment(AuthenticationService.self) private var authService
@@ -73,9 +74,11 @@ struct NotificationDebugView: View {
                         case .provisional:
                             Text("Provisional")
                                 .foregroundStyle(.orange)
+                        #if os(iOS)
                         case .ephemeral:
                             Text("Ephemeral")
                                 .foregroundStyle(.orange)
+                        #endif
                         @unknown default:
                             Text("Unknown")
                                 .foregroundStyle(.secondary)
