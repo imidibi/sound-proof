@@ -152,6 +152,15 @@ class FirestoreService {
                 
                 if projectDoc.exists, let projectData = projectDoc.data() {
                     let projectName = projectData["name"] as? String ?? "Unknown"
+                    
+                    // Skip archived projects for reviewers
+                    let isArchived = projectData["isArchived"] as? Bool ?? false
+                    if isArchived {
+                        print("⏭️ Skipping archived project: \(projectName) (\(projectId))")
+                        processedProjectIds.insert(projectId)
+                        continue
+                    }
+                    
                     print("✅ Found project: \(projectName) (\(projectId))")
                     projectsWithUser.append((projectId, projectData))
                     processedProjectIds.insert(projectId)
