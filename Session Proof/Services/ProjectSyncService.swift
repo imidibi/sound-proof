@@ -658,19 +658,30 @@ class ProjectSyncService {
                 // Skip if already removed in previous cleanup
                 if localProject.isDeleted { continue }
                 
-                // For projects where user is reviewer (not owner)
-                if localProject.ownerUserID != userId {
-                    // Check if this project was successfully synced from Firestore
-                    if let firestoreId = localProject.firestoreId {
-                        let wasSuccessfullySynced = syncedProjectIds.contains(firestoreId)
+                // Check if this project was successfully synced from Firestore
+                // Don't trust the local owner field - it may be corrupted
+                if let firestoreId = localProject.firestoreId {
+                    let wasSuccessfullySynced = syncedProjectIds.contains(firestoreId)
+                    
+                    if !wasSuccessfullySynced {
+                        print("🔍 Project '\(localProject.name)' (ID: \(firestoreId))")
+                        print("   - Was NOT in synced list (likely archived/inaccessible)")
+                        print("   - Local owner: \(localProject.ownerUserID)")
+                        print("   - Current user: \(userId)")
                         
-                        if !wasSuccessfullySynced {
-                            print("🔍 Project '\(localProject.name)' (ID: \(firestoreId))")
-                            print("   - Was NOT in synced list (likely archived/inaccessible)")
-                            print("   - User is reviewer (not owner)")
+                        // Only remove if user is not the actual owner
+                        // Check by seeing if this was an owned project
+                        // If user owns it, it would have been synced
+                        if localProject.ownerUserID != userId {
+                            print("   - Local data shows user as reviewer")
                             print("   - 🗑️ REMOVING project and all its songs from reviewer's device")
-                            
-                            // Delete the entire project (cascade will delete songs, mixes, etc.)
+                            modelContext.delete(localProject)
+                            inaccessibleProjectsRemoved += 1
+                        } else {
+                            // Local data says user owns it, but it wasn't synced
+                            // This indicates corrupted data - the project is likely archived and user is actually a reviewer
+                            print("   - ⚠️ Local data says user owns project, but it wasn't synced (corrupted data)")
+                            print("   - 🗑️ REMOVING project with corrupted owner data")
                             modelContext.delete(localProject)
                             inaccessibleProjectsRemoved += 1
                         }
