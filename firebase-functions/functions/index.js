@@ -6,6 +6,9 @@
  * - Mix updates
  * - Comments on mixes
  * - Approval status changes
+ * - Project invitations
+ *
+ * IMPORTANT: All notifications include content-available flag to trigger background sync
  */
 
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
@@ -20,6 +23,71 @@ const getFirestore = () => admin.firestore();
 const getMessaging = () => admin.messaging();
 
 /**
+ * Helper function to clean up invalid FCM tokens
+ * Removes tokens that are no longer valid from user documents
+ */
+async function cleanupInvalidTokens(userId, invalidTokens) {
+  if (invalidTokens.length === 0) return;
+
+  console.log(`🧹 Cleaning up ${invalidTokens.length} invalid tokens for user ${userId}`);
+
+  try {
+    await getFirestore()
+      .collection("users")
+      .doc(userId)
+      .update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
+      });
+    console.log(`✅ Removed ${invalidTokens.length} invalid tokens from user ${userId}`);
+  } catch (error) {
+    console.error(`❌ Failed to cleanup tokens for user ${userId}:`, error);
+  }
+}
+
+/**
+ * Helper function to collect FCM tokens with user tracking for cleanup
+ * Returns an object with tokens array and a map of token->userId for cleanup
+ */
+async function collectTokensWithTracking(userIds) {
+  const tokens = [];
+  const tokenToUserMap = new Map(); // Map token to userId for cleanup
+
+  for (const userId of userIds) {
+    const userDoc = await getFirestore()
+      .collection("users")
+      .doc(userId)
+      .get();
+
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      console.log(`📱 User ${userId}: checking for FCM tokens`);
+
+      // New format: array of tokens for multiple devices
+      if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+        console.log(`  ✅ Found ${userData.fcmTokens.length} tokens in fcmTokens array`);
+        userData.fcmTokens.forEach((token) => {
+          tokens.push(token);
+          tokenToUserMap.set(token, userId);
+        });
+      }
+      // Legacy format: single token (for backward compatibility)
+      else if (userData.fcmToken) {
+        console.log(`  ✅ Found 1 token in legacy fcmToken field`);
+        tokens.push(userData.fcmToken);
+        tokenToUserMap.set(userData.fcmToken, userId);
+      } else {
+        console.log(`  ⚠️ No FCM tokens found for user ${userId}`);
+      }
+    } else {
+      console.log(`  ⚠️ User document not found: ${userId}`);
+    }
+  }
+
+  console.log(`📊 Total tokens collected: ${tokens.length} from ${userIds.length} users`);
+  return {tokens, tokenToUserMap};
+}
+
+/**
  * Send notification when a new mix is created
  * Notifies all accepted approvers that a new mix is ready for review
  */
@@ -32,7 +100,7 @@ exports.onMixCreated = onDocumentCreated(
     const mixData = event.data.data();
     const {projectId, songId, mixId} = event.params;
 
-    console.log(`New mix created: ${mixId} in project ${projectId}`);
+    console.log(`🎵 New mix created: ${mixId} in project ${projectId}`);
 
     try {
       // Get project details
@@ -42,7 +110,7 @@ exports.onMixCreated = onDocumentCreated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -67,10 +135,10 @@ exports.onMixCreated = onDocumentCreated(
         .where("inviteStatus", "==", "Accepted")
         .get();
 
-      console.log(`Found ${reviewersSnapshot.size} accepted approvers`);
+      console.log(`👥 Found ${reviewersSnapshot.size} accepted approvers`);
 
       // Collect FCM tokens for all approvers (exclude producer)
-      const tokens = [];
+      const approverUserIds = [];
       for (const reviewerDoc of reviewersSnapshot.docs) {
         const reviewer = reviewerDoc.data();
 
@@ -79,29 +147,15 @@ exports.onMixCreated = onDocumentCreated(
           continue;
         }
 
-        // Get the user's FCM tokens (supports multiple devices)
         if (reviewer.userId) {
-          const userDoc = await getFirestore()
-            .collection("users")
-            .doc(reviewer.userId)
-            .get();
-
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            // New format: array of tokens for multiple devices
-            if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
-              tokens.push(...userData.fcmTokens);
-            }
-            // Legacy format: single token (for backward compatibility)
-            else if (userData.fcmToken) {
-              tokens.push(userData.fcmToken);
-            }
-          }
+          approverUserIds.push(reviewer.userId);
         }
       }
 
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking(approverUserIds);
+
       if (tokens.length === 0) {
-        console.log("No FCM tokens found for approvers");
+        console.log("⚠️ No FCM tokens found for approvers");
         return;
       }
 
@@ -120,6 +174,7 @@ exports.onMixCreated = onDocumentCreated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: `New Mix: ${mixData.name}`,
                 body: `${songName} - Ready for your review in ${projectData.name}`,
@@ -132,20 +187,38 @@ exports.onMixCreated = onDocumentCreated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send to ${tokens.length} tokens`);
+      console.log(`📤 Attempting to send to ${tokens.length} tokens`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent ${response.successCount} notifications`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
 
+      // Clean up invalid tokens
       if (response.failureCount > 0) {
-        console.log(`Failed to send ${response.failureCount} notifications`);
+        const invalidTokensByUser = new Map();
+
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.error(`Failed to send to token ${idx}:`, resp.error);
+            const token = tokens[idx];
+            const userId = tokenToUserMap.get(token);
+            console.error(`❌ Failed to send to token ${idx} (user: ${userId}):`, resp.error?.code || resp.error);
+
+            // Track invalid tokens by user for cleanup
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              if (!invalidTokensByUser.has(userId)) {
+                invalidTokensByUser.set(userId, []);
+              }
+              invalidTokensByUser.get(userId).push(token);
+            }
           }
         });
+
+        // Clean up invalid tokens for each user
+        for (const [userId, invalidTokens] of invalidTokensByUser) {
+          await cleanupInvalidTokens(userId, invalidTokens);
+        }
       }
     } catch (error) {
-      console.error("Error sending new mix notification:", error);
+      console.error("❌ Error sending new mix notification:", error);
     }
   }
 );
@@ -166,11 +239,11 @@ exports.onMixUpdated = onDocumentUpdated(
 
     // Only notify if the mix file was actually updated (version number changed)
     if (oldData.versionNumber === newData.versionNumber) {
-      console.log("Mix metadata updated but no new version - skipping notification");
+      console.log("ℹ️ Mix metadata updated but no new version - skipping notification");
       return;
     }
 
-    console.log(`Mix updated: ${mixId} in project ${projectId}`);
+    console.log(`🔄 Mix updated: ${mixId} in project ${projectId}`);
 
     try {
       // Get project and song details
@@ -180,7 +253,7 @@ exports.onMixUpdated = onDocumentUpdated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -205,7 +278,7 @@ exports.onMixUpdated = onDocumentUpdated(
         .get();
 
       // Collect FCM tokens
-      const tokens = [];
+      const approverUserIds = [];
       for (const reviewerDoc of reviewersSnapshot.docs) {
         const reviewer = reviewerDoc.data();
 
@@ -214,27 +287,14 @@ exports.onMixUpdated = onDocumentUpdated(
         }
 
         if (reviewer.userId) {
-          const userDoc = await getFirestore()
-            .collection("users")
-            .doc(reviewer.userId)
-            .get();
-
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            // New format: array of tokens for multiple devices
-            if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
-              tokens.push(...userData.fcmTokens);
-            }
-            // Legacy format: single token (for backward compatibility)
-            else if (userData.fcmToken) {
-              tokens.push(userData.fcmToken);
-            }
-          }
+          approverUserIds.push(reviewer.userId);
         }
       }
 
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking(approverUserIds);
+
       if (tokens.length === 0) {
-        console.log("No FCM tokens found");
+        console.log("⚠️ No FCM tokens found");
         return;
       }
 
@@ -252,6 +312,7 @@ exports.onMixUpdated = onDocumentUpdated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: `Mix Updated: ${newData.name}`,
                 body: `${songName} - New version available in ${projectData.name}`,
@@ -264,20 +325,36 @@ exports.onMixUpdated = onDocumentUpdated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send to ${tokens.length} tokens`);
+      console.log(`📤 Attempting to send to ${tokens.length} tokens`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent ${response.successCount} notifications`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
 
+      // Clean up invalid tokens
       if (response.failureCount > 0) {
-        console.log(`Failed to send ${response.failureCount} notifications`);
+        const invalidTokensByUser = new Map();
+
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.error(`Failed to send to token ${idx}:`, resp.error);
+            const token = tokens[idx];
+            const userId = tokenToUserMap.get(token);
+            console.error(`❌ Failed to send to token ${idx} (user: ${userId}):`, resp.error?.code || resp.error);
+
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              if (!invalidTokensByUser.has(userId)) {
+                invalidTokensByUser.set(userId, []);
+              }
+              invalidTokensByUser.get(userId).push(token);
+            }
           }
         });
+
+        for (const [userId, invalidTokens] of invalidTokensByUser) {
+          await cleanupInvalidTokens(userId, invalidTokens);
+        }
       }
     } catch (error) {
-      console.error("Error sending mix update notification:", error);
+      console.error("❌ Error sending mix update notification:", error);
     }
   }
 );
@@ -295,7 +372,7 @@ exports.onCommentCreated = onDocumentCreated(
     const commentData = event.data.data();
     const {projectId, songId, mixId} = event.params;
 
-    console.log(`New comment on mix ${mixId}`);
+    console.log(`💬 New comment on mix ${mixId}`);
 
     try {
       // Get project details
@@ -305,7 +382,7 @@ exports.onCommentCreated = onDocumentCreated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -313,8 +390,10 @@ exports.onCommentCreated = onDocumentCreated(
       const producerId = projectData.ownerUserId;
 
       // Don't notify if the producer commented (they know they commented!)
-      if (commentData.userId === producerId) {
-        console.log("Producer commented - skipping notification");
+      // Check both authorId (Swift uses this) and userId (legacy)
+      const commentAuthorId = commentData.authorId || commentData.userId;
+      if (commentAuthorId === producerId) {
+        console.log(`ℹ️ Producer commented (authorId: ${commentAuthorId}) - skipping notification`);
         return;
       }
 
@@ -339,30 +418,10 @@ exports.onCommentCreated = onDocumentCreated(
       const songName = songDoc.exists ? songDoc.data().name : "Song";
 
       // Get producer's FCM tokens (all devices)
-      const producerDoc = await getFirestore()
-        .collection("users")
-        .doc(producerId)
-        .get();
-
-      if (!producerDoc.exists) {
-        console.log("Producer document not found");
-        return;
-      }
-
-      const producerData = producerDoc.data();
-      const tokens = [];
-
-      // New format: array of tokens for multiple devices
-      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
-        tokens.push(...producerData.fcmTokens);
-      }
-      // Legacy format: single token (for backward compatibility)
-      else if (producerData.fcmToken) {
-        tokens.push(producerData.fcmToken);
-      }
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking([producerId]);
 
       if (tokens.length === 0) {
-        console.log("Producer has no FCM tokens");
+        console.log("⚠️ Producer has no FCM tokens");
         return;
       }
 
@@ -373,7 +432,7 @@ exports.onCommentCreated = onDocumentCreated(
           body: `${commentData.authorName}: ${commentData.text.substring(0, 100)}${commentData.text.length > 100 ? "..." : ""}`,
         },
         data: {
-          type: "comment",
+          type: "new_comment",
           projectId: projectId,
           songId: songId,
           mixId: mixId,
@@ -381,6 +440,7 @@ exports.onCommentCreated = onDocumentCreated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: `New Comment on ${mixName}`,
                 body: `${commentData.authorName}: ${commentData.text.substring(0, 100)}${commentData.text.length > 100 ? "..." : ""}`,
@@ -393,11 +453,31 @@ exports.onCommentCreated = onDocumentCreated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send comment notification to producer (${tokens.length} devices)`);
+      console.log(`📤 Attempting to send comment notification to producer (${tokens.length} devices)`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent comment notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
+
+      // Clean up invalid tokens
+      if (response.failureCount > 0) {
+        const invalidTokens = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const token = tokens[idx];
+            console.error(`❌ Failed to send to token ${idx}:`, resp.error?.code || resp.error);
+
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              invalidTokens.push(token);
+            }
+          }
+        });
+
+        if (invalidTokens.length > 0) {
+          await cleanupInvalidTokens(producerId, invalidTokens);
+        }
+      }
     } catch (error) {
-      console.error("Error sending comment notification:", error);
+      console.error("❌ Error sending comment notification:", error);
     }
   }
 );
@@ -415,7 +495,7 @@ exports.onApprovalCreated = onDocumentCreated(
     const approvalData = event.data.data();
     const {projectId, songId, mixId} = event.params;
 
-    console.log(`New approval created with status ${approvalData.status} for mix ${mixId}`);
+    console.log(`✅ New approval created with status ${approvalData.status} for mix ${mixId}`);
 
     try {
       // Get project details
@@ -425,7 +505,7 @@ exports.onApprovalCreated = onDocumentCreated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -434,13 +514,13 @@ exports.onApprovalCreated = onDocumentCreated(
 
       // Don't notify if the producer set their own approval
       if (approvalData.reviewerUserId === producerId) {
-        console.log("Producer set their own approval - skipping notification");
+        console.log("ℹ️ Producer set their own approval - skipping notification");
         return;
       }
 
       // Only notify for Approved or Changes Requested status
       if (approvalData.status !== "Approved" && approvalData.status !== "Changes Requested") {
-        console.log(`Status is ${approvalData.status} - skipping notification`);
+        console.log(`ℹ️ Status is ${approvalData.status} - skipping notification`);
         return;
       }
 
@@ -478,30 +558,10 @@ exports.onApprovalCreated = onDocumentCreated(
       }
 
       // Get producer's FCM tokens (all devices)
-      const producerDoc = await getFirestore()
-        .collection("users")
-        .doc(producerId)
-        .get();
-
-      if (!producerDoc.exists) {
-        console.log("Producer document not found");
-        return;
-      }
-
-      const producerData = producerDoc.data();
-      const tokens = [];
-
-      // New format: array of tokens for multiple devices
-      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
-        tokens.push(...producerData.fcmTokens);
-      }
-      // Legacy format: single token (for backward compatibility)
-      else if (producerData.fcmToken) {
-        tokens.push(producerData.fcmToken);
-      }
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking([producerId]);
 
       if (tokens.length === 0) {
-        console.log("Producer has no FCM tokens");
+        console.log("⚠️ Producer has no FCM tokens");
         return;
       }
 
@@ -531,6 +591,7 @@ exports.onApprovalCreated = onDocumentCreated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: title,
                 body: body,
@@ -543,20 +604,31 @@ exports.onApprovalCreated = onDocumentCreated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send approval notification to producer (${tokens.length} devices)`);
+      console.log(`📤 Attempting to send approval notification to producer (${tokens.length} devices)`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent approval notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
 
+      // Clean up invalid tokens
       if (response.failureCount > 0) {
-        console.log(`Failed to send ${response.failureCount} notifications`);
+        const invalidTokens = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.error(`Failed to send to token ${idx}:`, resp.error);
+            const token = tokens[idx];
+            console.error(`❌ Failed to send to token ${idx}:`, resp.error?.code || resp.error);
+
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              invalidTokens.push(token);
+            }
           }
         });
+
+        if (invalidTokens.length > 0) {
+          await cleanupInvalidTokens(producerId, invalidTokens);
+        }
       }
     } catch (error) {
-      console.error("Error sending approval notification:", error);
+      console.error("❌ Error sending approval notification:", error);
     }
   }
 );
@@ -577,11 +649,11 @@ exports.onApprovalUpdated = onDocumentUpdated(
 
     // Only notify if status actually changed
     if (oldData.status === newData.status) {
-      console.log("Approval status unchanged - skipping notification");
+      console.log("ℹ️ Approval status unchanged - skipping notification");
       return;
     }
 
-    console.log(`Approval status changed to ${newData.status} for mix ${mixId}`);
+    console.log(`🔄 Approval status changed to ${newData.status} for mix ${mixId}`);
 
     try {
       // Get project details
@@ -591,7 +663,7 @@ exports.onApprovalUpdated = onDocumentUpdated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -600,7 +672,7 @@ exports.onApprovalUpdated = onDocumentUpdated(
 
       // Don't notify if the producer changed their own approval
       if (newData.reviewerUserId === producerId) {
-        console.log("Producer changed their own approval - skipping notification");
+        console.log("ℹ️ Producer changed their own approval - skipping notification");
         return;
       }
 
@@ -638,30 +710,10 @@ exports.onApprovalUpdated = onDocumentUpdated(
       }
 
       // Get producer's FCM tokens (all devices)
-      const producerDoc = await getFirestore()
-        .collection("users")
-        .doc(producerId)
-        .get();
-
-      if (!producerDoc.exists) {
-        console.log("Producer document not found");
-        return;
-      }
-
-      const producerData = producerDoc.data();
-      const tokens = [];
-
-      // New format: array of tokens for multiple devices
-      if (producerData.fcmTokens && Array.isArray(producerData.fcmTokens)) {
-        tokens.push(...producerData.fcmTokens);
-      }
-      // Legacy format: single token (for backward compatibility)
-      else if (producerData.fcmToken) {
-        tokens.push(producerData.fcmToken);
-      }
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking([producerId]);
 
       if (tokens.length === 0) {
-        console.log("Producer has no FCM tokens");
+        console.log("⚠️ Producer has no FCM tokens");
         return;
       }
 
@@ -694,6 +746,7 @@ exports.onApprovalUpdated = onDocumentUpdated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: title,
                 body: body,
@@ -706,11 +759,31 @@ exports.onApprovalUpdated = onDocumentUpdated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send approval notification to producer (${tokens.length} devices)`);
+      console.log(`📤 Attempting to send approval notification to producer (${tokens.length} devices)`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent approval notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
+
+      // Clean up invalid tokens
+      if (response.failureCount > 0) {
+        const invalidTokens = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const token = tokens[idx];
+            console.error(`❌ Failed to send to token ${idx}:`, resp.error?.code || resp.error);
+
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              invalidTokens.push(token);
+            }
+          }
+        });
+
+        if (invalidTokens.length > 0) {
+          await cleanupInvalidTokens(producerId, invalidTokens);
+        }
+      }
     } catch (error) {
-      console.error("Error sending approval notification:", error);
+      console.error("❌ Error sending approval notification:", error);
     }
   }
 );
@@ -728,7 +801,7 @@ exports.onReviewerAdded = onDocumentCreated(
     const reviewerData = event.data.data();
     const {projectId, reviewerId} = event.params;
 
-    console.log(`New reviewer added: ${reviewerId} to project ${projectId}`);
+    console.log(`👤 New reviewer added: ${reviewerId} to project ${projectId}`);
 
     try {
       // Get project details
@@ -738,7 +811,7 @@ exports.onReviewerAdded = onDocumentCreated(
         .get();
 
       if (!projectDoc.exists) {
-        console.log("Project not found");
+        console.log("⚠️ Project not found");
         return;
       }
 
@@ -757,31 +830,17 @@ exports.onReviewerAdded = onDocumentCreated(
         }
       }
 
-      // Get reviewer's FCM tokens (all devices)
-      const tokens = [];
-
       // Check if we have a userId (for registered users)
-      if (reviewerData.userId) {
-        const reviewerUserDoc = await getFirestore()
-          .collection("users")
-          .doc(reviewerData.userId)
-          .get();
-
-        if (reviewerUserDoc.exists) {
-          const userData = reviewerUserDoc.data();
-          // New format: array of tokens for multiple devices
-          if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
-            tokens.push(...userData.fcmTokens);
-          }
-          // Legacy format: single token (for backward compatibility)
-          else if (userData.fcmToken) {
-            tokens.push(userData.fcmToken);
-          }
-        }
+      if (!reviewerData.userId) {
+        console.log("ℹ️ Reviewer has no userId (may not be registered yet) - skipping notification");
+        return;
       }
 
+      // Get reviewer's FCM tokens (all devices)
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking([reviewerData.userId]);
+
       if (tokens.length === 0) {
-        console.log("Reviewer has no FCM tokens (may not be registered yet)");
+        console.log("⚠️ Reviewer has no FCM tokens (may not have logged in yet)");
         return;
       }
 
@@ -802,6 +861,7 @@ exports.onReviewerAdded = onDocumentCreated(
         apns: {
           payload: {
             aps: {
+              "content-available": 1, // Wake app in background for sync
               alert: {
                 title: title,
                 body: body,
@@ -814,20 +874,31 @@ exports.onReviewerAdded = onDocumentCreated(
         tokens: tokens,
       };
 
-      console.log(`Attempting to send invitation notification to reviewer (${tokens.length} devices)`);
+      console.log(`📤 Attempting to send invitation notification to reviewer (${tokens.length} devices)`);
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`Sent invitation notification: ${response.successCount} succeeded, ${response.failureCount} failed`);
+      console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
 
+      // Clean up invalid tokens
       if (response.failureCount > 0) {
-        console.log(`Failed to send ${response.failureCount} notifications`);
+        const invalidTokens = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.error(`Failed to send to token ${idx}:`, resp.error);
+            const token = tokens[idx];
+            console.error(`❌ Failed to send to token ${idx}:`, resp.error?.code || resp.error);
+
+            if (resp.error?.code === "messaging/invalid-registration-token" ||
+                resp.error?.code === "messaging/registration-token-not-registered") {
+              invalidTokens.push(token);
+            }
           }
         });
+
+        if (invalidTokens.length > 0) {
+          await cleanupInvalidTokens(reviewerData.userId, invalidTokens);
+        }
       }
     } catch (error) {
-      console.error("Error sending reviewer invitation notification:", error);
+      console.error("❌ Error sending reviewer invitation notification:", error);
     }
   }
 );

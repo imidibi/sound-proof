@@ -100,12 +100,21 @@ class NotificationService: NSObject {
     
     /// Refresh and save FCM token to Firestore
     func refreshFCMToken() async {
+        print("🔄 Refreshing FCM token...")
+        
+        guard let userId = authService.currentUser?.id else {
+            print("⚠️ Cannot refresh FCM token - no authenticated user")
+            return
+        }
+        
         do {
             let token = try await Messaging.messaging().token()
             await MainActor.run {
                 self.fcmToken = token
             }
-            print("✅ Got FCM token: \(token)")
+            print("✅ Got FCM token from Firebase Messaging")
+            print("   Token: \(token.prefix(20))...")
+            print("   For user: \(userId)")
             
             // Save token to Firestore for this user
             await saveFCMTokenToFirestore(token: token)
@@ -116,14 +125,23 @@ class NotificationService: NSObject {
     
     /// Save FCM token to Firestore user document
     private func saveFCMTokenToFirestore(token: String) async {
-        guard let userId = authService.currentUser?.id else {
+        guard let userId = authService.currentUser?.id,
+              let userEmail = authService.currentUser?.email,
+              let userName = authService.currentUser?.displayName else {
             print("⚠️ No authenticated user to save FCM token")
             return
         }
         
+        print("💾 Saving FCM token to Firestore:")
+        print("   User ID: \(userId)")
+        print("   User Email: \(userEmail)")
+        print("   User Name: \(userName)")
+        print("   Token: \(token.prefix(20))...") // Only show first 20 chars for security
+        
         do {
             try await firestoreService.updateUserFCMToken(userId: userId, fcmToken: token)
-            print("✅ Saved FCM token to Firestore for user: \(userId)")
+            print("✅ Successfully saved FCM token to Firestore for user: \(userId)")
+            print("   Token will be added to fcmTokens array in users/\(userId)")
         } catch {
             print("❌ Error saving FCM token to Firestore: \(error.localizedDescription)")
         }
@@ -196,15 +214,25 @@ class NotificationService: NSObject {
 // MARK: - MessagingDelegate
 extension NotificationService: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        print("📱 FCM token refreshed: \(fcmToken ?? "nil")")
+        print("📱 FCM token refreshed via MessagingDelegate")
+        
+        guard let token = fcmToken else {
+            print("⚠️ Received nil FCM token")
+            return
+        }
+        
+        print("   Token: \(token.prefix(20))...")
         
         Task {
             await MainActor.run {
-                self.fcmToken = fcmToken
+                self.fcmToken = token
             }
             
-            if let token = fcmToken {
+            // Only save if we have an authenticated user
+            if authService.currentUser?.id != nil {
                 await saveFCMTokenToFirestore(token: token)
+            } else {
+                print("⚠️ FCM token received but no authenticated user - will save after login")
             }
         }
     }

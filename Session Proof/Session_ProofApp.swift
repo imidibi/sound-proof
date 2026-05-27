@@ -132,16 +132,29 @@ struct Session_ProofApp: App {
                     .task {
                         // Request notification permissions after user is authenticated
                         await notificationService.requestPermissions()
+                        
+                        // Ensure FCM token is fresh and saved
+                        await notificationService.refreshFCMToken()
                     }
                     #if os(iOS)
                     .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                         // Clear badge when app becomes active
                         notificationService.clearBadge()
+                        
+                        // Refresh FCM token to ensure it's up to date
+                        Task {
+                            await notificationService.refreshFCMToken()
+                        }
                     }
                     #elseif os(macOS)
                     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                         // Clear badge when app becomes active
                         notificationService.clearBadge()
+                        
+                        // Refresh FCM token to ensure it's up to date
+                        Task {
+                            await notificationService.refreshFCMToken()
+                        }
                     }
                     #endif
             } else {
