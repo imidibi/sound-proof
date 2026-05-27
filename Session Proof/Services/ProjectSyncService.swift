@@ -535,6 +535,9 @@ class ProjectSyncService {
             let cloudProjects = Array(projectsMap)
             print("📦 Total unique projects to sync: \(cloudProjects.count)")
             
+            // Track successfully synced project IDs for cleanup later
+            var syncedProjectIds = Set<String>()
+            
             for (projectId, projectData) in cloudProjects {
                 // Check if project already exists locally
                 let descriptor = FetchDescriptor<Project>(
@@ -579,6 +582,9 @@ class ProjectSyncService {
                         project: project,
                         modelContext: modelContext
                     )
+                    
+                    // Mark as successfully synced
+                    syncedProjectIds.insert(projectId)
                 } else {
                     print("✓ Project already exists locally: \(projectData["name"] ?? "Unknown")")
                     
@@ -595,6 +601,9 @@ class ProjectSyncService {
                             project: existingProject,
                             modelContext: modelContext
                         )
+                        
+                        // Mark as successfully synced
+                        syncedProjectIds.insert(projectId)
                     }
                 }
             }
@@ -637,6 +646,51 @@ class ProjectSyncService {
                 print("🧹 Cleanup complete: removed \(removedCount) archived project(s)")
             } else {
                 print("🧹 Cleanup complete: no archived projects to remove")
+            }
+            
+            // Additional cleanup: Remove orphaned songs that belong to projects where sync failed
+            // (e.g., archived projects that Firestore blocked access to)
+            print("🧹 Checking for orphaned songs from inaccessible projects...")
+            let allLocalSongs = try modelContext.fetch(FetchDescriptor<Song>())
+            print("🧹 Found \(allLocalSongs.count) local songs to check")
+            
+            var orphanedSongsRemoved = 0
+            for song in allLocalSongs {
+                // Check if song's project is accessible
+                if let projectFirestoreId = song.project?.firestoreId {
+                    print("🔍 Checking song '\(song.name)' from project \(projectFirestoreId)")
+                    
+                    // If project exists locally, check if it's one we couldn't sync
+                    if let project = song.project {
+                        // Check if user is reviewer and project is inaccessible
+                        // (We know it's inaccessible if Firestore denied access and it's not in synced list)
+                        if project.ownerUserID != userId {
+                            // Try to verify if this project was in the synced list
+                            let wasInSyncedList = syncedProjectIds.contains(projectFirestoreId)
+                            
+                            if !wasInSyncedList {
+                                print("   🗑️ REMOVING orphaned song '\(song.name)' - project \(projectFirestoreId) is inaccessible")
+                                modelContext.delete(song)
+                                orphanedSongsRemoved += 1
+                            } else {
+                                print("   ✓ Song's project is accessible - keeping")
+                            }
+                        } else {
+                            print("   ✓ Song's project is owned by user - keeping")
+                        }
+                    } else {
+                        print("   ⚠️ Song has nil project reference - keeping for safety")
+                    }
+                } else {
+                    print("🔍 Song '\(song.name)' has no project - keeping for safety")
+                }
+            }
+            
+            if orphanedSongsRemoved > 0 {
+                try modelContext.save()
+                print("🧹 Orphaned songs cleanup complete: removed \(orphanedSongsRemoved) song(s)")
+            } else {
+                print("🧹 Orphaned songs cleanup complete: no orphaned songs to remove")
             }
             
             print("✅ Finished syncing all projects")
