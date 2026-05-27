@@ -694,11 +694,14 @@ class ProjectSyncService {
             var orphanedSongsRemoved = 0
             for song in allLocalSongs {
                 let songProjectId = song.project?.firestoreId
+                let songProjectName = song.project?.name
                 let songOwner = song.project?.ownerUserID
                 
                 print("🔍 Checking song '\(song.name)'")
                 print("   - Project ID: \(songProjectId ?? "nil")")
+                print("   - Project name: \(songProjectName ?? "nil")")
                 print("   - Project owner: \(songOwner ?? "nil")")
+                print("   - Song's firestoreId: \(song.firestoreId ?? "nil")")
                 
                 // Case 1: Song has no parent project at all
                 if song.project == nil {
@@ -708,23 +711,21 @@ class ProjectSyncService {
                     continue
                 }
                 
-                // Case 2: Song's parent project exists but belongs to someone else and wasn't synced
-                if let projectId = songProjectId, let owner = songOwner {
-                    if owner != userId {
-                        // Check if this project was successfully synced
-                        let wasProjectSynced = syncedProjectIds.contains(projectId)
-                        print("   - User is reviewer (not owner)")
-                        print("   - Project was synced: \(wasProjectSynced)")
-                        
-                        if !wasProjectSynced {
-                            print("   🗑️ REMOVING orphaned song - parent project not accessible")
-                            modelContext.delete(song)
-                            orphanedSongsRemoved += 1
-                        } else {
-                            print("   ✓ Song's project is accessible - keeping")
-                        }
+                // Case 2: Song's parent project exists - check if it was successfully synced
+                if let projectId = songProjectId {
+                    // Check if this project was successfully synced from Firestore
+                    let wasProjectSynced = syncedProjectIds.contains(projectId)
+                    print("   - Project was synced from Firestore: \(wasProjectSynced)")
+                    
+                    if !wasProjectSynced {
+                        // Project wasn't synced - either archived or inaccessible
+                        // Delete the song regardless of what the local owner field says
+                        // (the local owner field may be corrupted)
+                        print("   🗑️ REMOVING orphaned song - parent project not synced from Firestore")
+                        modelContext.delete(song)
+                        orphanedSongsRemoved += 1
                     } else {
-                        print("   ✓ User owns parent project - keeping")
+                        print("   ✓ Song's project was successfully synced - keeping")
                     }
                 }
             }
