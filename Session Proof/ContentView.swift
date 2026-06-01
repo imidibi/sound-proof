@@ -57,6 +57,22 @@ struct ContentView: View {
                             await notificationService.refreshFCMToken()
                             print("✅ FCM token refreshed after authentication")
                             
+                            // One-time migration for existing beta users
+                            if let user = authService.currentUser,
+                               user.subscriptionStatus == nil,
+                               user.isProducer {
+                                let trialStart = Date()
+                                let trialEnd = Calendar.current.date(byAdding: .day, value: 30, to: trialStart)!
+                                
+                                try? await authService.updateSubscriptionStatus(
+                                    tier: "producer",
+                                    status: "trial",
+                                    trialStartedAt: trialStart,
+                                    trialEndsAt: trialEnd
+                                )
+                                print("✅ Migrated beta user to 30-day trial")
+                            }
+                            
                             // Auto-sync any unsyncced songs
                             do {
                                 try await syncService.syncUnsyncedSongsToCloud(
