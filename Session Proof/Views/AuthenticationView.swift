@@ -365,7 +365,7 @@ struct SignUpView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
-                                Text("Account Type: Approver")
+                                Text("Account Type: Approver (Free)")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                             }
@@ -374,23 +374,27 @@ struct SignUpView: View {
                             .background(Color.green.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             
-                            Text("You're signing up as an approver for the invited project(s). Your account will be free.")
+                            Text("You're signing up as an approver for the invited project(s). Your account will be free forever.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("I am a...")
+                            HStack(spacing: 8) {
+                                Image(systemName: "star.circle.fill")
+                                    .foregroundStyle(.blue)
+                                Text("Account Type: Producer (14-day free trial)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            
+                            Text("Start your 14-day free trial to create unlimited projects and invite approvers. $9.99/month after trial.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            
-                            Picker("Role", selection: $selectedRole) {
-                                Label("Producer/Engineer", systemImage: "music.note.list")
-                                    .tag(UserRole.producer)
-                                Label("Approver", systemImage: "person.fill")
-                                    .tag(UserRole.artist)
-                            }
-                            .pickerStyle(.segmented)
                         }
                     }
                     
@@ -513,8 +517,8 @@ struct SignUpView: View {
         do {
             print("🔵 Attempting to sign up with email: \(email)")
             
-            // If user is invited reviewer, force role to artist (not producer)
-            let finalRole: UserRole = isInvitedReviewer ? .artist : selectedRole
+            // If user is invited reviewer, they're free. Otherwise, they're a producer starting trial.
+            let finalRole: UserRole = isInvitedReviewer ? .artist : .producer
             print("   Role: \(finalRole.rawValue)")
             print("   Is invited reviewer: \(isInvitedReviewer)")
             
@@ -525,6 +529,27 @@ struct SignUpView: View {
                 role: finalRole
             )
             print("✅ Sign up successful!")
+            
+            // Initialize subscription status for new users
+            if isInvitedReviewer {
+                // Free approver - set as free tier
+                try await authService.updateSubscriptionStatus(
+                    tier: "free",
+                    status: "free"
+                )
+                print("✅ Initialized as free approver")
+            } else {
+                // Producer - start 14-day trial
+                let trialStart = Date()
+                let trialEnd = Calendar.current.date(byAdding: .day, value: 14, to: trialStart)!
+                try await authService.updateSubscriptionStatus(
+                    tier: "producer",
+                    status: "trial",
+                    trialStartedAt: trialStart,
+                    trialEndsAt: trialEnd
+                )
+                print("✅ Initialized 14-day trial for producer")
+            }
             
             // Check for pending invitations after signup
             await checkForPendingInvitations()
