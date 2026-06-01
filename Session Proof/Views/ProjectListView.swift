@@ -23,6 +23,7 @@ struct ProjectListView: View {
     // DISABLED: Share code functionality removed - use email invitations only
     // @State private var showingJoinProjectSheet = false
     @State private var showingSettings = false
+    @State private var showingPaywall = false
     @State private var expandedProjects: Set<UUID> = []
     @State private var expandedSongs: Set<UUID> = []
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -228,9 +229,13 @@ struct ProjectListView: View {
                     }
                     
                     Menu {
-                        // Always show New Project
+                        // New Project - check entitlement
                         Button {
-                            showingNewProjectSheet = true
+                            if authService.currentUser?.canCreateProjects == true {
+                                showingNewProjectSheet = true
+                            } else {
+                                showingPaywall = true
+                            }
                         } label: {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
@@ -249,13 +254,17 @@ struct ProjectListView: View {
                         if let selectedProject = selectedProjectForMenu {
                             Divider()
                             Button {
-                                showingNewSongSheet = true
+                                if authService.currentUser?.canCreateProjects == true {
+                                    showingNewSongSheet = true
+                                } else {
+                                    showingPaywall = true
+                                }
                             } label: {
                                 Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
                             }
                         }
                         
-                        if let selectedSong = selectedSongForMenu, authService.currentUser?.isProducer == true {
+                        if let selectedSong = selectedSongForMenu, authService.currentUser?.canCreateProjects == true {
                             Divider()
                             Button {
                                 showingImportMixSheet = true
@@ -271,9 +280,13 @@ struct ProjectListView: View {
                 // iOS toolbar layout
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        // Always show New Project
+                        // New Project - check entitlement
                         Button {
-                            showingNewProjectSheet = true
+                            if authService.currentUser?.canCreateProjects == true {
+                                showingNewProjectSheet = true
+                            } else {
+                                showingPaywall = true
+                            }
                         } label: {
                             Label("New Project", systemImage: "folder.badge.plus")
                         }
@@ -292,13 +305,17 @@ struct ProjectListView: View {
                         if let selectedProject = selectedProjectForMenu {
                             Divider()
                             Button {
-                                showingNewSongSheet = true
+                                if authService.currentUser?.canCreateProjects == true {
+                                    showingNewSongSheet = true
+                                } else {
+                                    showingPaywall = true
+                                }
                             } label: {
                                 Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
                             }
                         }
                         
-                        if let selectedSong = selectedSongForMenu, authService.currentUser?.isProducer == true {
+                        if let selectedSong = selectedSongForMenu, authService.currentUser?.canCreateProjects == true {
                             Divider()
                             Button {
                                 showingImportMixSheet = true
@@ -366,6 +383,9 @@ struct ProjectListView: View {
             // }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
             }
         } detail: {
             if let mix = selectedMix {

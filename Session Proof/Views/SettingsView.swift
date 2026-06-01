@@ -20,6 +20,7 @@ struct SettingsView: View {
     @Environment(ProjectSyncService.self) private var syncService
     @Environment(FirestoreService.self) private var firestoreService
     @Environment(NotificationService.self) private var notificationService
+    @Environment(SubscriptionService.self) private var subscriptionService
     
     @Query private var organizations: [Organization]
     
@@ -29,6 +30,7 @@ struct SettingsView: View {
     @State private var isSyncing = false
     @State private var lastSyncTime: Date?
     @State private var showingHelp = false
+    @State private var showingPaywall = false
     
     // Display preferences
     @AppStorage("showArchivedProjects") private var showArchivedProjects = false
@@ -125,6 +127,89 @@ struct SettingsView: View {
                     Text("Account")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                }
+                
+                // Subscription section
+                Section {
+                    if let user = authService.currentUser {
+                        // Current tier
+                        HStack {
+                            Label("Subscription", systemImage: "star.circle.fill")
+                            Spacer()
+                            if user.canCreateProjects {
+                                Text("Producer")
+                                    .foregroundStyle(.blue)
+                                    .fontWeight(.semibold)
+                            } else {
+                                Text("Free")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        
+                        // Trial status
+                        if user.isInTrial, let daysRemaining = user.trialDaysRemaining {
+                            HStack {
+                                Image(systemName: "clock.fill")
+                                    .foregroundStyle(.orange)
+                                Text("Trial ends in \(daysRemaining) \(daysRemaining == 1 ? "day" : "days")")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.caption)
+                        }
+                        
+                        // Grace period warning
+                        if user.isInGracePeriod, let daysRemaining = user.gracePeriodDaysRemaining {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Subscription Expired")
+                                        .fontWeight(.semibold)
+                                    Text("\(daysRemaining) days of read-only access remaining")
+                                        .font(.caption)
+                                }
+                            }
+                            .foregroundStyle(.orange)
+                        }
+                        
+                        // Action buttons
+                        if !user.canCreateProjects {
+                            // Free user - show upgrade button
+                            Button {
+                                showingPaywall = true
+                            } label: {
+                                Label("Upgrade to Producer", systemImage: "arrow.up.circle.fill")
+                            }
+                        } else {
+                            // Subscribed user - show manage button
+                            Button {
+                                subscriptionService.openManageSubscriptions()
+                            } label: {
+                                Label("Manage Subscription", systemImage: "gearshape")
+                            }
+                        }
+                        
+                        // Restore purchases
+                        Button {
+                            Task {
+                                await restorePurchases()
+                            }
+                        } label: {
+                            Label("Restore Purchases", systemImage: "arrow.clockwise")
+                        }
+                    }
+                } header: {
+                    Text("Subscription")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                } footer: {
+                    if let user = authService.currentUser {
+                        if user.canCreateProjects {
+                            Text("You have full access to all Producer features.")
+                        } else {
+                            Text("Upgrade to Producer to create projects and share your music for approval.")
+                        }
+                    }
                 }
                 
                 // Organization management (for studio owners and producers)
@@ -339,6 +424,11 @@ struct SettingsView: View {
             .sheet(isPresented: $showingHelp) {
                 HelpView()
             }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+                    .environment(subscriptionService)
+                    .environment(authService)
+            }
         }
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 600, minHeight: 400)
@@ -511,6 +601,26 @@ struct SettingsView: View {
             await MainActor.run {
                 isSavingProfile = false
             }
+        }
+    }
+    
+    private func restorePurchases() async {
+        do {
+            try await subscriptionService.restorePurchases()
+            
+            // Sync to Firestore
+            try await authService.updateSubscriptionStatus(
+                tier: subscriptionService.subscriptionTier.rawValue,
+                status: subscriptionService.subscriptionStatus.rawValue,
+                trialStartedAt: subscriptionService.isInTrial ? subscriptionService.trialEndDate?.addingTimeInterval(-14 * 24 * 60 * 60) : nil,
+                trialEndsAt: subscriptionService.trialEndDate,
+                subscriptionExpiresAt: subscriptionService.subscriptionExpiryDate,
+                gracePeriodEndsAt: subscriptionService.gracePeriodEndDate
+            )
+            
+            print("✅ Purchases restored and synced")
+        } catch {
+            print("❌ Failed to restore purchases: \(error.localizedDescription)")
         }
     }
 }

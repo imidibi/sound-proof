@@ -25,6 +25,7 @@ struct Session_ProofApp: App {
     @State private var networkMonitor: NetworkMonitor
     @State private var syncQueueService: SyncQueueService
     @State private var notificationService: NotificationService
+    @State private var subscriptionService: SubscriptionService
     @State private var inAppNotificationService = InAppNotificationService()
     @State private var pendingInvitationURL: URL?
     
@@ -97,6 +98,8 @@ struct Session_ProofApp: App {
         let notification = NotificationService(authService: auth, firestoreService: firestore)
         // Inject the sync service into notification service for automatic syncing
         notification.projectSyncService = sync
+        
+        let subscription = SubscriptionService()
 
         _authService = State(initialValue: auth)
         _firestoreService = State(initialValue: firestore)
@@ -105,6 +108,7 @@ struct Session_ProofApp: App {
         _networkMonitor = State(initialValue: network)
         _syncQueueService = State(initialValue: syncQueue)
         _notificationService = State(initialValue: notification)
+        _subscriptionService = State(initialValue: subscription)
         _inAppNotificationService = State(initialValue: inAppNotification)
     }
 
@@ -122,6 +126,7 @@ struct Session_ProofApp: App {
                     .environment(networkMonitor)
                     .environment(syncQueueService)
                     .environment(notificationService)
+                    .environment(subscriptionService)
                     .environment(inAppNotificationService)
                     .overlay {
                         InAppNotificationOverlay(notificationService: inAppNotificationService)
