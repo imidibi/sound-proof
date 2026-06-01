@@ -1,0 +1,139 @@
+{
+  "identifier" : "8A5F4C2E",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6737935177",
+    "_developerTeamID" : "BSUPN2VUX7",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 761644800.0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21482828",
+      "localizations" : [
+
+      ],
+      "name" : "Approvl Producer",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6738264901",
+          "introductoryOffer" : {
+            "internalID" : "70679657",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Create unlimited projects and invite approvers to review your music",
+              "displayName" : "Producer Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "approvl.producer.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Producer Monthly",
+          "subscriptionGroupID" : "21482828",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6738265100",
+          "introductoryOffer" : {
+            "internalID" : "70679658",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Create unlimited projects and invite approvers to review your music. Save 17% with annual billing.",
+              "displayName" : "Producer Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "approvl.producer.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Producer Yearly",
+          "subscriptionGroupID" : "21482828",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

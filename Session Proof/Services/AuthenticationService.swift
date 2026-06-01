@@ -21,33 +21,76 @@ struct User: Codable, Identifiable {
     let displayName: String
     let role: UserRole
     let createdAt: Date
-    
+
     // Organization membership
     var organizationId: String?     // Firestore ID of Organization
     var organizationName: String?   // Cached for display
-    
+
     // Contact information (for all users)
     var phone: String?
     var title: String? // e.g., "Senior Producer", "Lead Engineer"
-    
+
     // Notification preferences
     var enablePushNotifications: Bool?
     var enableSMSNotifications: Bool?
     var enableEmailNotifications: Bool?
-    
+
     // Studio-specific fields (when role == .studio)
     var isOrganizationAdmin: Bool?
-    
+
+    // Subscription fields (StoreKit)
+    var subscriptionTier: String?           // "free" or "producer"
+    var subscriptionStatus: String?         // "active", "trial", "expired", "cancelled", "free"
+    var trialStartedAt: Date?
+    var trialEndsAt: Date?
+    var subscriptionExpiresAt: Date?
+    var subscriptionGracePeriodEndsAt: Date?
+
+    // MARK: - Computed Properties
+
     var isProducer: Bool {
         role == .producer || role == .studio
     }
-    
+
     var isStudio: Bool {
         role == .studio
     }
-    
+
     var isArtist: Bool {
         role == .artist
+    }
+
+    /// Can this user create projects? (Has active subscription or trial)
+    var canCreateProjects: Bool {
+        guard let status = subscriptionStatus else {
+            // No subscription info yet - allow based on role for backward compatibility
+            return isProducer
+        }
+        return status == "active" || status == "trial"
+    }
+
+    /// Is user currently in trial period?
+    var isInTrial: Bool {
+        subscriptionStatus == "trial"
+    }
+
+    /// Is user in grace period after subscription expired?
+    var isInGracePeriod: Bool {
+        subscriptionStatus == "expired"
+    }
+
+    /// Days remaining in trial
+    var trialDaysRemaining: Int? {
+        guard let trialEnd = trialEndsAt else { return nil }
+        let components = Calendar.current.dateComponents([.day], from: Date(), to: trialEnd)
+        return max(0, components.day ?? 0)
+    }
+
+    /// Days remaining in grace period
+    var gracePeriodDaysRemaining: Int? {
+        guard let graceEnd = subscriptionGracePeriodEndsAt else { return nil }
+        let components = Calendar.current.dateComponents([.day], from: Date(), to: graceEnd)
+        return max(0, components.day ?? 0)
     }
 }
 
@@ -207,7 +250,23 @@ class AuthenticationService {
             user.enableSMSNotifications = data["enableSMSNotifications"] as? Bool
             user.enableEmailNotifications = data["enableEmailNotifications"] as? Bool
             user.isOrganizationAdmin = data["isOrganizationAdmin"] as? Bool
-            
+
+            // Load subscription fields
+            user.subscriptionTier = data["subscriptionTier"] as? String
+            user.subscriptionStatus = data["subscriptionStatus"] as? String
+            if let timestamp = data["trialStartedAt"] as? Timestamp {
+                user.trialStartedAt = timestamp.dateValue()
+            }
+            if let timestamp = data["trialEndsAt"] as? Timestamp {
+                user.trialEndsAt = timestamp.dateValue()
+            }
+            if let timestamp = data["subscriptionExpiresAt"] as? Timestamp {
+                user.subscriptionExpiresAt = timestamp.dateValue()
+            }
+            if let timestamp = data["subscriptionGracePeriodEndsAt"] as? Timestamp {
+                user.subscriptionGracePeriodEndsAt = timestamp.dateValue()
+            }
+
             await MainActor.run {
                 self.currentUser = user
                 print("✅ User profile loaded successfully: \(user.displayName) (\(user.email))")
@@ -292,8 +351,63 @@ class AuthenticationService {
         }
     }
     
+    // MARK: - Subscription Management
+
+    /// Update subscription status in Firestore from SubscriptionService
+    func updateSubscriptionStatus(
+        tier: String,
+        status: String,
+        trialStartedAt: Date? = nil,
+        trialEndsAt: Date? = nil,
+        subscriptionExpiresAt: Date? = nil,
+        gracePeriodEndsAt: Date? = nil
+    ) async throws {
+        guard let user = currentUser else {
+            print("⚠️ Cannot update subscription - no current user")
+            return
+        }
+
+        var updateData: [String: Any] = [
+            "subscriptionTier": tier,
+            "subscriptionStatus": status
+        ]
+
+        if let trialStarted = trialStartedAt {
+            updateData["trialStartedAt"] = Timestamp(date: trialStarted)
+        }
+        if let trialEnds = trialEndsAt {
+            updateData["trialEndsAt"] = Timestamp(date: trialEnds)
+        }
+        if let subExpires = subscriptionExpiresAt {
+            updateData["subscriptionExpiresAt"] = Timestamp(date: subExpires)
+        }
+        if let graceEnds = gracePeriodEndsAt {
+            updateData["subscriptionGracePeriodEndsAt"] = Timestamp(date: graceEnds)
+        }
+
+        do {
+            try await db.collection("users").document(user.id).updateData(updateData)
+            print("✅ Subscription status updated in Firestore")
+
+            // Update local user object
+            await MainActor.run {
+                var updatedUser = user
+                updatedUser.subscriptionTier = tier
+                updatedUser.subscriptionStatus = status
+                updatedUser.trialStartedAt = trialStartedAt
+                updatedUser.trialEndsAt = trialEndsAt
+                updatedUser.subscriptionExpiresAt = subscriptionExpiresAt
+                updatedUser.subscriptionGracePeriodEndsAt = gracePeriodEndsAt
+                self.currentUser = updatedUser
+            }
+        } catch {
+            print("❌ Failed to update subscription status: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
     // MARK: - Migration Helper
-    
+
     private func createMissingProfile(uid: String, email: String) async {
         // Create a temporary profile with minimal info
         // The user will be prompted to complete it on first login
@@ -304,11 +418,11 @@ class AuthenticationService {
             role: .producer, // Default to producer, can be changed later
             createdAt: Date()
         )
-        
+
         do {
             try await saveUserProfile(user: user)
             print("✅ Created missing user profile for: \(email)")
-            
+
             // Now load the newly created profile
             await loadUserProfile(uid: uid, email: email)
         } catch {
