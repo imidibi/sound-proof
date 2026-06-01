@@ -361,7 +361,8 @@ exports.onMixUpdated = onDocumentUpdated(
 
 /**
  * Send notification when a comment is created
- * Notifies the producer when an approver comments
+ * - If approver comments: notify the producer
+ * - If producer comments: notify all approvers/reviewers
  */
 exports.onCommentCreated = onDocumentCreated(
   {
@@ -389,13 +390,9 @@ exports.onCommentCreated = onDocumentCreated(
       const projectData = projectDoc.data();
       const producerId = projectData.ownerUserId;
 
-      // Don't notify if the producer commented (they know they commented!)
       // Check both authorId (Swift uses this) and userId (legacy)
       const commentAuthorId = commentData.authorId || commentData.userId;
-      if (commentAuthorId === producerId) {
-        console.log(`ℹ️ Producer commented (authorId: ${commentAuthorId}) - skipping notification`);
-        return;
-      }
+      const isProducerComment = commentAuthorId === producerId;
 
       // Get mix and song details
       const mixDoc = await getFirestore()
@@ -417,15 +414,41 @@ exports.onCommentCreated = onDocumentCreated(
       const mixName = mixDoc.exists ? mixDoc.data().name : "Mix";
       const songName = songDoc.exists ? songDoc.data().name : "Song";
 
-      // Get producer's FCM tokens (all devices)
-      const {tokens, tokenToUserMap} = await collectTokensWithTracking([producerId]);
+      let recipientUserIds = [];
 
-      if (tokens.length === 0) {
-        console.log("⚠️ Producer has no FCM tokens");
+      if (isProducerComment) {
+        // Producer commented - notify all reviewers/approvers
+        console.log(`ℹ️ Producer commented - notifying all reviewers`);
+
+        // Get all reviewers for this project
+        const reviewersSnapshot = await getFirestore()
+          .collection("projects")
+          .doc(projectId)
+          .collection("reviewers")
+          .get();
+
+        recipientUserIds = reviewersSnapshot.docs.map(doc => doc.data().userId);
+        console.log(`   Found ${recipientUserIds.length} reviewers to notify`);
+      } else {
+        // Approver commented - notify the producer
+        console.log(`ℹ️ Approver commented - notifying producer`);
+        recipientUserIds = [producerId];
+      }
+
+      if (recipientUserIds.length === 0) {
+        console.log("⚠️ No recipients to notify");
         return;
       }
 
-      // Send notification to producer (all devices)
+      // Get FCM tokens for all recipients (all devices)
+      const {tokens, tokenToUserMap} = await collectTokensWithTracking(recipientUserIds);
+
+      if (tokens.length === 0) {
+        console.log("⚠️ Recipients have no FCM tokens");
+        return;
+      }
+
+      // Send notification to recipients (all devices)
       const message = {
         notification: {
           title: `New Comment on ${mixName}`,
@@ -453,13 +476,14 @@ exports.onCommentCreated = onDocumentCreated(
         tokens: tokens,
       };
 
-      console.log(`📤 Attempting to send comment notification to producer (${tokens.length} devices)`);
+      console.log(`📤 Attempting to send comment notification to ${recipientUserIds.length} users (${tokens.length} devices)`);
       const response = await getMessaging().sendEachForMulticast(message);
       console.log(`✅ Sent ${response.successCount} notifications, ❌ ${response.failureCount} failed`);
 
       // Clean up invalid tokens
       if (response.failureCount > 0) {
-        const invalidTokens = [];
+        const invalidTokensByUser = new Map();
+
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             const token = tokens[idx];
@@ -467,13 +491,19 @@ exports.onCommentCreated = onDocumentCreated(
 
             if (resp.error?.code === "messaging/invalid-registration-token" ||
                 resp.error?.code === "messaging/registration-token-not-registered") {
-              invalidTokens.push(token);
+              const userId = tokenToUserMap.get(token);
+              if (userId) {
+                if (!invalidTokensByUser.has(userId)) {
+                  invalidTokensByUser.set(userId, []);
+                }
+                invalidTokensByUser.get(userId).push(token);
+              }
             }
           }
         });
 
-        if (invalidTokens.length > 0) {
-          await cleanupInvalidTokens(producerId, invalidTokens);
+        for (const [userId, invalidTokens] of invalidTokensByUser) {
+          await cleanupInvalidTokens(userId, invalidTokens);
         }
       }
     } catch (error) {
