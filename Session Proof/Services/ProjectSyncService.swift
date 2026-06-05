@@ -325,11 +325,11 @@ class ProjectSyncService {
         mix: Mix,
         modelContext: ModelContext
     ) -> FirebaseFirestore.ListenerRegistration {
-        print("👂 Setting up comment listener for project: \(projectId), mix: \(mixId)")
+        Logger.debug("👂 Setting up comment listener for project: \(projectId), mix: \(mixId)")
         
         // Get songId from mix's song relationship
         guard let song = mix.song, let songId = song.firestoreId else {
-            print("⚠️ Cannot set up comment listener: mix has no song or song has no firestoreId")
+            Logger.warning("⚠️ Cannot set up comment listener: mix has no song or song has no firestoreId")
             // Return a dummy listener that does nothing
             return firestoreService.listenToComments(projectId: "", songId: "", mixId: "") { _ in }
         }
@@ -337,7 +337,7 @@ class ProjectSyncService {
         return firestoreService.listenToComments(projectId: projectId, songId: songId, mixId: mixId) { [weak self] documents in
             guard let self = self else { return }
             
-            print("📬 Received \(documents.count) comment documents from Firestore")
+            Logger.debug("📬 Received \(documents.count) comment documents from Firestore")
             
             Task { @MainActor in
                 for document in documents {
@@ -361,11 +361,11 @@ class ProjectSyncService {
         
         // Convert commentId string to UUID
         guard let commentUUID = UUID(uuidString: commentId) else {
-            print("⚠️ Skipping comment with invalid UUID format: \(commentId)")
+            Logger.warning("⚠️ Skipping comment with invalid UUID format: \(commentId)")
             return
         }
         
-        print("📥 Processing comment from cloud: \(commentId)")
+        Logger.debug("📥 Processing comment from cloud: \(commentId)")
         
         // Check if comment already exists locally
         let descriptor = FetchDescriptor<Comment>(
@@ -383,12 +383,12 @@ class ProjectSyncService {
                       let text = data["text"] as? String,
                       let authorID = data["authorId"] as? String,
                       let authorName = data["authorName"] as? String else {
-                    print("⚠️ Invalid comment data for \(commentId)")
-                    print("   - timestamp: \(data["timestamp"] ?? "missing")")
-                    print("   - text: \(data["text"] ?? "missing")")
-                    print("   - authorId: \(data["authorId"] ?? "missing")")
-                    print("   - authorName: \(data["authorName"] ?? "missing")")
-                    print("   - Available keys: \(data.keys.joined(separator: ", "))")
+                    Logger.warning("⚠️ Invalid comment data for \(commentId)")
+                    Logger.debug("   - timestamp: \(data["timestamp"] ?? "missing")")
+                    Logger.debug("   - text: \(data["text"] ?? "missing")")
+                    Logger.debug("   - authorId: \(data["authorId"] ?? "missing")")
+                    Logger.debug("   - authorName: \(data["authorName"] ?? "missing")")
+                    Logger.debug("   - Available keys: \(data.keys.joined(separator: ", "))")
                     return
                 }
                 
@@ -431,20 +431,20 @@ class ProjectSyncService {
                 
                 do {
                     try modelContext.save()
-                    print("✅ Comment synced from cloud: \(text.prefix(30))...")
+                    Logger.debug("✅ Comment synced from cloud: \(text.prefix(30))...")
                 } catch {
-                    print("❌ Failed to save comment: \(error)")
+                    Logger.error("❌ Failed to save comment: \(error)")
                 }
             }
         } catch {
-            print("❌ Error checking for existing comment: \(error)")
+            Logger.error("❌ Error checking for existing comment: \(error)")
         }
     }
     
     // Public method for downloading voice notes on demand
     func downloadMissingVoiceNote(for comment: Comment) async -> Bool {
         guard let cloudURL = comment.voiceNoteCloudURL else {
-            print("⚠️ No cloud URL available for voice note")
+            Logger.warning("⚠️ No cloud URL available for voice note")
             return false
         }
         
@@ -480,7 +480,7 @@ class ProjectSyncService {
             
             // Download from cloud storage
             guard let url = URL(string: cloudURL) else {
-                print("⚠️ Invalid voice note URL")
+                Logger.warning("⚠️ Invalid voice note URL")
                 return
             }
             
@@ -489,10 +489,10 @@ class ProjectSyncService {
             
             await MainActor.run {
                 comment.voiceNoteFileName = fileName
-                print("✅ Voice note downloaded: \(fileName)")
+                Logger.debug("✅ Voice note downloaded: \(fileName)")
             }
         } catch {
-            print("❌ Failed to download voice note: \(error)")
+            Logger.error("❌ Failed to download voice note: \(error)")
         }
     }
     
@@ -506,29 +506,29 @@ class ProjectSyncService {
         defer { isSyncing = false }
         
         guard let userEmail = authService.currentUser?.email else {
-            print("❌ Cannot sync: user email not available")
+            Logger.error("❌ Cannot sync: user email not available")
             throw NSError(domain: "ProjectSync", code: 401, userInfo: [NSLocalizedDescriptionKey: "User email not available"])
         }
         
-        print("🔄 Syncing projects from cloud for user: \(userId)")
-        print("🆔 User ID being used for sync: '\(userId)'")
-        print("📧 User email: '\(userEmail)'")
+        Logger.debug("🔄 Syncing projects from cloud for user: \(userId)")
+        Logger.debug("🆔 User ID being used for sync: '\(userId)'")
+        Logger.debug("📧 User email: '\(userEmail)'")
         
         do {
             // Get projects owned by this user
-            print("🔍 Fetching owned projects...")
+            Logger.debug("🔍 Fetching owned projects...")
             let ownedProjects = try await firestoreService.getUserProjects(userId: userId)
-            print("📦 Found \(ownedProjects.count) owned projects")
+            Logger.debug("📦 Found \(ownedProjects.count) owned projects")
             for (projectId, projectData) in ownedProjects {
-                print("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
+                Logger.debug("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
             }
             
             // Get projects where user is a reviewer (with email fallback and backfill)
-            print("🔍 Fetching reviewer projects...")
+            Logger.debug("🔍 Fetching reviewer projects...")
             let reviewerProjects = try await firestoreService.getProjectsWhereUserIsReviewer(userId: userId, userEmail: userEmail)
-            print("📦 Found \(reviewerProjects.count) projects where user is a reviewer")
+            Logger.debug("📦 Found \(reviewerProjects.count) projects where user is a reviewer")
             for (projectId, projectData) in reviewerProjects {
-                print("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
+                Logger.debug("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
             }
             
             // Combine and deduplicate projects
@@ -541,7 +541,7 @@ class ProjectSyncService {
             }
             
             let cloudProjects = Array(projectsMap)
-            print("📦 Total unique projects to sync: \(cloudProjects.count)")
+            Logger.debug("📦 Total unique projects to sync: \(cloudProjects.count)")
             
             // Track successfully synced project IDs for cleanup later
             var syncedProjectIds = Set<String>()
@@ -555,7 +555,7 @@ class ProjectSyncService {
                 
                 if existingProjects.isEmpty {
                     // Create new local project
-                    print("✨ Creating new local project: \(projectData["name"] ?? "Unknown")")
+                    Logger.debug("✨ Creating new local project: \(projectData["name"] ?? "Unknown")")
                     
                     let project = Project(
                         name: projectData["name"] as? String ?? "Untitled",
@@ -594,7 +594,7 @@ class ProjectSyncService {
                     // Mark as successfully synced
                     syncedProjectIds.insert(projectId)
                 } else {
-                    print("✓ Project already exists locally: \(projectData["name"] ?? "Unknown")")
+                    Logger.debug("✓ Project already exists locally: \(projectData["name"] ?? "Unknown")")
                     
                     // Still sync reviewers and songs in case there are new ones
                     if let existingProject = existingProjects.first {
@@ -618,48 +618,48 @@ class ProjectSyncService {
             
             // Clean up: Remove any locally cached archived projects that user is only a reviewer for
             // (Approvers should not see archived projects)
-            print("🧹 Starting cleanup: checking for archived projects to remove...")
+            Logger.debug("🧹 Starting cleanup: checking for archived projects to remove...")
             let allLocalProjects = try modelContext.fetch(FetchDescriptor<Project>())
-            print("🧹 Found \(allLocalProjects.count) local projects to check")
+            Logger.debug("🧹 Found \(allLocalProjects.count) local projects to check")
             
             var removedCount = 0
             for localProject in allLocalProjects {
-                print("🔍 Checking project: \(localProject.name)")
-                print("   - Status: \(localProject.status.rawValue)")
-                print("   - isArchived flag: \(localProject.isArchived)")
-                print("   - Owner: \(localProject.ownerUserID)")
-                print("   - Current user: \(userId)")
+                Logger.debug("🔍 Checking project: \(localProject.name)")
+                Logger.debug("   - Status: \(localProject.status.rawValue)")
+                Logger.debug("   - isArchived flag: \(localProject.isArchived)")
+                Logger.debug("   - Owner: \(localProject.ownerUserID)")
+                Logger.debug("   - Current user: \(userId)")
                 
                 // Check if user is not the owner (i.e., they're only a reviewer)
                 if localProject.ownerUserID != userId {
-                    print("   ℹ️ User is a reviewer (not owner)")
+                    Logger.debug("   ℹ️ User is a reviewer (not owner)")
                     
                     // For reviewers: check if project is archived (using either field)
                     // The status might not be updated if Firestore blocked the sync,
                     // so we also check the isArchived boolean
                     if localProject.status == .archived || localProject.isArchived {
-                        print("   🗑️ REMOVING archived project from reviewer's device: \(localProject.name)")
+                        Logger.debug("   🗑️ REMOVING archived project from reviewer's device: \(localProject.name)")
                         modelContext.delete(localProject)
                         removedCount += 1
                     } else {
-                        print("   ✓ Project is active - keeping")
+                        Logger.debug("   ✓ Project is active - keeping")
                     }
                 } else {
-                    print("   ✓ User is owner - keeping project regardless of archive status")
+                    Logger.debug("   ✓ User is owner - keeping project regardless of archive status")
                 }
             }
             
             if removedCount > 0 {
                 try modelContext.save()
-                print("🧹 Cleanup complete: removed \(removedCount) archived project(s)")
+                Logger.debug("🧹 Cleanup complete: removed \(removedCount) archived project(s)")
             } else {
-                print("🧹 Cleanup complete: no archived projects to remove")
+                Logger.debug("🧹 Cleanup complete: no archived projects to remove")
             }
             
             // Additional cleanup: Remove projects and their songs that failed to sync
             // When a project is archived, Firestore blocks access for reviewers.
             // Any locally cached project that wasn't successfully synced should be removed.
-            print("🧹 Checking for inaccessible projects (e.g., archived by producer)...")
+            Logger.debug("🧹 Checking for inaccessible projects (e.g., archived by producer)...")
             
             var inaccessibleProjectsRemoved = 0
             for localProject in allLocalProjects {
@@ -672,24 +672,24 @@ class ProjectSyncService {
                     let wasSuccessfullySynced = syncedProjectIds.contains(firestoreId)
                     
                     if !wasSuccessfullySynced {
-                        print("🔍 Project '\(localProject.name)' (ID: \(firestoreId))")
-                        print("   - Was NOT in synced list (likely archived/inaccessible)")
-                        print("   - Local owner: \(localProject.ownerUserID)")
-                        print("   - Current user: \(userId)")
+                        Logger.debug("🔍 Project '\(localProject.name)' (ID: \(firestoreId))")
+                        Logger.debug("   - Was NOT in synced list (likely archived/inaccessible)")
+                        Logger.debug("   - Local owner: \(localProject.ownerUserID)")
+                        Logger.debug("   - Current user: \(userId)")
                         
                         // Only remove if user is not the actual owner
                         // Check by seeing if this was an owned project
                         // If user owns it, it would have been synced
                         if localProject.ownerUserID != userId {
-                            print("   - Local data shows user as reviewer")
-                            print("   - 🗑️ REMOVING project and all its songs from reviewer's device")
+                            Logger.debug("   - Local data shows user as reviewer")
+                            Logger.debug("   - 🗑️ REMOVING project and all its songs from reviewer's device")
                             modelContext.delete(localProject)
                             inaccessibleProjectsRemoved += 1
                         } else {
                             // Local data says user owns it, but it wasn't synced
                             // This indicates corrupted data - the project is likely archived and user is actually a reviewer
-                            print("   - ⚠️ Local data says user owns project, but it wasn't synced (corrupted data)")
-                            print("   - 🗑️ REMOVING project with corrupted owner data")
+                            Logger.warning("   - ⚠️ Local data says user owns project, but it wasn't synced (corrupted data)")
+                            Logger.debug("   - 🗑️ REMOVING project with corrupted owner data")
                             modelContext.delete(localProject)
                             inaccessibleProjectsRemoved += 1
                         }
@@ -699,16 +699,16 @@ class ProjectSyncService {
             
             if inaccessibleProjectsRemoved > 0 {
                 try modelContext.save()
-                print("🧹 Inaccessible projects cleanup complete: removed \(inaccessibleProjectsRemoved) project(s) and their songs")
+                Logger.debug("🧹 Inaccessible projects cleanup complete: removed \(inaccessibleProjectsRemoved) project(s) and their songs")
             } else {
-                print("🧹 Inaccessible projects cleanup complete: all reviewer projects are accessible")
+                Logger.debug("🧹 Inaccessible projects cleanup complete: all reviewer projects are accessible")
             }
             
             // Final cleanup: Remove orphaned songs whose parent project no longer exists
             // or whose project failed to sync from Firestore
-            print("🧹 Checking for orphaned songs without valid parent project...")
+            Logger.debug("🧹 Checking for orphaned songs without valid parent project...")
             let allLocalSongs = try modelContext.fetch(FetchDescriptor<Song>())
-            print("🧹 Found \(allLocalSongs.count) local songs to check")
+            Logger.debug("🧹 Found \(allLocalSongs.count) local songs to check")
             
             var orphanedSongsRemoved = 0
             for song in allLocalSongs {
@@ -716,15 +716,15 @@ class ProjectSyncService {
                 let songProjectName = song.project?.name
                 let songOwner = song.project?.ownerUserID
                 
-                print("🔍 Checking song '\(song.name)'")
-                print("   - Project ID: \(songProjectId ?? "nil")")
-                print("   - Project name: \(songProjectName ?? "nil")")
-                print("   - Project owner: \(songOwner ?? "nil")")
-                print("   - Song's firestoreId: \(song.firestoreId ?? "nil")")
+                Logger.debug("🔍 Checking song '\(song.name)'")
+                Logger.debug("   - Project ID: \(songProjectId ?? "nil")")
+                Logger.debug("   - Project name: \(songProjectName ?? "nil")")
+                Logger.debug("   - Project owner: \(songOwner ?? "nil")")
+                Logger.debug("   - Song's firestoreId: \(song.firestoreId ?? "nil")")
                 
                 // Case 1: Song has no parent project at all
                 if song.project == nil {
-                    print("   🗑️ REMOVING orphaned song - no parent project")
+                    Logger.debug("   🗑️ REMOVING orphaned song - no parent project")
                     modelContext.delete(song)
                     orphanedSongsRemoved += 1
                     continue
@@ -734,32 +734,32 @@ class ProjectSyncService {
                 if let projectId = songProjectId {
                     // Check if this project was successfully synced from Firestore
                     let wasProjectSynced = syncedProjectIds.contains(projectId)
-                    print("   - Project was synced from Firestore: \(wasProjectSynced)")
+                    Logger.debug("   - Project was synced from Firestore: \(wasProjectSynced)")
                     
                     if !wasProjectSynced {
                         // Project wasn't synced - either archived or inaccessible
                         // Delete the song regardless of what the local owner field says
                         // (the local owner field may be corrupted)
-                        print("   🗑️ REMOVING orphaned song - parent project not synced from Firestore")
+                        Logger.debug("   🗑️ REMOVING orphaned song - parent project not synced from Firestore")
                         modelContext.delete(song)
                         orphanedSongsRemoved += 1
                     } else {
-                        print("   ✓ Song's project was successfully synced - keeping")
+                        Logger.debug("   ✓ Song's project was successfully synced - keeping")
                     }
                 }
             }
             
             if orphanedSongsRemoved > 0 {
                 try modelContext.save()
-                print("🧹 Orphaned songs cleanup complete: removed \(orphanedSongsRemoved) song(s)")
+                Logger.debug("🧹 Orphaned songs cleanup complete: removed \(orphanedSongsRemoved) song(s)")
             } else {
-                print("🧹 Orphaned songs cleanup complete: no orphaned songs found")
+                Logger.debug("🧹 Orphaned songs cleanup complete: no orphaned songs found")
             }
             
-            print("✅ Finished syncing all projects")
+            Logger.debug("✅ Finished syncing all projects")
             
         } catch {
-            print("❌ Error syncing projects: \(error)")
+            Logger.error("❌ Error syncing projects: \(error)")
             syncError = error.localizedDescription
             throw error
         }
@@ -771,7 +771,7 @@ class ProjectSyncService {
         modelContext: ModelContext
     ) async throws {
         let cloudSongs = try await firestoreService.getProjectSongs(projectId: projectId)
-        print("🎵 Found \(cloudSongs.count) songs for project")
+        Logger.debug("🎵 Found \(cloudSongs.count) songs for project")
         
         for (songId, songData) in cloudSongs {
             // Check if song already exists locally
@@ -781,7 +781,7 @@ class ProjectSyncService {
             let existingSongs = try modelContext.fetch(descriptor)
             
             if existingSongs.isEmpty {
-                print("✨ Creating new local song: \(songData["name"] ?? "Unknown")")
+                Logger.debug("✨ Creating new local song: \(songData["name"] ?? "Unknown")")
                 
                 let song = Song(
                     name: songData["name"] as? String ?? "Untitled",
@@ -809,7 +809,7 @@ class ProjectSyncService {
                     modelContext: modelContext
                 )
             } else {
-                print("✓ Song already exists locally: \(songData["name"] ?? "Unknown")")
+                Logger.debug("✓ Song already exists locally: \(songData["name"] ?? "Unknown")")
                 
                 // Still sync mixes in case there are new ones or updates
                 if let existingSong = existingSongs.first {
@@ -831,7 +831,7 @@ class ProjectSyncService {
         modelContext: ModelContext
     ) async throws {
         let cloudMixes = try await firestoreService.getSongMixes(projectId: projectId, songId: songId)
-        print("🎚️ Found \(cloudMixes.count) mixes for song")
+        Logger.debug("🎚️ Found \(cloudMixes.count) mixes for song")
         
         for (mixId, mixData) in cloudMixes {
             // Check if mix already exists locally
@@ -841,7 +841,7 @@ class ProjectSyncService {
             let existingMixes = try modelContext.fetch(descriptor)
             
             if existingMixes.isEmpty {
-                print("✨ Creating new local mix: \(mixData["name"] ?? "Unknown")")
+                Logger.debug("✨ Creating new local mix: \(mixData["name"] ?? "Unknown")")
                 
                 let mix = Mix(
                     name: mixData["name"] as? String ?? "Untitled",
@@ -863,7 +863,7 @@ class ProjectSyncService {
                 modelContext.insert(mix)
                 try modelContext.save()
                 
-                print("📥 Mix metadata synced (audio will download on demand)")
+                Logger.debug("📥 Mix metadata synced (audio will download on demand)")
                 
                 // Sync approvals for this mix
                 await syncMixApprovalsFromCloud(
@@ -875,7 +875,7 @@ class ProjectSyncService {
                     modelContext: modelContext
                 )
             } else {
-                print("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
+                Logger.debug("✓ Mix already exists locally: \(mixData["name"] ?? "Unknown")")
                 
                 // Timestamp-based conflict resolution
                 if let existingMix = existingMixes.first {
@@ -883,7 +883,7 @@ class ProjectSyncService {
                     let isDeletedInCloud = mixData["isDeleted"] as? Bool ?? false
                     
                     if isDeletedInCloud && !existingMix.isDeleted {
-                        print("🗑️ Mix deleted in cloud - marking local copy as deleted")
+                        Logger.debug("🗑️ Mix deleted in cloud - marking local copy as deleted")
                         existingMix.isDeleted = true
                         existingMix.lastModifiedAt = Date()
                         try modelContext.save()
@@ -903,18 +903,18 @@ class ProjectSyncService {
                     if let cloudDate = cloudUpdatedAt {
                         let localDate = existingMix.lastModifiedAt
                         
-                        print("   Local lastModifiedAt: \(localDate)")
-                        print("   Cloud updatedAt: \(cloudDate)")
+                        Logger.debug("   Local lastModifiedAt: \(localDate)")
+                        Logger.debug("   Cloud updatedAt: \(cloudDate)")
                         
                         // If local is newer and needs upload, skip cloud update
                         if existingMix.needsUpload && localDate > cloudDate {
-                            print("   ℹ️ Local version is newer and needs upload - keeping local changes")
+                            Logger.debug("   ℹ️ Local version is newer and needs upload - keeping local changes")
                             continue
                         }
                         
                         // If cloud is newer or same, update from cloud
                         if cloudDate >= localDate {
-                            print("   🔄 Cloud version is newer or equal - updating from cloud")
+                            Logger.debug("   🔄 Cloud version is newer or equal - updating from cloud")
                             
                             // Update mix properties from cloud
                             if let name = mixData["name"] as? String {
@@ -924,7 +924,7 @@ class ProjectSyncService {
                             if let statusString = mixData["approvalStatus"] as? String,
                                let status = MixStatus(rawValue: statusString) {
                                 if existingMix.approvalStatus != status {
-                                    print("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
+                                    Logger.debug("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
                                     existingMix.approvalStatus = status
                                 }
                             }
@@ -938,16 +938,16 @@ class ProjectSyncService {
                             existingMix.needsUpload = false
                             
                             try modelContext.save()
-                            print("   ✅ Mix updated from cloud")
+                            Logger.debug("   ✅ Mix updated from cloud")
                         }
                     } else {
                         // No timestamp in cloud - just update approval status as before
-                        print("   ⚠️ No timestamp in cloud data - updating approval status only")
+                        Logger.warning("   ⚠️ No timestamp in cloud data - updating approval status only")
                         
                         if let statusString = mixData["approvalStatus"] as? String,
                            let status = MixStatus(rawValue: statusString),
                            existingMix.approvalStatus != status {
-                            print("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
+                            Logger.debug("   🔄 Updating approval status: \(existingMix.approvalStatus.rawValue) → \(status.rawValue)")
                             existingMix.approvalStatus = status
                             try modelContext.save()
                         }
@@ -1012,11 +1012,11 @@ class ProjectSyncService {
         project: Project,
         modelContext: ModelContext
     ) -> FirebaseFirestore.ListenerRegistration {
-        print("👂 Setting up reviewer listener for project: \(projectId)")
+        Logger.debug("👂 Setting up reviewer listener for project: \(projectId)")
         return firestoreService.listenToReviewers(projectId: projectId) { [weak self] documents in
             guard let self = self else { return }
             
-            print("📬 Received \(documents.count) reviewer documents from Firestore")
+            Logger.debug("📬 Received \(documents.count) reviewer documents from Firestore")
             
             Task { @MainActor in
                 // Get all reviewer IDs from Firestore
@@ -1028,7 +1028,7 @@ class ProjectSyncService {
                 // Remove local reviewers that no longer exist in Firestore
                 for localReviewer in localReviewers {
                     if !firestoreReviewerIds.contains(localReviewer.id) {
-                        print("🗑️ Removing deleted reviewer: \(localReviewer.displayName)")
+                        Logger.debug("🗑️ Removing deleted reviewer: \(localReviewer.displayName)")
                         modelContext.delete(localReviewer)
                     }
                 }
@@ -1045,9 +1045,9 @@ class ProjectSyncService {
                 // Save all changes
                 do {
                     try modelContext.save()
-                    print("✅ Reviewer sync completed")
+                    Logger.debug("✅ Reviewer sync completed")
                 } catch {
-                    print("❌ Error saving reviewer changes: \(error)")
+                    Logger.error("❌ Error saving reviewer changes: \(error)")
                 }
             }
         }
@@ -1067,7 +1067,7 @@ class ProjectSyncService {
             return
         }
         
-        print("📥 Processing reviewer from cloud: \(reviewerId)")
+        Logger.debug("📥 Processing reviewer from cloud: \(reviewerId)")
         
         // Check if reviewer already exists locally
         let descriptor = FetchDescriptor<Reviewer>(
@@ -1084,7 +1084,7 @@ class ProjectSyncService {
                   let email = data["email"] as? String,
                   let roleString = data["role"] as? String,
                   let role = ReviewerRole(rawValue: roleString) else {
-                print("⚠️ Invalid reviewer data for \(reviewerId)")
+                Logger.warning("⚠️ Invalid reviewer data for \(reviewerId)")
                 return
             }
             
@@ -1096,7 +1096,7 @@ class ProjectSyncService {
                 status = parsedStatus
             } else {
                 // Default to .accepted for reviewers without inviteStatus (legacy data)
-                print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                Logger.warning("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
                 status = .accepted
                 needsFirestoreUpdate = true
             }
@@ -1124,7 +1124,7 @@ class ProjectSyncService {
                 modelContext.insert(reviewer)
                 try modelContext.save()
                 
-                print("✨ Created new reviewer from cloud: \(displayName)")
+                Logger.debug("✨ Created new reviewer from cloud: \(displayName)")
                 
                 // Fix missing inviteStatus in Firestore
                 if needsFirestoreUpdate {
@@ -1136,18 +1136,18 @@ class ProjectSyncService {
                                 field: "inviteStatus",
                                 value: status.rawValue
                             )
-                            print("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
+                            Logger.debug("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
                         } catch {
-                            print("⚠️ Failed to update inviteStatus in Firestore: \(error)")
+                            Logger.warning("⚠️ Failed to update inviteStatus in Firestore: \(error)")
                         }
                     }
                 }
             } else {
-                print("✓ Reviewer already exists locally: \(data["displayName"] ?? "Unknown")")
+                Logger.debug("✓ Reviewer already exists locally: \(data["displayName"] ?? "Unknown")")
                 
                 // Update existing reviewer with latest data from Firestore
                 if let existingReviewer = existingReviewers.first(where: { $0.id.uuidString == reviewerId }) {
-                    print("   Updating existing reviewer with cloud data...")
+                    Logger.debug("   Updating existing reviewer with cloud data...")
                     
                     // Update fields that may have changed
                     existingReviewer.displayName = displayName
@@ -1171,11 +1171,11 @@ class ProjectSyncService {
                         existingReviewer.invitedAt = invitedAtTimestamp.dateValue()
                     }
                     
-                    print("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
+                    Logger.debug("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
                 }
             }
         } catch {
-            print("❌ Error processing reviewer: \(error)")
+            Logger.error("❌ Error processing reviewer: \(error)")
         }
     }
     
@@ -1189,7 +1189,7 @@ class ProjectSyncService {
         project: Project,
         modelContext: ModelContext
     ) -> FirebaseFirestore.ListenerRegistration {
-        print("👂 Setting up approval listener for mix: \(mixId)")
+        Logger.debug("👂 Setting up approval listener for mix: \(mixId)")
         return firestoreService.setupApprovalsListener(
             projectId: projectId,
             songId: songId,
@@ -1197,7 +1197,7 @@ class ProjectSyncService {
         ) { [weak self] approvalDocs in
             guard let self = self else { return }
             
-            print("📬 Received \(approvalDocs.count) approval documents from Firestore")
+            Logger.debug("📬 Received \(approvalDocs.count) approval documents from Firestore")
             
             Task { @MainActor in
                 for approvalData in approvalDocs {
@@ -1221,18 +1221,18 @@ class ProjectSyncService {
         guard let reviewerUserId = approvalData["reviewerUserId"] as? String,
               let statusString = approvalData["status"] as? String,
               let status = ApprovalStatus(rawValue: statusString) else {
-            print("⚠️ Invalid approval data")
+            Logger.warning("⚠️ Invalid approval data")
             return
         }
         
-        print("📥 Processing approval from cloud for user: \(reviewerUserId)")
+        Logger.debug("📥 Processing approval from cloud for user: \(reviewerUserId)")
         
         // Find the reviewer by userId
         var reviewer = project.reviewers.first(where: { $0.userId == reviewerUserId })
         
         // If not found by userId, try to find by matching the userId from Firestore reviewer doc
         if reviewer == nil {
-            print("⚠️ Reviewer not found by userId, checking Firestore for match...")
+            Logger.warning("⚠️ Reviewer not found by userId, checking Firestore for match...")
             
             // Try to find the reviewer in Firestore by userId and link it
             if let projectId = project.firestoreId {
@@ -1246,7 +1246,7 @@ class ProjectSyncService {
                             // Found the matching reviewer - try to find locally by reviewerId
                             if let reviewerUUID = UUID(uuidString: reviewerId),
                                let localReviewer = project.reviewers.first(where: { $0.id == reviewerUUID }) {
-                                print("✅ Found reviewer by document ID, updating userId: \(localReviewer.displayName)")
+                                Logger.debug("✅ Found reviewer by document ID, updating userId: \(localReviewer.displayName)")
                                 localReviewer.userId = reviewerUserId
                                 try? modelContext.save()
                                 reviewer = localReviewer
@@ -1255,13 +1255,13 @@ class ProjectSyncService {
                         }
                     }
                 } catch {
-                    print("❌ Error fetching reviewers: \(error)")
+                    Logger.error("❌ Error fetching reviewers: \(error)")
                 }
             }
         }
         
         guard let reviewer = reviewer else {
-            print("⚠️ Reviewer not found for userId: \(reviewerUserId) - cannot sync approval")
+            Logger.warning("⚠️ Reviewer not found for userId: \(reviewerUserId) - cannot sync approval")
             return
         }
         
@@ -1275,7 +1275,7 @@ class ProjectSyncService {
             if let updatedTimestamp = approvalData["updatedAt"] as? Timestamp {
                 approval.updatedAt = updatedTimestamp.dateValue()
             }
-            print("✅ Updated existing approval for \(reviewer.displayName)")
+            Logger.debug("✅ Updated existing approval for \(reviewer.displayName)")
             
             // Show in-app notification if status changed and user is producer
             if oldStatus != status, authService.currentUser?.isProducer == true {
@@ -1301,7 +1301,7 @@ class ProjectSyncService {
             }
             
             modelContext.insert(newApproval)
-            print("✅ Created new approval for \(reviewer.displayName)")
+            Logger.debug("✅ Created new approval for \(reviewer.displayName)")
             
             // Show in-app notification for new approval if user is producer
             if authService.currentUser?.isProducer == true {
@@ -1318,7 +1318,7 @@ class ProjectSyncService {
         do {
             try modelContext.save()
         } catch {
-            print("❌ Error saving approval: \(error)")
+            Logger.error("❌ Error saving approval: \(error)")
         }
     }
     
@@ -1337,7 +1337,7 @@ class ProjectSyncService {
                 mixId: mixId
             )
             
-            print("📥 Syncing \(approvals.count) approvals for mix")
+            Logger.debug("📥 Syncing \(approvals.count) approvals for mix")
             
             for (_, approvalData) in approvals {
                 await processApprovalFromCloud(
@@ -1348,7 +1348,7 @@ class ProjectSyncService {
                 )
             }
         } catch {
-            print("❌ Error syncing approvals: \(error)")
+            Logger.error("❌ Error syncing approvals: \(error)")
         }
     }
     
@@ -1358,7 +1358,7 @@ class ProjectSyncService {
         modelContext: ModelContext
     ) async throws {
         let cloudReviewers = try await firestoreService.getProjectReviewers(projectId: projectId)
-        print("👥 Found \(cloudReviewers.count) reviewers for project")
+        Logger.debug("👥 Found \(cloudReviewers.count) reviewers for project")
         
         for (reviewerId, reviewerData) in cloudReviewers {
             // Convert reviewerId string to UUID
@@ -1373,7 +1373,7 @@ class ProjectSyncService {
                   let email = reviewerData["email"] as? String,
                   let roleString = reviewerData["role"] as? String,
                   let role = ReviewerRole(rawValue: roleString) else {
-                print("⚠️ Invalid reviewer data for \(reviewerId)")
+                Logger.warning("⚠️ Invalid reviewer data for \(reviewerId)")
                 continue
             }
             
@@ -1385,7 +1385,7 @@ class ProjectSyncService {
                 status = parsedStatus
             } else {
                 // Default to .accepted for reviewers without inviteStatus (legacy data)
-                print("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
+                Logger.warning("⚠️ Missing inviteStatus for reviewer \(reviewerId), defaulting to .accepted")
                 status = .accepted
                 needsFirestoreUpdate = true
             }
@@ -1399,7 +1399,7 @@ class ProjectSyncService {
             let existingReviewers = try modelContext.fetch(descriptor)
             
             if existingReviewers.isEmpty {
-                print("✨ Creating new local reviewer: \(displayName)")
+                Logger.debug("✨ Creating new local reviewer: \(displayName)")
                 
                 let reviewer = Reviewer(
                     id: reviewerUUID,
@@ -1419,7 +1419,7 @@ class ProjectSyncService {
                 modelContext.insert(reviewer)
                 try modelContext.save()
                 
-                print("📥 Reviewer synced: \(displayName)")
+                Logger.debug("📥 Reviewer synced: \(displayName)")
                 
                 // Fix missing inviteStatus in Firestore
                 if needsFirestoreUpdate {
@@ -1431,18 +1431,18 @@ class ProjectSyncService {
                                 field: "inviteStatus",
                                 value: status.rawValue
                             )
-                            print("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
+                            Logger.debug("✅ Fixed missing inviteStatus in Firestore for \(displayName)")
                         } catch {
-                            print("⚠️ Failed to update inviteStatus in Firestore: \(error)")
+                            Logger.warning("⚠️ Failed to update inviteStatus in Firestore: \(error)")
                         }
                     }
                 }
             } else {
-                print("✓ Reviewer already exists locally: \(reviewerData["displayName"] ?? "Unknown")")
+                Logger.debug("✓ Reviewer already exists locally: \(reviewerData["displayName"] ?? "Unknown")")
                 
                 // Update existing reviewer with latest data from Firestore
                 if let existingReviewer = existingReviewers.first(where: { $0.id.uuidString == reviewerId }) {
-                    print("   Updating existing reviewer with cloud data...")
+                    Logger.debug("   Updating existing reviewer with cloud data...")
                     
                     // Update fields that may have changed
                     existingReviewer.displayName = displayName
@@ -1466,7 +1466,7 @@ class ProjectSyncService {
                         existingReviewer.invitedAt = invitedAtTimestamp.dateValue()
                     }
                     
-                    print("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
+                    Logger.debug("   ✅ Updated reviewer: \(displayName) with status: \(status.rawValue)")
                 }
             }
         }
@@ -1478,33 +1478,33 @@ class ProjectSyncService {
         userId: String,
         modelContext: ModelContext
     ) async throws {
-        print("🏢 Starting organization sync for user: \(userId)")
+        Logger.debug("🏢 Starting organization sync for user: \(userId)")
         
         // Fetch organization from Firestore
         guard let (firestoreId, data) = try await firestoreService.getUserOrganization(userId: userId) else {
-            print("ℹ️ No organization found in Firestore for user")
+            Logger.debug("ℹ️ No organization found in Firestore for user")
             return
         }
         
-        print("☁️ Found organization in Firestore: \(firestoreId)")
+        Logger.debug("☁️ Found organization in Firestore: \(firestoreId)")
         
         // Check if organization already exists locally
-        print("🔍 Checking for existing local organization...")
+        Logger.debug("🔍 Checking for existing local organization...")
         
         // First try to fetch all organizations and filter manually to avoid predicate issues
         let allOrgsDescriptor = FetchDescriptor<Organization>()
         let allOrganizations = try modelContext.fetch(allOrgsDescriptor)
         
-        print("📊 Found \(allOrganizations.count) total local organizations")
+        Logger.debug("📊 Found \(allOrganizations.count) total local organizations")
         
         // Check by firestoreId or memberIds
         let existingOrganizations = allOrganizations.filter { org in
             if let orgFirestoreId = org.firestoreId, orgFirestoreId == firestoreId {
-                print("✓ Match by firestoreId: \(orgFirestoreId)")
+                Logger.debug("✓ Match by firestoreId: \(orgFirestoreId)")
                 return true
             }
             if org.memberIds.contains(userId) {
-                print("✓ Match by memberIds")
+                Logger.debug("✓ Match by memberIds")
                 return true
             }
             return false
@@ -1512,7 +1512,7 @@ class ProjectSyncService {
         
         if let existingOrg = existingOrganizations.first {
             // Update existing organization
-            print("📝 Updating existing organization: \(existingOrg.name)")
+            Logger.debug("📝 Updating existing organization: \(existingOrg.name)")
             
             if let name = data["name"] as? String {
                 existingOrg.name = name
@@ -1557,15 +1557,15 @@ class ProjectSyncService {
             existingOrg.firestoreId = firestoreId
             
             try modelContext.save()
-            print("✅ Organization updated from Firestore")
+            Logger.debug("✅ Organization updated from Firestore")
         } else {
             // Create new organization
-            print("✨ Creating new organization from Firestore")
+            Logger.debug("✨ Creating new organization from Firestore")
             
             guard let name = data["name"] as? String,
                   let typeString = data["type"] as? String,
                   let type = OrganizationType(rawValue: typeString) else {
-                print("⚠️ Missing required organization data")
+                Logger.warning("⚠️ Missing required organization data")
                 return
             }
             
@@ -1613,7 +1613,7 @@ class ProjectSyncService {
             
             modelContext.insert(organization)
             try modelContext.save()
-            print("✅ Organization created from Firestore: \(organization.name)")
+            Logger.debug("✅ Organization created from Firestore: \(organization.name)")
         }
     }
     
@@ -1624,14 +1624,14 @@ class ProjectSyncService {
         userEmail: String,
         modelContext: ModelContext
     ) async throws {
-        print("📬 Checking for pending invitations for: \(userEmail)")
+        Logger.debug("📬 Checking for pending invitations for: \(userEmail)")
         
         var invitationsAccepted = 0
         
         do {
             // Use collection group query to find all reviewers with this email across all projects
             let pendingInvitations = try await firestoreService.findPendingInvitationsByEmail(email: userEmail)
-            print("🔍 Found \(pendingInvitations.count) reviewer record(s) with email: \(userEmail)")
+            Logger.debug("🔍 Found \(pendingInvitations.count) reviewer record(s) with email: \(userEmail)")
             
             for invitation in pendingInvitations {
                 // Check if userId-based document exists (for security rules)
@@ -1651,13 +1651,13 @@ class ProjectSyncService {
                                  (userIdValue as? String)?.isEmpty == true
 
                 if hasNoUserId || !userIdDocExists {
-                    print("✉️ Found pending invitation in project: \(invitation.projectId)")
-                    print("   Reviewer email: \(invitation.data["email"] ?? ""), Document ID: \(invitation.reviewerId)")
-                    print("   hasNoUserId: \(hasNoUserId), userIdDocExists: \(userIdDocExists)")
+                    Logger.debug("✉️ Found pending invitation in project: \(invitation.projectId)")
+                    Logger.debug("   Reviewer email: \(invitation.data["email"] ?? ""), Document ID: \(invitation.reviewerId)")
+                    Logger.debug("   hasNoUserId: \(hasNoUserId), userIdDocExists: \(userIdDocExists)")
 
                     // Update UUID-based reviewer document with userId and accept status if needed
                     if hasNoUserId {
-                        print("🔗 Updating UUID-based reviewer document (\(invitation.reviewerId)) with userId: \(userId)")
+                        Logger.debug("🔗 Updating UUID-based reviewer document (\(invitation.reviewerId)) with userId: \(userId)")
                         try await firestoreService.updateReviewer(
                             projectId: invitation.projectId,
                             reviewerId: invitation.reviewerId,
@@ -1667,46 +1667,46 @@ class ProjectSyncService {
                                 "acceptedAt": Timestamp(date: Date())
                             ]
                         )
-                        print("✅ Updated UUID-based reviewer document with userId")
+                        Logger.debug("✅ Updated UUID-based reviewer document with userId")
                     }
 
                     // Create userId-based reviewer document for security rules if it doesn't exist
                     if !userIdDocExists {
-                        print("🔗 Creating userId-based reviewer document at: projects/\(invitation.projectId)/reviewers/\(userId)")
+                        Logger.debug("🔗 Creating userId-based reviewer document at: projects/\(invitation.projectId)/reviewers/\(userId)")
                         try await userIdReviewerRef.setData([
                             "email": invitation.data["email"] ?? userEmail,
                             "userId": userId,
                             "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
                             "acceptedAt": Timestamp(date: Date())
                         ])
-                        print("✅ Created userId-based reviewer document")
+                        Logger.debug("✅ Created userId-based reviewer document")
                     }
 
                     invitationsAccepted += 1
-                    print("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
-                    print("   - Total invitations accepted so far: \(invitationsAccepted)")
+                    Logger.debug("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
+                    Logger.debug("   - Total invitations accepted so far: \(invitationsAccepted)")
                     
                     // Delete the pending_invitations document now that it's been accepted
                     let pendingInviteRef = Firestore.firestore()
                         .collection("pending_invitations")
                         .document(userEmail.lowercased())
                     try await pendingInviteRef.delete()
-                    print("✅ Deleted pending_invitations document for: \(userEmail)")
+                    Logger.debug("✅ Deleted pending_invitations document for: \(userEmail)")
                 } else {
-                    print("✓ Reviewer already fully linked in project: \(invitation.projectId)")
+                    Logger.debug("✓ Reviewer already fully linked in project: \(invitation.projectId)")
                 }
             }
             
             if invitationsAccepted > 0 {
-                print("🎉 Accepted \(invitationsAccepted) pending invitation(s)")
+                Logger.debug("🎉 Accepted \(invitationsAccepted) pending invitation(s)")
             } else if pendingInvitations.isEmpty {
-                print("ℹ️ No reviewer records found for email: \(userEmail)")
+                Logger.debug("ℹ️ No reviewer records found for email: \(userEmail)")
             } else {
-                print("ℹ️ All reviewer records already have userId linked")
+                Logger.debug("ℹ️ All reviewer records already have userId linked")
             }
         } catch {
-            print("⚠️ Error checking for pending invitations: \(error)")
-            print("   Error details: \(error.localizedDescription)")
+            Logger.warning("⚠️ Error checking for pending invitations: \(error)")
+            Logger.debug("   Error details: \(error.localizedDescription)")
         }
     }
     
@@ -1716,11 +1716,11 @@ class ProjectSyncService {
     /// This runs on app launch and network reconnect to ensure all local changes are backed up
     func syncUnsyncedMixesToCloud(modelContext: ModelContext) async throws {
         guard authService.currentUser?.id != nil else {
-            print("⚠️ Cannot sync - no authenticated user")
+            Logger.warning("⚠️ Cannot sync - no authenticated user")
             return
         }
         
-        print("🔄 Starting auto-sync of unsyncced mixes...")
+        Logger.debug("🔄 Starting auto-sync of unsyncced mixes...")
         
         // Query for mixes that need upload
         let descriptor = FetchDescriptor<Mix>(
@@ -1732,11 +1732,11 @@ class ProjectSyncService {
         let unsyncedMixes = try modelContext.fetch(descriptor)
         
         guard !unsyncedMixes.isEmpty else {
-            print("✅ No unsyncced mixes found")
+            Logger.debug("✅ No unsyncced mixes found")
             return
         }
         
-        print("📤 Found \(unsyncedMixes.count) mix(es) that need uploading")
+        Logger.debug("📤 Found \(unsyncedMixes.count) mix(es) that need uploading")
         
         var successCount = 0
         var failCount = 0
@@ -1747,20 +1747,20 @@ class ProjectSyncService {
                   let project = song.project,
                   let projectId = project.firestoreId,
                   let songId = song.firestoreId else {
-                print("⚠️ Mix '\(mix.name)' missing required project/song info - skipping")
+                Logger.warning("⚠️ Mix '\(mix.name)' missing required project/song info - skipping")
                 continue
             }
             
             // Only project owners can sync mixes to Firestore
             // Approvers have read-only access to mixes
             guard project.ownerUserID == authService.currentUser?.id else {
-                print("⏭️ Skipping mix '\(mix.name)' - user is not project owner")
+                Logger.debug("⏭️ Skipping mix '\(mix.name)' - user is not project owner")
                 continue
             }
             
             // Handle deleted mixes - propagate deletion to cloud
             if mix.isDeleted {
-                print("🗑️ Syncing deletion for mix: \(mix.name)")
+                Logger.debug("🗑️ Syncing deletion for mix: \(mix.name)")
                 
                 if let mixId = mix.firestoreId {
                     do {
@@ -1777,15 +1777,15 @@ class ProjectSyncService {
                         }
                         
                         successCount += 1
-                        print("✅ Deletion synced and local copy removed: \(mix.name)")
+                        Logger.debug("✅ Deletion synced and local copy removed: \(mix.name)")
                         
                     } catch {
                         failCount += 1
-                        print("❌ Failed to sync deletion for '\(mix.name)': \(error.localizedDescription)")
+                        Logger.error("❌ Failed to sync deletion for '\(mix.name)': \(error.localizedDescription)")
                     }
                 } else {
                     // Mix was never uploaded, just delete locally
-                    print("   ℹ️ Mix was never uploaded - removing locally only")
+                    Logger.debug("   ℹ️ Mix was never uploaded - removing locally only")
                     await MainActor.run {
                         modelContext.delete(mix)
                         try? modelContext.save()
@@ -1798,14 +1798,14 @@ class ProjectSyncService {
             
             // Verify local file exists for non-deleted mixes
             guard mix.resolvedAssetURL != nil else {
-                print("⚠️ Mix '\(mix.name)' has no local file - skipping")
+                Logger.warning("⚠️ Mix '\(mix.name)' has no local file - skipping")
                 continue
             }
             
             do {
                 // Check if this is an update to existing cloud mix
                 if let mixId = mix.firestoreId, mix.isUploaded {
-                    print("🔄 Updating existing mix: \(mix.name)")
+                    Logger.debug("🔄 Updating existing mix: \(mix.name)")
                     try await firestoreService.updateMix(
                         projectId: projectId,
                         songId: songId,
@@ -1819,11 +1819,11 @@ class ProjectSyncService {
                     }
                     
                     successCount += 1
-                    print("✅ Successfully updated: \(mix.name)")
+                    Logger.debug("✅ Successfully updated: \(mix.name)")
                     
                 } else {
                     // New mix - upload file and create in Firestore
-                    print("📤 Uploading new mix: \(mix.name)")
+                    Logger.debug("📤 Uploading new mix: \(mix.name)")
                     try await uploadMix(
                         mix: mix,
                         projectId: projectId,
@@ -1837,17 +1837,17 @@ class ProjectSyncService {
                     }
                     
                     successCount += 1
-                    print("✅ Successfully uploaded: \(mix.name)")
+                    Logger.debug("✅ Successfully uploaded: \(mix.name)")
                 }
                 
             } catch {
                 failCount += 1
-                print("❌ Failed to sync '\(mix.name)': \(error.localizedDescription)")
+                Logger.error("❌ Failed to sync '\(mix.name)': \(error.localizedDescription)")
                 // Keep needsUpload = true so it retries later
             }
         }
         
-        print("🎉 Auto-sync complete: \(successCount) uploaded, \(failCount) failed")
+        Logger.debug("🎉 Auto-sync complete: \(successCount) uploaded, \(failCount) failed")
     }
     
     // MARK: - Auto-Sync Unsyncced Approvals
@@ -1856,11 +1856,11 @@ class ProjectSyncService {
     /// This runs on app launch and network reconnect to ensure all local approval changes are backed up
     func syncUnsyncedApprovalsToCloud(modelContext: ModelContext) async throws {
         guard let currentUserId = authService.currentUser?.id else {
-            print("⚠️ Cannot sync approvals - no authenticated user")
+            Logger.warning("⚠️ Cannot sync approvals - no authenticated user")
             return
         }
         
-        print("🔄 Starting auto-sync of unsyncced approvals...")
+        Logger.debug("🔄 Starting auto-sync of unsyncced approvals...")
         
         // Query for approvals that need upload AND belong to the current user
         // Only reviewers can upload their own approvals (per Firestore security rules)
@@ -1874,11 +1874,11 @@ class ProjectSyncService {
         let unsyncedApprovals = try modelContext.fetch(descriptor)
         
         guard !unsyncedApprovals.isEmpty else {
-            print("✅ No unsyncced approvals found")
+            Logger.debug("✅ No unsyncced approvals found")
             return
         }
         
-        print("📤 Found \(unsyncedApprovals.count) approval(s) that need uploading")
+        Logger.debug("📤 Found \(unsyncedApprovals.count) approval(s) that need uploading")
         
         var successCount = 0
         var failCount = 0
@@ -1891,26 +1891,26 @@ class ProjectSyncService {
                   let projectId = project.firestoreId,
                   let songId = song.firestoreId,
                   let mixId = mix.firestoreId else {
-                print("⚠️ Approval missing required project/song/mix info - skipping")
+                Logger.warning("⚠️ Approval missing required project/song/mix info - skipping")
                 continue
             }
             
             // Get reviewer info
             guard let reviewer = approval.reviewer,
                   let reviewerUserId = reviewer.userId else {
-                print("⚠️ Approval missing reviewer userId - skipping")
+                Logger.warning("⚠️ Approval missing reviewer userId - skipping")
                 continue
             }
             
             // Only sync approvals where the current user is the reviewer
             // (Firestore security rules only allow reviewers to update their own approvals)
             guard reviewerUserId == currentUserId else {
-                print("⏭️ Skipping approval from '\(reviewer.displayName)' - not current user's approval")
+                Logger.debug("⏭️ Skipping approval from '\(reviewer.displayName)' - not current user's approval")
                 continue
             }
             
             do {
-                print("📤 Syncing approval for mix '\(mix.name)' by reviewer '\(reviewer.displayName)'")
+                Logger.debug("📤 Syncing approval for mix '\(mix.name)' by reviewer '\(reviewer.displayName)'")
                 
                 // Sync to Firestore
                 _ = try await firestoreService.createOrUpdateApproval(
@@ -1929,16 +1929,16 @@ class ProjectSyncService {
                 }
                 
                 successCount += 1
-                print("✅ Successfully synced approval")
+                Logger.debug("✅ Successfully synced approval")
                 
             } catch {
                 failCount += 1
-                print("❌ Failed to sync approval: \(error.localizedDescription)")
+                Logger.error("❌ Failed to sync approval: \(error.localizedDescription)")
                 // Keep needsUpload = true so it retries later
             }
         }
         
-        print("🎉 Approval sync complete: \(successCount) uploaded, \(failCount) failed")
+        Logger.debug("🎉 Approval sync complete: \(successCount) uploaded, \(failCount) failed")
     }
     
     // MARK: - Auto-Sync Unsyncced Songs
@@ -1947,11 +1947,11 @@ class ProjectSyncService {
     /// This runs on app launch and network reconnect to ensure all local song changes are backed up
     func syncUnsyncedSongsToCloud(modelContext: ModelContext) async throws {
         guard authService.currentUser?.id != nil else {
-            print("⚠️ Cannot sync songs - no authenticated user")
+            Logger.warning("⚠️ Cannot sync songs - no authenticated user")
             return
         }
         
-        print("🔄 Starting auto-sync of unsyncced songs...")
+        Logger.debug("🔄 Starting auto-sync of unsyncced songs...")
         
         // Query ALL songs to verify they exist in Firestore (temporary debugging)
         // TODO: Revert to optimized query once sync is verified working
@@ -1960,11 +1960,11 @@ class ProjectSyncService {
         let unsyncedSongs = try modelContext.fetch(descriptor)
         
         guard !unsyncedSongs.isEmpty else {
-            print("✅ No unsyncced songs found")
+            Logger.debug("✅ No unsyncced songs found")
             return
         }
         
-        print("📤 Found \(unsyncedSongs.count) song(s) that need uploading")
+        Logger.debug("📤 Found \(unsyncedSongs.count) song(s) that need uploading")
         
         var successCount = 0
         var failCount = 0
@@ -1973,14 +1973,14 @@ class ProjectSyncService {
             // Get the project info first
             guard let project = song.project,
                   let projectId = project.firestoreId else {
-                print("⚠️ Song '\(song.name)' missing required project info - skipping")
+                Logger.warning("⚠️ Song '\(song.name)' missing required project info - skipping")
                 continue
             }
             
             // Only project owners can sync songs to Firestore
             // Approvers have read-only access to songs
             guard project.ownerUserID == authService.currentUser?.id else {
-                print("⏭️ Skipping song '\(song.name)' - user is not project owner")
+                Logger.debug("⏭️ Skipping song '\(song.name)' - user is not project owner")
                 continue
             }
             
@@ -1988,49 +1988,49 @@ class ProjectSyncService {
             // This handles the case where a previous sync attempt set the ID but failed to create the document
             var shouldSync = false
             if let songId = song.firestoreId {
-                print("🔍 Checking song '\(song.name)' with firestoreId: \(songId)")
+                Logger.debug("🔍 Checking song '\(song.name)' with firestoreId: \(songId)")
                 do {
                     // Check if document exists
                     let exists = try await firestoreService.songExists(projectId: projectId, songId: songId)
-                    print("   - Document exists in Firestore: \(exists)")
-                    print("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
+                    Logger.debug("   - Document exists in Firestore: \(exists)")
+                    Logger.debug("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
                     
                     if !exists {
-                        print("⚠️ Song '\(song.name)' has firestoreId but document doesn't exist - forcing sync")
+                        Logger.warning("⚠️ Song '\(song.name)' has firestoreId but document doesn't exist - forcing sync")
                         shouldSync = true
                     } else if let lastSync = song.lastSyncedAt,
                               Date().timeIntervalSince(lastSync) < 3600 {
                         let timeSinceSync = Date().timeIntervalSince(lastSync)
-                        print("⏭️ Skipping recently synced song: \(song.name) (synced \(Int(timeSinceSync))s ago)")
+                        Logger.debug("⏭️ Skipping recently synced song: \(song.name) (synced \(Int(timeSinceSync))s ago)")
                         continue
                     } else {
-                        print("✅ Song exists and needs sync (not synced recently)")
+                        Logger.debug("✅ Song exists and needs sync (not synced recently)")
                         shouldSync = true
                     }
                 } catch {
-                    print("⚠️ Error checking song existence: \(error.localizedDescription) - forcing sync")
+                    Logger.warning("⚠️ Error checking song existence: \(error.localizedDescription) - forcing sync")
                     shouldSync = true
                 }
             } else {
                 // No firestoreId means new song - always sync
-                print("📝 Song '\(song.name)' has no firestoreId - will create new")
+                Logger.debug("📝 Song '\(song.name)' has no firestoreId - will create new")
                 shouldSync = true
             }
             
             guard shouldSync else { continue }
             
             do {
-                print("📤 Syncing song: \(song.name)")
-                print("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
-                print("   - firestoreId: \(song.firestoreId ?? "nil")")
-                print("   - projectId: \(projectId)")
+                Logger.debug("📤 Syncing song: \(song.name)")
+                Logger.debug("   - lastSyncedAt: \(song.lastSyncedAt?.description ?? "nil")")
+                Logger.debug("   - firestoreId: \(song.firestoreId ?? "nil")")
+                Logger.debug("   - projectId: \(projectId)")
                 
                 // Check if this is an update to existing cloud song
                 if let songId = song.firestoreId {
-                    print("🔄 Calling updateSong with:")
-                    print("   - projectId: \(projectId)")
-                    print("   - songId: \(songId)")
-                    print("   - name: \(song.name)")
+                    Logger.debug("🔄 Calling updateSong with:")
+                    Logger.debug("   - projectId: \(projectId)")
+                    Logger.debug("   - songId: \(songId)")
+                    Logger.debug("   - name: \(song.name)")
                     
                     try await firestoreService.updateSong(
                         projectId: projectId,
@@ -2044,7 +2044,7 @@ class ProjectSyncService {
                         ]
                     )
                     
-                    print("✅ updateSong completed successfully")
+                    Logger.debug("✅ updateSong completed successfully")
                     
                     await MainActor.run {
                         song.needsUpload = false
@@ -2054,16 +2054,16 @@ class ProjectSyncService {
                     
                 } else {
                     // New song - create in Firestore
-                    print("📤 Creating new song with createSong()")
-                    print("   - projectId: \(projectId)")
-                    print("   - song.name: \(song.name)")
+                    Logger.debug("📤 Creating new song with createSong()")
+                    Logger.debug("   - projectId: \(projectId)")
+                    Logger.debug("   - song.name: \(song.name)")
                     
                     let firestoreId = try await firestoreService.createSong(
                         projectId: projectId,
                         song: song
                     )
                     
-                    print("✅ createSong completed, got firestoreId: \(firestoreId)")
+                    Logger.debug("✅ createSong completed, got firestoreId: \(firestoreId)")
                     
                     await MainActor.run {
                         song.firestoreId = firestoreId
@@ -2074,18 +2074,18 @@ class ProjectSyncService {
                 }
                 
                 successCount += 1
-                print("✅ Successfully synced song: \(song.name)")
+                Logger.debug("✅ Successfully synced song: \(song.name)")
                 
             } catch {
                 failCount += 1
-                print("❌ Failed to sync song '\(song.name)': \(error.localizedDescription)")
-                print("❌ Full error: \(error)")
-                print("❌ Error type: \(type(of: error))")
+                Logger.error("❌ Failed to sync song '\(song.name)': \(error.localizedDescription)")
+                Logger.error("❌ Full error: \(error)")
+                Logger.error("❌ Error type: \(type(of: error))")
                 // Keep needsUpload = true so it retries later
             }
         }
         
-        print("🎉 Song sync complete: \(successCount) uploaded, \(failCount) failed")
+        Logger.debug("🎉 Song sync complete: \(successCount) uploaded, \(failCount) failed")
     }
     
     // MARK: - In-App Notifications

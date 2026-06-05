@@ -41,7 +41,7 @@ class NotificationService: NSObject {
     
     /// Request notification permissions from the user
     func requestPermissions() async -> Bool {
-        print("📱 Requesting notification permissions...")
+        Logger.debug("📱 Requesting notification permissions...")
         
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(
@@ -51,7 +51,7 @@ class NotificationService: NSObject {
             isAuthorized = granted
             
             if granted {
-                print("✅ Notification permissions granted")
+                Logger.debug("✅ Notification permissions granted")
                 
                 // Register for remote notifications on main thread
                 await MainActor.run {
@@ -64,14 +64,14 @@ class NotificationService: NSObject {
                 
                 // Don't get FCM token immediately - wait for APNS token to be set
                 // The token will be fetched automatically via MessagingDelegate when APNS token is ready
-                print("✅ Registered for remote notifications - FCM token will be fetched when APNS token is ready")
+                Logger.debug("✅ Registered for remote notifications - FCM token will be fetched when APNS token is ready")
             } else {
-                print("❌ Notification permissions denied")
+                Logger.error("❌ Notification permissions denied")
             }
             
             return granted
         } catch {
-            print("❌ Error requesting notification permissions: \(error.localizedDescription)")
+            Logger.error("❌ Error requesting notification permissions: \(error.localizedDescription)")
             return false
         }
     }
@@ -84,7 +84,7 @@ class NotificationService: NSObject {
                 self.authorizationStatus = settings.authorizationStatus
                 self.isAuthorized = settings.authorizationStatus == .authorized
                 
-                print("📱 Notification authorization status: \(settings.authorizationStatus.rawValue)")
+                Logger.debug("📱 Notification authorization status: \(settings.authorizationStatus.rawValue)")
                 
                 // If authorized, ensure we're registered for remote notifications
                 if isAuthorized {
@@ -100,10 +100,10 @@ class NotificationService: NSObject {
     
     /// Refresh and save FCM token to Firestore
     func refreshFCMToken() async {
-        print("🔄 Refreshing FCM token...")
+        Logger.debug("🔄 Refreshing FCM token...")
         
         guard let userId = authService.currentUser?.id else {
-            print("⚠️ Cannot refresh FCM token - no authenticated user")
+            Logger.warning("⚠️ Cannot refresh FCM token - no authenticated user")
             return
         }
         
@@ -112,14 +112,14 @@ class NotificationService: NSObject {
             await MainActor.run {
                 self.fcmToken = token
             }
-            print("✅ Got FCM token from Firebase Messaging")
-            print("   Token: \(token.prefix(20))...")
-            print("   For user: \(userId)")
+            Logger.debug("✅ Got FCM token from Firebase Messaging")
+            Logger.debug("   Token: \(token.prefix(20))...")
+            Logger.debug("   For user: \(userId)")
             
             // Save token to Firestore for this user
             await saveFCMTokenToFirestore(token: token)
         } catch {
-            print("❌ Error getting FCM token: \(error.localizedDescription)")
+            Logger.error("❌ Error getting FCM token: \(error.localizedDescription)")
         }
     }
     
@@ -128,22 +128,22 @@ class NotificationService: NSObject {
         guard let userId = authService.currentUser?.id,
               let userEmail = authService.currentUser?.email,
               let userName = authService.currentUser?.displayName else {
-            print("⚠️ No authenticated user to save FCM token")
+            Logger.warning("⚠️ No authenticated user to save FCM token")
             return
         }
         
-        print("💾 Saving FCM token to Firestore:")
-        print("   User ID: \(userId)")
-        print("   User Email: \(userEmail)")
-        print("   User Name: \(userName)")
-        print("   Token: \(token.prefix(20))...") // Only show first 20 chars for security
+        Logger.debug("💾 Saving FCM token to Firestore:")
+        Logger.debug("   User ID: \(userId)")
+        Logger.debug("   User Email: \(userEmail)")
+        Logger.debug("   User Name: \(userName)")
+        Logger.debug("   Token: \(token.prefix(20))...") // Only show first 20 chars for security
         
         do {
             try await firestoreService.updateUserFCMToken(userId: userId, fcmToken: token)
-            print("✅ Successfully saved FCM token to Firestore for user: \(userId)")
-            print("   Token will be added to fcmTokens array in users/\(userId)")
+            Logger.debug("✅ Successfully saved FCM token to Firestore for user: \(userId)")
+            Logger.debug("   Token will be added to fcmTokens array in users/\(userId)")
         } catch {
-            print("❌ Error saving FCM token to Firestore: \(error.localizedDescription)")
+            Logger.error("❌ Error saving FCM token to Firestore: \(error.localizedDescription)")
         }
     }
     
@@ -165,9 +165,9 @@ class NotificationService: NSObject {
                 self.fcmToken = nil
             }
             
-            print("✅ Deleted FCM token for this device")
+            Logger.debug("✅ Deleted FCM token for this device")
         } catch {
-            print("❌ Error deleting FCM token: \(error.localizedDescription)")
+            Logger.error("❌ Error deleting FCM token: \(error.localizedDescription)")
         }
     }
     
@@ -179,7 +179,7 @@ class NotificationService: NSObject {
             #elseif os(macOS)
             NSApplication.shared.dockTile.badgeLabel = nil
             #endif
-            print("✅ Cleared app badge")
+            Logger.debug("✅ Cleared app badge")
         }
     }
 
@@ -199,7 +199,7 @@ class NotificationService: NSObject {
         ]
 
         if syncTriggeringTypes.contains(notificationType) {
-            print("📱 Notification type '\(notificationType)' requires sync - triggering background sync")
+            Logger.debug("📱 Notification type '\(notificationType)' requires sync - triggering background sync")
 
             // Post notification to trigger sync in the main app with proper modelContext
             NotificationCenter.default.post(
@@ -214,14 +214,14 @@ class NotificationService: NSObject {
 // MARK: - MessagingDelegate
 extension NotificationService: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        print("📱 FCM token refreshed via MessagingDelegate")
+        Logger.debug("📱 FCM token refreshed via MessagingDelegate")
         
         guard let token = fcmToken else {
-            print("⚠️ Received nil FCM token")
+            Logger.warning("⚠️ Received nil FCM token")
             return
         }
         
-        print("   Token: \(token.prefix(20))...")
+        Logger.debug("   Token: \(token.prefix(20))...")
         
         Task {
             await MainActor.run {
@@ -232,7 +232,7 @@ extension NotificationService: MessagingDelegate {
             if authService.currentUser?.id != nil {
                 await saveFCMTokenToFirestore(token: token)
             } else {
-                print("⚠️ FCM token received but no authenticated user - will save after login")
+                Logger.warning("⚠️ FCM token received but no authenticated user - will save after login")
             }
         }
     }
@@ -246,14 +246,14 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        print("📱 Received notification while app in foreground")
-        print("   Title: \(notification.request.content.title)")
-        print("   Body: \(notification.request.content.body)")
-        print("   Sound: \(notification.request.content.sound?.description ?? "none")")
-        print("   Badge: \(notification.request.content.badge?.intValue ?? 0)")
+        Logger.debug("📱 Received notification while app in foreground")
+        Logger.debug("   Title: \(notification.request.content.title)")
+        Logger.debug("   Body: \(notification.request.content.body)")
+        Logger.debug("   Sound: \(notification.request.content.sound?.description ?? "none")")
+        Logger.debug("   Badge: \(notification.request.content.badge?.intValue ?? 0)")
 
         let userInfo = notification.request.content.userInfo
-        print("   Notification data: \(userInfo)")
+        Logger.debug("   Notification data: \(userInfo)")
 
         // Trigger background sync if needed
         handleNotificationSync(userInfo: userInfo)
@@ -264,7 +264,7 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         #elseif os(macOS)
         completionHandler([.banner, .sound, .badge])
         #endif
-        print("   ✅ Called completion handler with [.banner, .sound, .badge]")
+        Logger.debug("   ✅ Called completion handler with [.banner, .sound, .badge]")
     }
     
     /// Handle notification tap
@@ -273,10 +273,10 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        print("📱 User tapped notification")
+        Logger.debug("📱 User tapped notification")
 
         let userInfo = response.notification.request.content.userInfo
-        print("   Notification data: \(userInfo)")
+        Logger.debug("   Notification data: \(userInfo)")
 
         // Trigger background sync if needed
         handleNotificationSync(userInfo: userInfo)
@@ -284,7 +284,7 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         // Extract deep link data from notification
         if let projectId = userInfo["projectId"] as? String,
            let mixId = userInfo["mixId"] as? String {
-            print("   Deep link to project: \(projectId), mix: \(mixId)")
+            Logger.debug("   Deep link to project: \(projectId), mix: \(mixId)")
 
             // Post notification to handle deep link navigation
             NotificationCenter.default.post(

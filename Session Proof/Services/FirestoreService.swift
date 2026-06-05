@@ -92,7 +92,7 @@ class FirestoreService {
         // Check the root-level pending_invitations collection
         // This allows unauthenticated users to check for invitations during signup
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
-        print("🔍 Checking pending_invitations collection for email: \(normalizedEmail)")
+        Logger.debug("🔍 Checking pending_invitations collection for email: \(normalizedEmail)")
         
         var results: [(projectId: String, reviewerId: String, data: [String: Any])] = []
         
@@ -103,7 +103,7 @@ class FirestoreService {
         if inviteDoc.exists, let data = inviteDoc.data() {
             if let projectId = data["projectId"] as? String,
                let reviewerId = data["reviewerId"] as? String {
-                print("✉️ Found PENDING invitation for project: \(projectId)")
+                Logger.debug("✉️ Found PENDING invitation for project: \(projectId)")
                 results.append((
                     projectId: projectId,
                     reviewerId: reviewerId,
@@ -111,29 +111,29 @@ class FirestoreService {
                 ))
             }
         } else {
-            print("📊 No pending invitations found for: \(normalizedEmail)")
+            Logger.debug("📊 No pending invitations found for: \(normalizedEmail)")
         }
         
-        print("📊 Total pending invitations found: \(results.count)")
+        Logger.debug("📊 Total pending invitations found: \(results.count)")
         return results
     }
     
     func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
-        print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
-        print("🔍 Using collection group query on 'reviewers' with userId field")
+        Logger.debug("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
+        Logger.debug("🔍 Using collection group query on 'reviewers' with userId field")
         
         // Use collection group query to find all reviewer documents with this userId
         // This searches across all projects' reviewers subcollections
         let reviewersQuery = db.collectionGroup("reviewers")
             .whereField("userId", isEqualTo: userId)
         
-        print("🔍 Executing collection group query...")
+        Logger.debug("🔍 Executing collection group query...")
         let reviewersSnapshot = try await reviewersQuery.getDocuments()
-        print("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) with userId: \(userId)")
+        Logger.debug("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) with userId: \(userId)")
         
         // Log each reviewer document found
         for (index, doc) in reviewersSnapshot.documents.enumerated() {
-            print("📧 Reviewer #\(index + 1): path=\(doc.reference.path), data=\(doc.data())")
+            Logger.debug("📧 Reviewer #\(index + 1): path=\(doc.reference.path), data=\(doc.data())")
         }
         
         var projectsWithUser: [(id: String, data: [String: Any])] = []
@@ -143,58 +143,58 @@ class FirestoreService {
         for reviewerDoc in reviewersSnapshot.documents {
             // Extract projectId from the document path: projects/{projectId}/reviewers/{reviewerId}
             let pathComponents = reviewerDoc.reference.path.split(separator: "/")
-            print("🔍 Processing path: \(reviewerDoc.reference.path)")
-            print("🔍 Path components: \(pathComponents)")
+            Logger.debug("🔍 Processing path: \(reviewerDoc.reference.path)")
+            Logger.debug("🔍 Path components: \(pathComponents)")
             
             guard pathComponents.count >= 2,
                   pathComponents[0] == "projects",
                   let projectId = pathComponents.indices.contains(1) ? String(pathComponents[1]) : nil else {
-                print("⚠️ Could not extract projectId from path: \(reviewerDoc.reference.path)")
+                Logger.warning("⚠️ Could not extract projectId from path: \(reviewerDoc.reference.path)")
                 continue
             }
             
-            print("✅ Extracted projectId: \(projectId)")
+            Logger.debug("✅ Extracted projectId: \(projectId)")
             
             // Skip if we've already processed this project
             guard !processedProjectIds.contains(projectId) else {
-                print("⏭️ Already processed project: \(projectId)")
+                Logger.debug("⏭️ Already processed project: \(projectId)")
                 continue
             }
             
             do {
                 // Get the project document
-                print("🔍 Fetching project document: \(projectId)")
+                Logger.debug("🔍 Fetching project document: \(projectId)")
                 let projectDoc = try await db.collection("projects").document(projectId).getDocument()
-                print("🔍 Project exists: \(projectDoc.exists)")
+                Logger.debug("🔍 Project exists: \(projectDoc.exists)")
                 
                 if projectDoc.exists, let projectData = projectDoc.data() {
                     let projectName = projectData["name"] as? String ?? "Unknown"
-                    print("✅ Project data retrieved: \(projectName)")
-                    print("   - ownerUserId: \(projectData["ownerUserId"] ?? "missing")")
-                    print("   - isArchived: \(projectData["isArchived"] ?? "not set")")
+                    Logger.debug("✅ Project data retrieved: \(projectName)")
+                    Logger.debug("   - ownerUserId: \(projectData["ownerUserId"] ?? "missing")")
+                    Logger.debug("   - isArchived: \(projectData["isArchived"] ?? "not set")")
                     
                     // Skip archived projects for reviewers
                     let isArchived = projectData["isArchived"] as? Bool ?? false
                     if isArchived {
-                        print("⏭️ Skipping archived project: \(projectName) (\(projectId))")
+                        Logger.debug("⏭️ Skipping archived project: \(projectName) (\(projectId))")
                         processedProjectIds.insert(projectId)
                         continue
                     }
                     
-                    print("✅ Adding project to results: \(projectName) (\(projectId))")
+                    Logger.debug("✅ Adding project to results: \(projectName) (\(projectId))")
                     projectsWithUser.append((projectId, projectData))
                     processedProjectIds.insert(projectId)
                 } else {
-                    print("⚠️ Project \(projectId) not found or has no data")
-                    print("   - Document exists: \(projectDoc.exists)")
+                    Logger.warning("⚠️ Project \(projectId) not found or has no data")
+                    Logger.debug("   - Document exists: \(projectDoc.exists)")
                 }
             } catch {
-                print("⚠️ Error fetching project \(projectId): \(error.localizedDescription)")
-                print("   - Full error: \(error)")
+                Logger.warning("⚠️ Error fetching project \(projectId): \(error.localizedDescription)")
+                Logger.debug("   - Full error: \(error)")
             }
         }
         
-        print("📦 Found \(projectsWithUser.count) projects where user is a reviewer")
+        Logger.debug("📦 Found \(projectsWithUser.count) projects where user is a reviewer")
         return projectsWithUser
     }
     
@@ -228,14 +228,14 @@ class FirestoreService {
         projectId: String,
         song: Song
     ) async throws -> String {
-        print("🔥 FirestoreService.createSong called")
-        print("   - projectId: \(projectId)")
-        print("   - song.name: \(song.name)")
+        Logger.debug("🔥 FirestoreService.createSong called")
+        Logger.debug("   - projectId: \(projectId)")
+        Logger.debug("   - song.name: \(song.name)")
         
         let songRef = db.collection("projects").document(projectId).collection("songs").document()
         
-        print("   - Generated songRef.documentID: \(songRef.documentID)")
-        print("   - Full path: projects/\(projectId)/songs/\(songRef.documentID)")
+        Logger.debug("   - Generated songRef.documentID: \(songRef.documentID)")
+        Logger.debug("   - Full path: projects/\(projectId)/songs/\(songRef.documentID)")
         
         let data: [String: Any] = [
             "name": song.name,
@@ -247,29 +247,29 @@ class FirestoreService {
             "updatedAt": Timestamp(date: song.updatedAt)
         ]
         
-        print("   - About to call setData with data: \(data)")
+        Logger.debug("   - About to call setData with data: \(data)")
         try await songRef.setData(data)
-        print("   - setData completed successfully")
+        Logger.debug("   - setData completed successfully")
         
         return songRef.documentID
     }
     
     func updateSong(projectId: String, songId: String, data: [String: Any]) async throws {
-        print("🔥 FirestoreService.updateSong called")
-        print("   - projectId: \(projectId)")
-        print("   - songId: \(songId)")
-        print("   - Full path: projects/\(projectId)/songs/\(songId)")
-        print("   - data: \(data)")
+        Logger.debug("🔥 FirestoreService.updateSong called")
+        Logger.debug("   - projectId: \(projectId)")
+        Logger.debug("   - songId: \(songId)")
+        Logger.debug("   - Full path: projects/\(projectId)/songs/\(songId)")
+        Logger.debug("   - data: \(data)")
         
         var updateData = data
         updateData["updatedAt"] = Timestamp(date: Date())
         
-        print("   - About to call setData with merge: true")
+        Logger.debug("   - About to call setData with merge: true")
         // Use setData with merge to create document if it doesn't exist
         try await db.collection("projects").document(projectId)
             .collection("songs").document(songId)
             .setData(updateData, merge: true)
-        print("   - setData completed successfully")
+        Logger.debug("   - setData completed successfully")
     }
     
     func archiveSong(projectId: String, songId: String) async throws {
@@ -291,15 +291,15 @@ class FirestoreService {
     }
     
     func songExists(projectId: String, songId: String) async throws -> Bool {
-        print("🔥 FirestoreService.songExists called")
-        print("   - Checking path: projects/\(projectId)/songs/\(songId)")
+        Logger.debug("🔥 FirestoreService.songExists called")
+        Logger.debug("   - Checking path: projects/\(projectId)/songs/\(songId)")
         
         let snapshot = try await db.collection("projects").document(projectId)
             .collection("songs").document(songId)
             .getDocument()
         
-        print("   - snapshot.exists: \(snapshot.exists)")
-        print("   - snapshot.data: \(snapshot.data() ?? [:])")
+        Logger.debug("   - snapshot.exists: \(snapshot.exists)")
+        Logger.debug("   - snapshot.data: \(snapshot.data() ?? [:])")
         
         return snapshot.exists
     }
@@ -453,7 +453,7 @@ class FirestoreService {
             .collection("approvals")
             .addSnapshotListener { snapshot, error in
                 guard let documents = snapshot?.documents else {
-                    print("❌ Error fetching approvals: \(error?.localizedDescription ?? "Unknown")")
+                    Logger.error("❌ Error fetching approvals: \(error?.localizedDescription ?? "Unknown")")
                     return
                 }
                 
@@ -525,7 +525,7 @@ class FirestoreService {
             .collection("comments")
             .addSnapshotListener { snapshot, error in
                 guard let documents = snapshot?.documents else {
-                    print("Error fetching comments: \(error?.localizedDescription ?? "Unknown error")")
+                    Logger.debug("Error fetching comments: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 onChange(documents)
@@ -540,7 +540,7 @@ class FirestoreService {
             .collection("reviewers")
             .addSnapshotListener { snapshot, error in
                 guard let documents = snapshot?.documents else {
-                    print("Error fetching reviewers: \(error?.localizedDescription ?? "Unknown error")")
+                    Logger.debug("Error fetching reviewers: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 onChange(documents)
@@ -565,14 +565,14 @@ class FirestoreService {
             "createdAt": Timestamp(date: reviewer.createdAt)
         ]
         
-        print("🔍 DEBUG: About to write reviewer to Firestore with data:")
-        print("   displayName: \(data["displayName"] ?? "nil")")
-        print("   email: \(data["email"] ?? "nil")")
-        print("   userId: \(data["userId"] ?? "nil")")
-        print("   role: \(data["role"] ?? "nil")")
-        print("   inviteStatus: \(data["inviteStatus"] ?? "nil")")
-        print("   isKeyApprover: \(data["isKeyApprover"] ?? "nil")")
-        print("   Reviewer object inviteStatus: \(reviewer.inviteStatus.rawValue)")
+        Logger.debug("🔍 DEBUG: About to write reviewer to Firestore with data:")
+        Logger.debug("   displayName: \(data["displayName"] ?? "nil")")
+        Logger.debug("   email: \(data["email"] ?? "nil")")
+        Logger.debug("   userId: \(data["userId"] ?? "nil")")
+        Logger.debug("   role: \(data["role"] ?? "nil")")
+        Logger.debug("   inviteStatus: \(data["inviteStatus"] ?? "nil")")
+        Logger.debug("   isKeyApprover: \(data["isKeyApprover"] ?? "nil")")
+        Logger.debug("   Reviewer object inviteStatus: \(reviewer.inviteStatus.rawValue)")
         
         if let invitationToken = reviewer.invitationToken {
             data["invitationToken"] = invitationToken
@@ -587,7 +587,7 @@ class FirestoreService {
         // Create the main reviewer document with UUID as ID
         do {
             try await reviewerRef.setData(data)
-            print("✅ Successfully wrote reviewer to Firestore at path: projects/\(projectId)/reviewers/\(reviewer.id.uuidString)")
+            Logger.debug("✅ Successfully wrote reviewer to Firestore at path: projects/\(projectId)/reviewers/\(reviewer.id.uuidString)")
             
             // If this is a pending invitation, also create a root-level pending_invitations document
             // This allows unauthenticated users to check for invitations during signup
@@ -603,23 +603,23 @@ class FirestoreService {
                 // Use email as document ID for easy lookup
                 let inviteRef = db.collection("pending_invitations").document(reviewer.email.lowercased())
                 try await inviteRef.setData(pendingInviteData)
-                print("✅ Created pending_invitations document for: \(reviewer.email)")
+                Logger.debug("✅ Created pending_invitations document for: \(reviewer.email)")
             }
             
             // Immediately verify the write by reading it back
             let verifyDoc = try await reviewerRef.getDocument()
             if verifyDoc.exists {
-                print("✅ VERIFIED: Document exists in Firestore")
+                Logger.debug("✅ VERIFIED: Document exists in Firestore")
                 if let verifyData = verifyDoc.data() {
-                    print("   Fields in Firestore: \(verifyData.keys.sorted())")
-                    print("   inviteStatus in Firestore: \(verifyData["inviteStatus"] ?? "MISSING")")
+                    Logger.debug("   Fields in Firestore: \(verifyData.keys.sorted())")
+                    Logger.debug("   inviteStatus in Firestore: \(verifyData["inviteStatus"] ?? "MISSING")")
                 }
             } else {
-                print("❌ ERROR: Document does NOT exist in Firestore after write!")
+                Logger.error("❌ ERROR: Document does NOT exist in Firestore after write!")
             }
         } catch {
-            print("❌ CRITICAL ERROR writing to Firestore: \(error)")
-            print("   Error details: \(error.localizedDescription)")
+            Logger.error("❌ CRITICAL ERROR writing to Firestore: \(error)")
+            Logger.debug("   Error details: \(error.localizedDescription)")
             throw error
         }
         
@@ -645,7 +645,7 @@ class FirestoreService {
         
         // If we're setting a userId, also create/update the userId-based document
         if let userId = data["userId"] as? String {
-            print("🔗 Creating userId-based reviewer document: \(userId)")
+            Logger.debug("🔗 Creating userId-based reviewer document: \(userId)")
             
             // Get the current reviewer data to merge with updates
             let reviewerDoc = try await db.collection("projects").document(projectId)
@@ -666,7 +666,7 @@ class FirestoreService {
                     .collection("reviewers").document(userId)
                     .setData(reviewerData)
                 
-                print("✅ Created userId-based document for reviewer")
+                Logger.debug("✅ Created userId-based document for reviewer")
             }
         }
     }
@@ -942,24 +942,24 @@ class FirestoreService {
     }
     
     func getUserOrganization(userId: String) async throws -> (id: String, data: [String: Any])? {
-        print("🔍 Querying Firestore for organization with userId: \(userId)")
+        Logger.debug("🔍 Querying Firestore for organization with userId: \(userId)")
         let query = db.collection("organizations").whereField("memberIds", arrayContains: userId)
         let snapshot = try await query.getDocuments()
         
-        print("📊 Query returned \(snapshot.documents.count) organization(s)")
+        Logger.debug("📊 Query returned \(snapshot.documents.count) organization(s)")
         for doc in snapshot.documents {
-            print("   - Found org: \(doc.documentID)")
+            Logger.debug("   - Found org: \(doc.documentID)")
             if let memberIds = doc.data()["memberIds"] as? [String] {
-                print("     memberIds: \(memberIds)")
+                Logger.debug("     memberIds: \(memberIds)")
             }
         }
         
         guard let document = snapshot.documents.first else {
-            print("⚠️ No organization document found")
+            Logger.warning("⚠️ No organization document found")
             return nil
         }
         
-        print("✅ Returning organization: \(document.documentID)")
+        Logger.debug("✅ Returning organization: \(document.documentID)")
         return (document.documentID, document.data())
     }
     

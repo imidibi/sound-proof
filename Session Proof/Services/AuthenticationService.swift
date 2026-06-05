@@ -182,19 +182,19 @@ class AuthenticationService {
             self.currentUser = user
         }
         
-        print("✅ User profile updated: \(user.displayName) (\(user.email))")
+        Logger.debug("✅ User profile updated: \(user.displayName) (\(user.email))")
     }
     
     private func loadUserProfile(uid: String, email: String) async {
-        print("📥 Loading user profile for UID: \(uid)")
+        Logger.debug("📥 Loading user profile for UID: \(uid)")
         
         do {
             let document = try await db.collection("users").document(uid).getDocument()
             
             guard document.exists else {
-                print("❌ User profile document does not exist in Firestore for UID: \(uid)")
-                print("⚠️ This usually means the user was created directly in Firebase Auth without a Firestore profile")
-                print("🔧 Attempting to create profile automatically...")
+                Logger.error("❌ User profile document does not exist in Firestore for UID: \(uid)")
+                Logger.warning("⚠️ This usually means the user was created directly in Firebase Auth without a Firestore profile")
+                Logger.debug("🔧 Attempting to create profile automatically...")
                 
                 // Create a basic profile - we'll prompt user to complete it later
                 await createMissingProfile(uid: uid, email: email)
@@ -202,34 +202,34 @@ class AuthenticationService {
             }
             
             guard let data = document.data() else {
-                print("❌ User profile document exists but has no data")
+                Logger.error("❌ User profile document exists but has no data")
                 return
             }
             
-            print("📊 User profile data: \(data.keys.joined(separator: ", "))")
+            Logger.debug("📊 User profile data: \(data.keys.joined(separator: ", "))")
             
             guard let email = data["email"] as? String else {
-                print("❌ Missing email field")
+                Logger.error("❌ Missing email field")
                 return
             }
             
             guard let displayName = data["displayName"] as? String else {
-                print("❌ Missing displayName field")
+                Logger.error("❌ Missing displayName field")
                 return
             }
             
             guard let roleString = data["role"] as? String else {
-                print("❌ Missing role field")
+                Logger.error("❌ Missing role field")
                 return
             }
             
             guard let role = UserRole(rawValue: roleString) else {
-                print("❌ Invalid role value: \(roleString)")
+                Logger.error("❌ Invalid role value: \(roleString)")
                 return
             }
             
             guard let timestamp = data["createdAt"] as? Timestamp else {
-                print("❌ Missing createdAt field")
+                Logger.error("❌ Missing createdAt field")
                 return
             }
             
@@ -269,11 +269,11 @@ class AuthenticationService {
 
             await MainActor.run {
                 self.currentUser = user
-                print("✅ User profile loaded successfully: \(user.displayName) (\(user.email))")
+                Logger.debug("✅ User profile loaded successfully: \(user.displayName) (\(user.email))")
             }
         } catch {
-            print("❌ Error loading user profile: \(error)")
-            print("   Error details: \(error.localizedDescription)")
+            Logger.error("❌ Error loading user profile: \(error)")
+            Logger.debug("   Error details: \(error.localizedDescription)")
         }
     }
     
@@ -363,7 +363,7 @@ class AuthenticationService {
         gracePeriodEndsAt: Date? = nil
     ) async throws {
         guard let user = currentUser else {
-            print("⚠️ Cannot update subscription - no current user")
+            Logger.warning("⚠️ Cannot update subscription - no current user")
             return
         }
 
@@ -387,7 +387,7 @@ class AuthenticationService {
 
         do {
             try await db.collection("users").document(user.id).updateData(updateData)
-            print("✅ Subscription status updated in Firestore")
+            Logger.debug("✅ Subscription status updated in Firestore")
 
             // Update local user object
             await MainActor.run {
@@ -401,7 +401,7 @@ class AuthenticationService {
                 self.currentUser = updatedUser
             }
         } catch {
-            print("❌ Failed to update subscription status: \(error.localizedDescription)")
+            Logger.error("❌ Failed to update subscription status: \(error.localizedDescription)")
             throw error
         }
     }
@@ -418,14 +418,14 @@ class AuthenticationService {
             throw NSError(domain: "AuthenticationService", code: -2, userInfo: [NSLocalizedDescriptionKey: "No Firebase user found"])
         }
         
-        print("🗑️ Starting account deletion for user: \(user.id)")
+        Logger.debug("🗑️ Starting account deletion for user: \(user.id)")
         
         // Step 1: Delete user document from Firestore
         do {
             try await db.collection("users").document(user.id).delete()
-            print("✅ Deleted user document from Firestore")
+            Logger.debug("✅ Deleted user document from Firestore")
         } catch {
-            print("⚠️ Failed to delete user document (may not exist): \(error)")
+            Logger.warning("⚠️ Failed to delete user document (may not exist): \(error)")
         }
         
         // Step 2: Delete all user's projects and associated data
@@ -490,17 +490,17 @@ class AuthenticationService {
             
             // Delete the project
             try await projectDoc.reference.delete()
-            print("✅ Deleted project: \(projectId)")
+            Logger.debug("✅ Deleted project: \(projectId)")
         }
         
         // Step 3: Anonymize comments and approvals on OTHER users' projects
         // Use collection group query to find all reviewer documents for this user
-        print("🔍 Searching for projects where user is a reviewer using collection group query")
+        Logger.debug("🔍 Searching for projects where user is a reviewer using collection group query")
         let reviewersSnapshot = try await db.collectionGroup("reviewers")
             .whereField("userId", isEqualTo: user.id)
             .getDocuments()
         
-        print("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) for user")
+        Logger.debug("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) for user")
         
         // Extract unique project IDs
         var projectIds = Set<String>()
@@ -512,7 +512,7 @@ class AuthenticationService {
             }
         }
         
-        print("📦 Found \(projectIds.count) unique project(s) where user is a reviewer")
+        Logger.debug("📦 Found \(projectIds.count) unique project(s) where user is a reviewer")
         
         for projectId in projectIds {
             // Get project to check ownership
@@ -523,11 +523,11 @@ class AuthenticationService {
             
             // Skip if this is the user's own project (already deleted in Step 2)
             if ownerId == user.id {
-                print("⏭️ Skipping own project: \(projectId)")
+                Logger.debug("⏭️ Skipping own project: \(projectId)")
                 continue
             }
             
-            print("🔄 Anonymizing user contributions in project: \(projectId)")
+            Logger.debug("🔄 Anonymizing user contributions in project: \(projectId)")
             
             // Get all songs in this project
             let songsSnapshot = try await db.collection("projects").document(projectId)
@@ -562,7 +562,7 @@ class AuthenticationService {
                     }
                     
                     if !commentsSnapshot.documents.isEmpty {
-                        print("✅ Anonymized \(commentsSnapshot.documents.count) comment(s) in mix: \(mixId)")
+                        Logger.debug("✅ Anonymized \(commentsSnapshot.documents.count) comment(s) in mix: \(mixId)")
                     }
                     
                     // Anonymize approvals
@@ -581,7 +581,7 @@ class AuthenticationService {
                     }
                     
                     if !approvalsSnapshot.documents.isEmpty {
-                        print("✅ Anonymized \(approvalsSnapshot.documents.count) approval(s) in mix: \(mixId)")
+                        Logger.debug("✅ Anonymized \(approvalsSnapshot.documents.count) approval(s) in mix: \(mixId)")
                     }
                 }
             }
@@ -594,11 +594,11 @@ class AuthenticationService {
             
             for reviewerDoc in reviewersInProjectSnapshot.documents {
                 try await reviewerDoc.reference.delete()
-                print("🗑️ Deleted reviewer document: \(reviewerDoc.documentID)")
+                Logger.debug("🗑️ Deleted reviewer document: \(reviewerDoc.documentID)")
             }
         }
         
-        print("✅ Anonymized user contributions on other users' projects")
+        Logger.debug("✅ Anonymized user contributions on other users' projects")
         
         // Step 4: Remove user from any organizations
         if let orgId = user.organizationId {
@@ -606,9 +606,9 @@ class AuthenticationService {
                 try await db.collection("organizations").document(orgId).updateData([
                     "memberIds": FieldValue.arrayRemove([user.id])
                 ])
-                print("✅ Removed user from organization")
+                Logger.debug("✅ Removed user from organization")
             } catch {
-                print("⚠️ Failed to remove from organization: \(error)")
+                Logger.warning("⚠️ Failed to remove from organization: \(error)")
             }
         }
         
@@ -621,18 +621,18 @@ class AuthenticationService {
             try await invitationDoc.reference.delete()
         }
         
-        print("✅ Deleted pending invitations")
+        Logger.debug("✅ Deleted pending invitations")
         
         // Step 6: Delete Firebase Auth account (this must be last)
         try await firebaseUser.delete()
-        print("✅ Deleted Firebase Auth account")
+        Logger.debug("✅ Deleted Firebase Auth account")
         
         // Step 7: Clear local state
         await MainActor.run {
             self.currentUser = nil
         }
         
-        print("✅ Account deletion completed successfully")
+        Logger.debug("✅ Account deletion completed successfully")
     }
 
     // MARK: - Migration Helper
@@ -650,12 +650,12 @@ class AuthenticationService {
 
         do {
             try await saveUserProfile(user: user)
-            print("✅ Created missing user profile for: \(email)")
+            Logger.debug("✅ Created missing user profile for: \(email)")
 
             // Now load the newly created profile
             await loadUserProfile(uid: uid, email: email)
         } catch {
-            print("❌ Failed to create missing profile: \(error)")
+            Logger.error("❌ Failed to create missing profile: \(error)")
         }
     }
 }
