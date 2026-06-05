@@ -104,16 +104,17 @@ class FirestoreService {
         for projectDoc in projectsSnapshot.documents {
             let projectId = projectDoc.documentID
             
-            // Query reviewers in this specific project by email
+            // Query reviewers in this specific project by email AND pending status
             let reviewersQuery = db.collection("projects").document(projectId)
                 .collection("reviewers")
                 .whereField("email", isEqualTo: normalizedEmail)
+                .whereField("inviteStatus", isEqualTo: "pending")
             
             let reviewersSnapshot = try await reviewersQuery.getDocuments()
             
-            // Add any matching reviewers to results
+            // Add any matching pending reviewers to results
             for reviewerDoc in reviewersSnapshot.documents {
-                print("✉️ Found reviewer in project \(projectId): \(reviewerDoc.documentID)")
+                print("✉️ Found PENDING reviewer in project \(projectId): \(reviewerDoc.documentID)")
                 results.append((
                     projectId: projectId,
                     reviewerId: reviewerDoc.documentID,
