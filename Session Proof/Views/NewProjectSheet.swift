@@ -16,6 +16,8 @@ struct NewProjectSheet: View {
     
     @Query private var organizations: [Organization]
     
+    var onProjectCreated: (() -> Void)? = nil
+    
     // Basic Information
     @State private var projectName = ""
     @State private var artistName = ""
@@ -240,14 +242,9 @@ struct NewProjectSheet: View {
             // Ensure we're on main actor for dismiss
             await MainActor.run {
                 isCreating = false
-            }
-            
-            // Small delay to ensure UI updates before dismiss on macOS
-            #if os(macOS)
-            try? await Task.sleep(for: .milliseconds(100))
-            #endif
-            
-            await MainActor.run {
+                // Call callback to close sheet
+                onProjectCreated?()
+                // Also call dismiss as fallback
                 dismiss()
             }
         } catch {

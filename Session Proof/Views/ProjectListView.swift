@@ -333,7 +333,9 @@ struct ProjectListView: View {
                 }
             }
             .sheet(isPresented: $showingNewProjectSheet) {
-                NewProjectSheet()
+                NewProjectSheet(onProjectCreated: {
+                    showingNewProjectSheet = false
+                })
             }
             .sheet(isPresented: $showingNewSongSheet) {
                 if let project = selectedProjectForMenu {
