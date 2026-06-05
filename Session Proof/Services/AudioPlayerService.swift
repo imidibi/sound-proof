@@ -32,7 +32,7 @@ final class AudioPlayerService {
             try audioSession.setCategory(
                 .playback,
                 mode: .default,
-                options: [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
+                options: [.allowBluetoothA2DP, .allowAirPlay]
             )
             
             // Activate the audio session
