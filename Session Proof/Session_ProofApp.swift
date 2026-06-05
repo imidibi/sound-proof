@@ -136,7 +136,7 @@ struct Session_ProofApp: App {
                     }
                     .task {
                         // Request notification permissions after user is authenticated
-                        await notificationService.requestPermissions()
+                        _ = await notificationService.requestPermissions()
                         
                         // Ensure FCM token is fresh and saved
                         await notificationService.refreshFCMToken()

@@ -175,7 +175,11 @@ class NotificationService: NSObject {
     func clearBadge() {
         Task { @MainActor in
             #if os(iOS)
-            UIApplication.shared.applicationIconBadgeNumber = 0
+            if #available(iOS 17.0, *) {
+                UNUserNotificationCenter.current().setBadgeCount(0)
+            } else {
+                UIApplication.shared.applicationIconBadgeNumber = 0
+            }
             #elseif os(macOS)
             NSApplication.shared.dockTile.badgeLabel = nil
             #endif
