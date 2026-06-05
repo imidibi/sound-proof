@@ -494,17 +494,36 @@ class AuthenticationService {
         }
         
         // Step 3: Anonymize comments and approvals on OTHER users' projects
-        // Find all projects where user is a reviewer (but not owner)
-        let reviewerProjectsSnapshot = try await db.collection("projects")
-            .whereField("reviewerIds", arrayContains: user.id)
+        // Use collection group query to find all reviewer documents for this user
+        print("🔍 Searching for projects where user is a reviewer using collection group query")
+        let reviewersSnapshot = try await db.collectionGroup("reviewers")
+            .whereField("userId", isEqualTo: user.id)
             .getDocuments()
         
-        for projectDoc in reviewerProjectsSnapshot.documents {
-            let projectId = projectDoc.documentID
-            let ownerId = projectDoc.data()["ownerId"] as? String
+        print("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) for user")
+        
+        // Extract unique project IDs
+        var projectIds = Set<String>()
+        for reviewerDoc in reviewersSnapshot.documents {
+            let pathComponents = reviewerDoc.reference.path.split(separator: "/")
+            if pathComponents.count >= 2 {
+                let projectId = String(pathComponents[1])
+                projectIds.insert(projectId)
+            }
+        }
+        
+        print("📦 Found \(projectIds.count) unique project(s) where user is a reviewer")
+        
+        for projectId in projectIds {
+            // Get project to check ownership
+            let projectDoc = try await db.collection("projects").document(projectId).getDocument()
+            guard projectDoc.exists else { continue }
+            
+            let ownerId = projectDoc.data()?["ownerUserId"] as? String
             
             // Skip if this is the user's own project (already deleted in Step 2)
             if ownerId == user.id {
+                print("⏭️ Skipping own project: \(projectId)")
                 continue
             }
             
@@ -518,56 +537,64 @@ class AuthenticationService {
             for songDoc in songsSnapshot.documents {
                 let songId = songDoc.documentID
                 
-                // Anonymize comments by this user
-                let commentsSnapshot = try await db.collection("projects").document(projectId)
+                // Anonymize comments by this user in song's mixes
+                let mixesSnapshot = try await db.collection("projects").document(projectId)
                     .collection("songs").document(songId)
-                    .collection("comments")
-                    .whereField("reviewerId", isEqualTo: user.id)
+                    .collection("mixes")
                     .getDocuments()
                 
-                for commentDoc in commentsSnapshot.documents {
-                    try await commentDoc.reference.updateData([
-                        "reviewerId": "deleted-user",
-                        "reviewerName": "Deleted User"
-                    ])
-                }
-                
-                if !commentsSnapshot.documents.isEmpty {
-                    print("✅ Anonymized \(commentsSnapshot.documents.count) comment(s) in song: \(songId)")
-                }
-                
-                // Anonymize approvals by this user
-                let approvalsSnapshot = try await db.collection("projects").document(projectId)
-                    .collection("songs").document(songId)
-                    .collection("approvals")
-                    .whereField("reviewerId", isEqualTo: user.id)
-                    .getDocuments()
-                
-                for approvalDoc in approvalsSnapshot.documents {
-                    try await approvalDoc.reference.updateData([
-                        "reviewerId": "deleted-user",
-                        "reviewerName": "Deleted User"
-                    ])
-                }
-                
-                if !approvalsSnapshot.documents.isEmpty {
-                    print("✅ Anonymized \(approvalsSnapshot.documents.count) approval(s) in song: \(songId)")
+                for mixDoc in mixesSnapshot.documents {
+                    let mixId = mixDoc.documentID
+                    
+                    // Anonymize comments
+                    let commentsSnapshot = try await db.collection("projects").document(projectId)
+                        .collection("songs").document(songId)
+                        .collection("mixes").document(mixId)
+                        .collection("comments")
+                        .whereField("authorId", isEqualTo: user.id)
+                        .getDocuments()
+                    
+                    for commentDoc in commentsSnapshot.documents {
+                        try await commentDoc.reference.updateData([
+                            "authorId": "deleted-user",
+                            "authorName": "Deleted Approver"
+                        ])
+                    }
+                    
+                    if !commentsSnapshot.documents.isEmpty {
+                        print("✅ Anonymized \(commentsSnapshot.documents.count) comment(s) in mix: \(mixId)")
+                    }
+                    
+                    // Anonymize approvals
+                    let approvalsSnapshot = try await db.collection("projects").document(projectId)
+                        .collection("songs").document(songId)
+                        .collection("mixes").document(mixId)
+                        .collection("approvals")
+                        .whereField("reviewerUserId", isEqualTo: user.id)
+                        .getDocuments()
+                    
+                    for approvalDoc in approvalsSnapshot.documents {
+                        try await approvalDoc.reference.updateData([
+                            "reviewerUserId": "deleted-user",
+                            "reviewerName": "Deleted Approver"
+                        ])
+                    }
+                    
+                    if !approvalsSnapshot.documents.isEmpty {
+                        print("✅ Anonymized \(approvalsSnapshot.documents.count) approval(s) in mix: \(mixId)")
+                    }
                 }
             }
             
-            // Remove user from project's reviewerIds array
-            try await db.collection("projects").document(projectId).updateData([
-                "reviewerIds": FieldValue.arrayRemove([user.id])
-            ])
-            
-            // Delete reviewer document for this user
-            let reviewersSnapshot = try await db.collection("projects").document(projectId)
+            // Delete all reviewer documents for this user in this project
+            let reviewersInProjectSnapshot = try await db.collection("projects").document(projectId)
                 .collection("reviewers")
                 .whereField("userId", isEqualTo: user.id)
                 .getDocuments()
             
-            for reviewerDoc in reviewersSnapshot.documents {
+            for reviewerDoc in reviewersInProjectSnapshot.documents {
                 try await reviewerDoc.reference.delete()
+                print("🗑️ Deleted reviewer document: \(reviewerDoc.documentID)")
             }
         }
         
