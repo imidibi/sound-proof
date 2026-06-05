@@ -228,103 +228,71 @@ struct ProjectListView: View {
                         Label("Settings", systemImage: "gear")
                     }
                     
-                    Menu {
-                        // New Project - check entitlement
-                        Button {
-                            if authService.currentUser?.canCreateProjects == true {
+                    if authService.currentUser?.canCreateProjects == true {
+                        Menu {
+                            // New Project
+                            Button {
                                 showingNewProjectSheet = true
-                            } else {
-                                showingPaywall = true
+                            } label: {
+                                Label("New Project", systemImage: "folder.badge.plus")
+                            }
+                            
+                            // Context-aware options based on selection
+                            if let selectedProject = selectedProjectForMenu {
+                                Divider()
+                                Button {
+                                    showingNewSongSheet = true
+                                } label: {
+                                    Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
+                                }
+                            }
+                            
+                            if let selectedSong = selectedSongForMenu {
+                                Divider()
+                                Button {
+                                    showingImportMixSheet = true
+                                } label: {
+                                    Label("Import Mix to \(selectedSong.name)", systemImage: "square.and.arrow.down")
+                                }
                             }
                         } label: {
-                            Label("New Project", systemImage: "folder.badge.plus")
+                            Label("Add", systemImage: "plus")
                         }
-                        
-                        // DISABLED: Share code functionality removed - use email invitations only
-                        // Show Join Project for artists
-                        // if authService.currentUser?.role == .artist {
-                        //     Button {
-                        //         showingJoinProjectSheet = true
-                        //     } label: {
-                        //         Label("Join Project", systemImage: "link")
-                        //     }
-                        // }
-                        
-                        // Context-aware options based on selection
-                        if let selectedProject = selectedProjectForMenu {
-                            Divider()
-                            Button {
-                                if authService.currentUser?.canCreateProjects == true {
-                                    showingNewSongSheet = true
-                                } else {
-                                    showingPaywall = true
-                                }
-                            } label: {
-                                Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
-                            }
-                        }
-                        
-                        if let selectedSong = selectedSongForMenu, authService.currentUser?.canCreateProjects == true {
-                            Divider()
-                            Button {
-                                showingImportMixSheet = true
-                            } label: {
-                                Label("Import Mix to \(selectedSong.name)", systemImage: "square.and.arrow.down")
-                            }
-                        }
-                    } label: {
-                        Label("Add", systemImage: "plus")
                     }
                 }
                 #else
                 // iOS toolbar layout
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        // New Project - check entitlement
-                        Button {
-                            if authService.currentUser?.canCreateProjects == true {
+                if authService.currentUser?.canCreateProjects == true {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            // New Project
+                            Button {
                                 showingNewProjectSheet = true
-                            } else {
-                                showingPaywall = true
+                            } label: {
+                                Label("New Project", systemImage: "folder.badge.plus")
+                            }
+                            
+                            // Context-aware options based on selection
+                            if let selectedProject = selectedProjectForMenu {
+                                Divider()
+                                Button {
+                                    showingNewSongSheet = true
+                                } label: {
+                                    Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
+                                }
+                            }
+                            
+                            if let selectedSong = selectedSongForMenu {
+                                Divider()
+                                Button {
+                                    showingImportMixSheet = true
+                                } label: {
+                                    Label("Import Mix to \(selectedSong.name)", systemImage: "square.and.arrow.down")
+                                }
                             }
                         } label: {
-                            Label("New Project", systemImage: "folder.badge.plus")
+                            Label("Add", systemImage: "plus")
                         }
-                        
-                        // DISABLED: Share code functionality removed - use email invitations only
-                        // Show Join Project for artists
-                        // if authService.currentUser?.role == .artist {
-                        //     Button {
-                        //         showingJoinProjectSheet = true
-                        //     } label: {
-                        //         Label("Join Project", systemImage: "link")
-                        //     }
-                        // }
-                        
-                        // Context-aware options based on selection
-                        if let selectedProject = selectedProjectForMenu {
-                            Divider()
-                            Button {
-                                if authService.currentUser?.canCreateProjects == true {
-                                    showingNewSongSheet = true
-                                } else {
-                                    showingPaywall = true
-                                }
-                            } label: {
-                                Label("Add Song to \(selectedProject.name)", systemImage: "music.note")
-                            }
-                        }
-                        
-                        if let selectedSong = selectedSongForMenu, authService.currentUser?.canCreateProjects == true {
-                            Divider()
-                            Button {
-                                showingImportMixSheet = true
-                            } label: {
-                                Label("Import Mix to \(selectedSong.name)", systemImage: "square.and.arrow.down")
-                            }
-                        }
-                    } label: {
-                        Label("Add", systemImage: "plus")
                     }
                 }
                 
@@ -392,19 +360,29 @@ struct ProjectListView: View {
                 MixDetailView(mix: mix)
             } else if projects.isEmpty {
                 VStack(spacing: 20) {
-                    ContentUnavailableView(
-                        "Welcome to Approvl",
-                        systemImage: "waveform.circle",
-                        description: Text("Get started by creating a project")
-                    )
-                    
-                    Button {
-                        showingNewProjectSheet = true
-                    } label: {
-                        Label("Create Project", systemImage: "plus")
+                    if authService.currentUser?.canCreateProjects == true {
+                        // Producer with no projects
+                        ContentUnavailableView(
+                            "Welcome to Approvl",
+                            systemImage: "waveform.circle",
+                            description: Text("Get started by creating a project")
+                        )
+                        
+                        Button {
+                            showingNewProjectSheet = true
+                        } label: {
+                            Label("Create Project", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    } else {
+                        // Free user with no projects
+                        ContentUnavailableView(
+                            "Welcome to Approvl",
+                            systemImage: "waveform.circle",
+                            description: Text("You'll see projects here when a producer invites you to review their music")
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                 }
             } else {
                 VStack(spacing: 20) {
