@@ -137,5 +137,14 @@ service cloud.firestore {
       allow update: if isSignedIn() && isOrganizationMember(organizationId);
       allow delete: if isSignedIn() && isOrganizationMember(organizationId);
     }
+
+    // Pending invitations collection (root level)
+    // Allows unauthenticated users to check for invitations during signup
+    match /pending_invitations/{email} {
+      // Anyone can read to check if they have a pending invitation
+      allow read: if true;
+      // Only authenticated users can create, update, or delete
+      allow write, delete: if isSignedIn();
+    }
   }
 }
