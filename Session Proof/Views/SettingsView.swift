@@ -451,7 +451,7 @@ struct SettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will permanently delete your account and all associated data including projects, mixes, and comments. This action cannot be undone.")
+                Text("This will permanently delete your account and all associated data including projects, mixes, and comments. This action cannot be undone.\n\nNote: If you recently signed in, you may need to sign out and sign back in before deleting your account.")
             }
             .alert("Error Deleting Account", isPresented: .constant(deleteAccountError != nil)) {
                 Button("OK") {
@@ -567,6 +567,14 @@ struct SettingsView: View {
             // Sign out from Firebase
             try authService.signOut()
             
+            // Dismiss sheet BEFORE clearing data to avoid SwiftUI accessing deleted objects
+            await MainActor.run {
+                dismiss()
+            }
+            
+            // Small delay to let sheet dismiss animation complete
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+            
             // Clear all local SwiftData to prevent data leakage between users
             await MainActor.run {
                 print("🗑️ Clearing all local data for user isolation...")
@@ -594,7 +602,6 @@ struct SettingsView: View {
                 }
                 
                 isLoggingOut = false
-                dismiss()
             }
         } catch {
             await MainActor.run {
@@ -680,9 +687,17 @@ struct SettingsView: View {
             // Delete account from Firebase
             try await authService.deleteAccount()
             
+            // Dismiss sheet BEFORE clearing data to avoid SwiftUI accessing deleted objects
+            await MainActor.run {
+                dismiss()
+            }
+            
+            // Small delay to let sheet dismiss animation complete
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+            
             // Clear all local SwiftData
             await MainActor.run {
-                print("🗑️ Clearing all local data...")
+                print("🗑️ Clearing all local data for user isolation...")
                 
                 do {
                     // Delete all projects (cascade will delete songs, mixes, comments, reviewers, approvals)
@@ -701,13 +716,12 @@ struct SettingsView: View {
                     
                     // Save changes
                     try modelContext.save()
-                    print("✅ All local data cleared")
+                    print("✅ All local data cleared - user isolation complete")
                 } catch {
                     print("❌ Error clearing local data: \(error)")
                 }
                 
                 isDeletingAccount = false
-                dismiss()
             }
             
             print("✅ Account deleted successfully")
