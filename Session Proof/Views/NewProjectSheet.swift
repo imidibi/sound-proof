@@ -237,8 +237,17 @@ struct NewProjectSheet: View {
                 modelContext: modelContext
             )
             
+            // Ensure we're on main actor for dismiss
             await MainActor.run {
                 isCreating = false
+            }
+            
+            // Small delay to ensure UI updates before dismiss on macOS
+            #if os(macOS)
+            try? await Task.sleep(for: .milliseconds(100))
+            #endif
+            
+            await MainActor.run {
                 dismiss()
             }
         } catch {
