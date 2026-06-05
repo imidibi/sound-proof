@@ -41,58 +41,59 @@ service cloud.firestore {
     // Projects collection
     match /projects/{projectId} {
       // Allow reading individual projects
-      // Owner can always read, reviewers can read if they have a reviewer document
+      // Owner can always read (check ownership by comparing ownerUserId field directly to avoid circular dependency)
+      // Reviewers can read if they have a reviewer document
       // Archived project filtering is handled in application code
       allow get: if isSignedIn() &&
-                    (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                    (resource.data.ownerUserId == request.auth.uid || isProjectReviewer(projectId));
       // Allow listing all projects (needed for finding invitations by email)
       // Users can only actually read project details if they're owner/reviewer
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isProducer();
-      allow update: if isSignedIn() && isProjectOwner(projectId);
-      allow delete: if isSignedIn() && isProjectOwner(projectId);
+      allow update: if isSignedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerUserId == request.auth.uid;
 
       // Reviewers subcollection
       match /reviewers/{reviewerId} {
         // Allow reading specific reviewer document
         allow get: if isSignedIn() &&
-                      (isProjectOwner(projectId) ||
+                      (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
                        isProjectReviewer(projectId) ||
                        reviewerId == request.auth.uid);
         // Allow listing/querying reviewers for invitation lookup
         // Any authenticated user can query by email to find their invitations
         allow list: if isSignedIn();
         allow create: if isSignedIn() &&
-                         (isProjectOwner(projectId) ||
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
                           reviewerId == request.auth.uid);
         // Allow update if:
         // - Project owner, OR
         // - Document ID matches userId (userId-based document), OR
         // - Updating to link userId when email matches authenticated user's email in users collection
         allow update: if isSignedIn() &&
-                         (isProjectOwner(projectId) ||
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
                           reviewerId == request.auth.uid ||
                           (resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email &&
                            request.resource.data.userId == request.auth.uid));
-        allow delete: if isSignedIn() && isProjectOwner(projectId);
+        allow delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
       }
 
       // Songs subcollection
       match /songs/{songId} {
         // Reviewers cannot access archived songs
         allow read: if isSignedIn() &&
-                       (isProjectOwner(projectId) ||
+                       (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
                         (isProjectReviewer(projectId) &&
                          (!('isArchived' in resource.data) || resource.data.isArchived == false)));
-        allow write: if isSignedIn() && isProjectOwner(projectId);
+        allow write: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
 
         // Mixes subcollection
         match /mixes/{mixId} {
           allow read: if isSignedIn() &&
-                         (isProjectOwner(projectId) || isProjectReviewer(projectId));
-          allow create, delete: if isSignedIn() && isProjectOwner(projectId);
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid || isProjectReviewer(projectId));
+          allow create, delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
           // Allow project owner to update any field
-          allow update: if isSignedIn() && isProjectOwner(projectId);
+          allow update: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
           // Allow reviewers to update only the approvalStatus field
           allow update: if isSignedIn() &&
                            isProjectReviewer(projectId) &&
@@ -101,7 +102,7 @@ service cloud.firestore {
           // Approvals subcollection
           match /approvals/{approvalId} {
             allow read: if isSignedIn() &&
-                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                           (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid || isProjectReviewer(projectId));
             // Allow reviewers to create their own approval records
             allow create: if isSignedIn() && isProjectReviewer(projectId);
             // Allow reviewers to update only their own approval records
@@ -109,19 +110,19 @@ service cloud.firestore {
                              isProjectReviewer(projectId) &&
                              resource.data.reviewerUserId == request.auth.uid;
             // Only project owner can delete approvals
-            allow delete: if isSignedIn() && isProjectOwner(projectId);
+            allow delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
           }
 
           // Comments subcollection
           match /comments/{commentId} {
             allow read: if isSignedIn() &&
-                           (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                           (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid || isProjectReviewer(projectId));
             allow create: if isSignedIn() &&
-                             (isProjectOwner(projectId) || isProjectReviewer(projectId));
+                             (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid || isProjectReviewer(projectId));
             allow update: if isSignedIn() &&
-                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+                             (request.auth.uid == resource.data.authorId || get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid);
             allow delete: if isSignedIn() &&
-                             (request.auth.uid == resource.data.authorId || isProjectOwner(projectId));
+                             (request.auth.uid == resource.data.authorId || get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid);
           }
         }
       }
@@ -145,6 +146,14 @@ service cloud.firestore {
       allow read: if true;
       // Only authenticated users can create, update, or delete
       allow write, delete: if isSignedIn();
+    }
+
+    // Collection group query for reviewers
+    // Allows authenticated users to query all reviewer documents where userId matches their own
+    match /{path=**}/reviewers/{reviewerId} {
+      allow read: if isSignedIn() &&
+                     (reviewerId == request.auth.uid ||
+                      resource.data.userId == request.auth.uid);
     }
   }
 }

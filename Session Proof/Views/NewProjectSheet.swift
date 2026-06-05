@@ -232,22 +232,32 @@ struct NewProjectSheet: View {
         
         do {
             try modelContext.save()
+            print("✅ Project saved to SwiftData")
             
             // Sync to cloud
             try await syncService.createAndSyncProject(
                 project: project,
                 modelContext: modelContext
             )
+            print("✅ Project synced to cloud")
             
             // Ensure we're on main actor for dismiss
             await MainActor.run {
+                print("🔄 Attempting to close sheet...")
                 isCreating = false
                 // Call callback to close sheet
-                onProjectCreated?()
+                if let callback = onProjectCreated {
+                    print("✅ Calling onProjectCreated callback")
+                    callback()
+                } else {
+                    print("⚠️ No onProjectCreated callback provided")
+                }
                 // Also call dismiss as fallback
+                print("✅ Calling dismiss()")
                 dismiss()
             }
         } catch {
+            print("❌ Error creating project: \(error)")
             await MainActor.run {
                 errorMessage = "Error creating project: \(error.localizedDescription)"
                 isCreating = false

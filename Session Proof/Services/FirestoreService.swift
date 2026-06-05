@@ -120,30 +120,58 @@ class FirestoreService {
     
     func getProjectsWhereUserIsReviewer(userId: String, userEmail: String) async throws -> [(id: String, data: [String: Any])] {
         print("🔍 Searching for projects where user \(userId) (\(userEmail)) is a reviewer")
+        print("🔍 Using collection group query on 'reviewers' with userId field")
         
-        // Use findPendingInvitationsByEmail to get all reviewer records for this user
-        // This works because it queries by email in each project's reviewers subcollection
-        let reviewerRecords = try await findPendingInvitationsByEmail(email: userEmail)
-        print("📧 Found \(reviewerRecords.count) reviewer record(s) with user's email")
+        // Use collection group query to find all reviewer documents with this userId
+        // This searches across all projects' reviewers subcollections
+        let reviewersQuery = db.collectionGroup("reviewers")
+            .whereField("userId", isEqualTo: userId)
+        
+        print("🔍 Executing collection group query...")
+        let reviewersSnapshot = try await reviewersQuery.getDocuments()
+        print("📧 Found \(reviewersSnapshot.documents.count) reviewer record(s) with userId: \(userId)")
+        
+        // Log each reviewer document found
+        for (index, doc) in reviewersSnapshot.documents.enumerated() {
+            print("📧 Reviewer #\(index + 1): path=\(doc.reference.path), data=\(doc.data())")
+        }
         
         var projectsWithUser: [(id: String, data: [String: Any])] = []
         var processedProjectIds = Set<String>()
         
-        // For each reviewer record, get the project data
-        for record in reviewerRecords {
-            let projectId = record.projectId
+        // For each reviewer record, extract the project ID and get the project data
+        for reviewerDoc in reviewersSnapshot.documents {
+            // Extract projectId from the document path: projects/{projectId}/reviewers/{reviewerId}
+            let pathComponents = reviewerDoc.reference.path.split(separator: "/")
+            print("🔍 Processing path: \(reviewerDoc.reference.path)")
+            print("🔍 Path components: \(pathComponents)")
+            
+            guard pathComponents.count >= 2,
+                  pathComponents[0] == "projects",
+                  let projectId = pathComponents.indices.contains(1) ? String(pathComponents[1]) : nil else {
+                print("⚠️ Could not extract projectId from path: \(reviewerDoc.reference.path)")
+                continue
+            }
+            
+            print("✅ Extracted projectId: \(projectId)")
             
             // Skip if we've already processed this project
             guard !processedProjectIds.contains(projectId) else {
+                print("⏭️ Already processed project: \(projectId)")
                 continue
             }
             
             do {
                 // Get the project document
+                print("🔍 Fetching project document: \(projectId)")
                 let projectDoc = try await db.collection("projects").document(projectId).getDocument()
+                print("🔍 Project exists: \(projectDoc.exists)")
                 
                 if projectDoc.exists, let projectData = projectDoc.data() {
                     let projectName = projectData["name"] as? String ?? "Unknown"
+                    print("✅ Project data retrieved: \(projectName)")
+                    print("   - ownerUserId: \(projectData["ownerUserId"] ?? "missing")")
+                    print("   - isArchived: \(projectData["isArchived"] ?? "not set")")
                     
                     // Skip archived projects for reviewers
                     let isArchived = projectData["isArchived"] as? Bool ?? false
@@ -153,14 +181,16 @@ class FirestoreService {
                         continue
                     }
                     
-                    print("✅ Found project: \(projectName) (\(projectId))")
+                    print("✅ Adding project to results: \(projectName) (\(projectId))")
                     projectsWithUser.append((projectId, projectData))
                     processedProjectIds.insert(projectId)
                 } else {
                     print("⚠️ Project \(projectId) not found or has no data")
+                    print("   - Document exists: \(projectDoc.exists)")
                 }
             } catch {
                 print("⚠️ Error fetching project \(projectId): \(error.localizedDescription)")
+                print("   - Full error: \(error)")
             }
         }
         

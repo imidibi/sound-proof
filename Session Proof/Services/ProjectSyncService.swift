@@ -516,12 +516,20 @@ class ProjectSyncService {
         
         do {
             // Get projects owned by this user
+            print("🔍 Fetching owned projects...")
             let ownedProjects = try await firestoreService.getUserProjects(userId: userId)
             print("📦 Found \(ownedProjects.count) owned projects")
+            for (projectId, projectData) in ownedProjects {
+                print("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
+            }
             
             // Get projects where user is a reviewer (with email fallback and backfill)
+            print("🔍 Fetching reviewer projects...")
             let reviewerProjects = try await firestoreService.getProjectsWhereUserIsReviewer(userId: userId, userEmail: userEmail)
             print("📦 Found \(reviewerProjects.count) projects where user is a reviewer")
+            for (projectId, projectData) in reviewerProjects {
+                print("   - \(projectData["name"] ?? "Unknown") (\(projectId))")
+            }
             
             // Combine and deduplicate projects
             var projectsMap: [String: [String: Any]] = [:]
@@ -552,7 +560,7 @@ class ProjectSyncService {
                     let project = Project(
                         name: projectData["name"] as? String ?? "Untitled",
                         clientName: projectData["clientName"] as? String,
-                        ownerUserID: userId,
+                        ownerUserID: projectData["ownerUserId"] as? String ?? userId,
                         notes: projectData["notes"] as? String
                     )
                     
@@ -1645,9 +1653,11 @@ class ProjectSyncService {
                 if hasNoUserId || !userIdDocExists {
                     print("✉️ Found pending invitation in project: \(invitation.projectId)")
                     print("   Reviewer email: \(invitation.data["email"] ?? ""), Document ID: \(invitation.reviewerId)")
+                    print("   hasNoUserId: \(hasNoUserId), userIdDocExists: \(userIdDocExists)")
 
                     // Update UUID-based reviewer document with userId and accept status if needed
                     if hasNoUserId {
+                        print("🔗 Updating UUID-based reviewer document (\(invitation.reviewerId)) with userId: \(userId)")
                         try await firestoreService.updateReviewer(
                             projectId: invitation.projectId,
                             reviewerId: invitation.reviewerId,
@@ -1657,21 +1667,24 @@ class ProjectSyncService {
                                 "acceptedAt": Timestamp(date: Date())
                             ]
                         )
+                        print("✅ Updated UUID-based reviewer document with userId")
                     }
 
                     // Create userId-based reviewer document for security rules if it doesn't exist
                     if !userIdDocExists {
-                        print("🔗 Creating userId-based reviewer document: \(userId)")
+                        print("🔗 Creating userId-based reviewer document at: projects/\(invitation.projectId)/reviewers/\(userId)")
                         try await userIdReviewerRef.setData([
                             "email": invitation.data["email"] ?? userEmail,
                             "userId": userId,
                             "inviteStatus": ReviewerInviteStatus.accepted.rawValue,
                             "acceptedAt": Timestamp(date: Date())
                         ])
+                        print("✅ Created userId-based reviewer document")
                     }
 
                     invitationsAccepted += 1
                     print("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
+                    print("   - Total invitations accepted so far: \(invitationsAccepted)")
                     
                     // Delete the pending_invitations document now that it's been accepted
                     let pendingInviteRef = Firestore.firestore()
