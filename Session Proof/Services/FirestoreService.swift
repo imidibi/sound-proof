@@ -49,6 +49,71 @@ class FirestoreService {
         try await updateProject(projectId: projectId, data: data)
     }
     
+    func deleteProject(projectId: String) async throws {
+        Logger.debug("🗑️ Deleting project from Firestore: \(projectId)")
+        
+        // Delete all songs and their subcollections
+        let songsSnapshot = try await db.collection("projects").document(projectId)
+            .collection("songs")
+            .getDocuments()
+        
+        for songDoc in songsSnapshot.documents {
+            let songId = songDoc.documentID
+            
+            // Delete all mixes and their subcollections
+            let mixesSnapshot = try await db.collection("projects").document(projectId)
+                .collection("songs").document(songId)
+                .collection("mixes")
+                .getDocuments()
+            
+            for mixDoc in mixesSnapshot.documents {
+                let mixId = mixDoc.documentID
+                
+                // Delete comments
+                let commentsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("mixes").document(mixId)
+                    .collection("comments")
+                    .getDocuments()
+                
+                for commentDoc in commentsSnapshot.documents {
+                    try await commentDoc.reference.delete()
+                }
+                
+                // Delete approvals
+                let approvalsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("mixes").document(mixId)
+                    .collection("approvals")
+                    .getDocuments()
+                
+                for approvalDoc in approvalsSnapshot.documents {
+                    try await approvalDoc.reference.delete()
+                }
+                
+                // Delete mix
+                try await mixDoc.reference.delete()
+            }
+            
+            // Delete song
+            try await songDoc.reference.delete()
+        }
+        
+        // Delete all reviewers
+        let reviewersSnapshot = try await db.collection("projects").document(projectId)
+            .collection("reviewers")
+            .getDocuments()
+        
+        for reviewerDoc in reviewersSnapshot.documents {
+            try await reviewerDoc.reference.delete()
+        }
+        
+        // Finally, delete the project itself
+        try await db.collection("projects").document(projectId).delete()
+        
+        Logger.debug("✅ Project deleted from Firestore: \(projectId)")
+    }
+    
     func reloadProject(projectId: String) async throws {
         let data: [String: Any] = [
             "status": "Draft",

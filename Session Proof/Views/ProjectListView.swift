@@ -606,12 +606,26 @@ struct ProjectFolderRow: View {
     }
     
     private func deleteProject() {
+        // Delete from Firestore first
+        if let projectId = project.firestoreId {
+            Task {
+                do {
+                    try await firestoreService.deleteProject(projectId: projectId)
+                    Logger.debug("✅ Project deleted from Firestore: \(project.name)")
+                } catch {
+                    Logger.error("Error deleting project from Firestore: \(error)")
+                }
+            }
+        }
+        
+        // Delete from local SwiftData
         modelContext.delete(project)
         
         do {
             try modelContext.save()
+            Logger.debug("✅ Project deleted locally: \(project.name)")
         } catch {
-            print("Error deleting project: \(error)")
+            Logger.error("Error deleting project locally: \(error)")
         }
     }
     

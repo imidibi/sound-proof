@@ -49,17 +49,25 @@ class ProjectSyncService {
                 ownerUserId: userId
             )
             
+            // Always set firestoreId immediately to prevent duplicates
+            await MainActor.run {
+                project.firestoreId = firestoreId
+                project.isSynced = true
+                project.lastSyncedAt = Date()
+            }
+            
             // Get the share code from Firestore
             if let projectData = try await firestoreService.getProject(projectId: firestoreId),
                let shareCode = projectData["shareCode"] as? String {
                 
-                // Update local project
+                // Update local project with share code
                 await MainActor.run {
-                    project.firestoreId = firestoreId
                     project.shareCode = shareCode
-                    project.isSynced = true
-                    project.lastSyncedAt = Date()
-                    
+                    try? modelContext.save()
+                }
+            } else {
+                // Even if we couldn't get the share code, save the firestoreId
+                await MainActor.run {
                     try? modelContext.save()
                 }
             }
