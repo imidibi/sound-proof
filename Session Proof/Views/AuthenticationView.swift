@@ -358,6 +358,30 @@ struct SignUpView: View {
                         SecureField("Confirm Password", text: $confirmPassword)
                             .textFieldStyle(.roundedBorder)
                             .textContentType(.newPassword)
+                        
+                        if !confirmPassword.isEmpty && password != confirmPassword {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                                Text("Passwords do not match")
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                            .padding(.top, 4)
+                        }
+                        
+                        if !password.isEmpty && password.count < 6 {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.orange)
+                                    .font(.caption)
+                                Text("Password must be at least 6 characters")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                     
                     if isInvitedReviewer {
