@@ -493,7 +493,87 @@ class AuthenticationService {
             print("✅ Deleted project: \(projectId)")
         }
         
-        // Step 3: Remove user from any organizations
+        // Step 3: Anonymize comments and approvals on OTHER users' projects
+        // Find all projects where user is a reviewer (but not owner)
+        let reviewerProjectsSnapshot = try await db.collection("projects")
+            .whereField("reviewerIds", arrayContains: user.id)
+            .getDocuments()
+        
+        for projectDoc in reviewerProjectsSnapshot.documents {
+            let projectId = projectDoc.documentID
+            let ownerId = projectDoc.data()["ownerId"] as? String
+            
+            // Skip if this is the user's own project (already deleted in Step 2)
+            if ownerId == user.id {
+                continue
+            }
+            
+            print("🔄 Anonymizing user contributions in project: \(projectId)")
+            
+            // Get all songs in this project
+            let songsSnapshot = try await db.collection("projects").document(projectId)
+                .collection("songs")
+                .getDocuments()
+            
+            for songDoc in songsSnapshot.documents {
+                let songId = songDoc.documentID
+                
+                // Anonymize comments by this user
+                let commentsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("comments")
+                    .whereField("reviewerId", isEqualTo: user.id)
+                    .getDocuments()
+                
+                for commentDoc in commentsSnapshot.documents {
+                    try await commentDoc.reference.updateData([
+                        "reviewerId": "deleted-user",
+                        "reviewerName": "Deleted User"
+                    ])
+                }
+                
+                if !commentsSnapshot.documents.isEmpty {
+                    print("✅ Anonymized \(commentsSnapshot.documents.count) comment(s) in song: \(songId)")
+                }
+                
+                // Anonymize approvals by this user
+                let approvalsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("approvals")
+                    .whereField("reviewerId", isEqualTo: user.id)
+                    .getDocuments()
+                
+                for approvalDoc in approvalsSnapshot.documents {
+                    try await approvalDoc.reference.updateData([
+                        "reviewerId": "deleted-user",
+                        "reviewerName": "Deleted User"
+                    ])
+                }
+                
+                if !approvalsSnapshot.documents.isEmpty {
+                    print("✅ Anonymized \(approvalsSnapshot.documents.count) approval(s) in song: \(songId)")
+                }
+            }
+            
+            // Remove user from project's reviewerIds array
+            try await db.collection("projects").document(projectId).updateData([
+                "reviewerIds": FieldValue.arrayRemove([user.id])
+            ])
+            
+            // Delete reviewer document for this user
+            let reviewersSnapshot = try await db.collection("projects").document(projectId)
+                .collection("reviewers")
+                .whereField("userId", isEqualTo: user.id)
+                .getDocuments()
+            
+            for reviewerDoc in reviewersSnapshot.documents {
+                try await reviewerDoc.reference.delete()
+            }
+        }
+        
+        print("✅ Anonymized user contributions on other users' projects")
+        
+        // Step 4: Remove user from any organizations
         if let orgId = user.organizationId {
             do {
                 try await db.collection("organizations").document(orgId).updateData([
@@ -505,7 +585,7 @@ class AuthenticationService {
             }
         }
         
-        // Step 4: Delete pending invitations
+        // Step 5: Delete pending invitations
         let invitationsSnapshot = try await db.collection("pending_invitations")
             .whereField("inviteeEmail", isEqualTo: user.email)
             .getDocuments()
@@ -516,11 +596,11 @@ class AuthenticationService {
         
         print("✅ Deleted pending invitations")
         
-        // Step 5: Delete Firebase Auth account (this must be last)
+        // Step 6: Delete Firebase Auth account (this must be last)
         try await firebaseUser.delete()
         print("✅ Deleted Firebase Auth account")
         
-        // Step 6: Clear local state
+        // Step 7: Clear local state
         await MainActor.run {
             self.currentUser = nil
         }
