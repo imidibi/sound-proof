@@ -1672,6 +1672,13 @@ class ProjectSyncService {
 
                     invitationsAccepted += 1
                     print("✅ Accepted invitation and linked userId for project: \(invitation.projectId)")
+                    
+                    // Delete the pending_invitations document now that it's been accepted
+                    let pendingInviteRef = Firestore.firestore()
+                        .collection("pending_invitations")
+                        .document(userEmail.lowercased())
+                    try await pendingInviteRef.delete()
+                    print("✅ Deleted pending_invitations document for: \(userEmail)")
                 } else {
                     print("✓ Reviewer already fully linked in project: \(invitation.projectId)")
                 }

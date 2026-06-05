@@ -473,10 +473,13 @@ struct SignUpView: View {
         
         do {
             // Check if this email exists in any project's reviewers
+            print("🔍 Checking for pending invitations for email: \(email)")
             let invitations = try await firestoreService.findPendingInvitationsByEmail(email: email)
+            print("✅ Found \(invitations.count) pending invitation(s)")
             
             await MainActor.run {
                 if !invitations.isEmpty {
+                    print("✅ Setting user as invited reviewer")
                     isInvitedReviewer = true
                     selectedRole = .artist  // Automatically set to artist
                     

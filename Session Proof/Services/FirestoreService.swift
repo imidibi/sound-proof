@@ -89,41 +89,32 @@ class FirestoreService {
     }
     
     func findPendingInvitationsByEmail(email: String) async throws -> [(projectId: String, reviewerId: String, data: [String: Any])] {
-        // Get all projects and check their reviewers subcollections
-        // This avoids needing a collection group index
+        // Check the root-level pending_invitations collection
+        // This allows unauthenticated users to check for invitations during signup
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
-        print("🔍 Searching all projects for reviewers with email: \(normalizedEmail)")
+        print("🔍 Checking pending_invitations collection for email: \(normalizedEmail)")
         
         var results: [(projectId: String, reviewerId: String, data: [String: Any])] = []
         
-        // Get all projects
-        let projectsSnapshot = try await db.collection("projects").getDocuments()
-        print("📁 Found \(projectsSnapshot.documents.count) total projects to check")
+        // Query pending_invitations by email (document ID is the email)
+        let inviteRef = db.collection("pending_invitations").document(normalizedEmail)
+        let inviteDoc = try await inviteRef.getDocument()
         
-        // Check each project's reviewers subcollection
-        for projectDoc in projectsSnapshot.documents {
-            let projectId = projectDoc.documentID
-            
-            // Query reviewers in this specific project by email AND pending status
-            let reviewersQuery = db.collection("projects").document(projectId)
-                .collection("reviewers")
-                .whereField("email", isEqualTo: normalizedEmail)
-                .whereField("inviteStatus", isEqualTo: "pending")
-            
-            let reviewersSnapshot = try await reviewersQuery.getDocuments()
-            
-            // Add any matching pending reviewers to results
-            for reviewerDoc in reviewersSnapshot.documents {
-                print("✉️ Found PENDING reviewer in project \(projectId): \(reviewerDoc.documentID)")
+        if inviteDoc.exists, let data = inviteDoc.data() {
+            if let projectId = data["projectId"] as? String,
+               let reviewerId = data["reviewerId"] as? String {
+                print("✉️ Found PENDING invitation for project: \(projectId)")
                 results.append((
                     projectId: projectId,
-                    reviewerId: reviewerDoc.documentID,
-                    data: reviewerDoc.data()
+                    reviewerId: reviewerId,
+                    data: data
                 ))
             }
+        } else {
+            print("📊 No pending invitations found for: \(normalizedEmail)")
         }
         
-        print("📊 Total matching reviewers found: \(results.count)")
+        print("📊 Total pending invitations found: \(results.count)")
         return results
     }
     
@@ -567,6 +558,23 @@ class FirestoreService {
         do {
             try await reviewerRef.setData(data)
             print("✅ Successfully wrote reviewer to Firestore at path: projects/\(projectId)/reviewers/\(reviewer.id.uuidString)")
+            
+            // If this is a pending invitation, also create a root-level pending_invitations document
+            // This allows unauthenticated users to check for invitations during signup
+            if reviewer.inviteStatus == .sent {
+                let pendingInviteData: [String: Any] = [
+                    "inviteeEmail": reviewer.email.lowercased(),
+                    "projectId": projectId,
+                    "reviewerId": reviewer.id.uuidString,
+                    "displayName": reviewer.displayName,
+                    "createdAt": Timestamp(date: reviewer.createdAt)
+                ]
+                
+                // Use email as document ID for easy lookup
+                let inviteRef = db.collection("pending_invitations").document(reviewer.email.lowercased())
+                try await inviteRef.setData(pendingInviteData)
+                print("✅ Created pending_invitations document for: \(reviewer.email)")
+            }
             
             // Immediately verify the write by reading it back
             let verifyDoc = try await reviewerRef.getDocument()
