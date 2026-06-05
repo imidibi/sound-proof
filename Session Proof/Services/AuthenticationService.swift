@@ -406,6 +406,128 @@ class AuthenticationService {
         }
     }
 
+    // MARK: - Account Deletion
+    
+    /// Delete user account and all associated data
+    func deleteAccount() async throws {
+        guard let user = currentUser else {
+            throw NSError(domain: "AuthenticationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user logged in"])
+        }
+        
+        guard let firebaseUser = Auth.auth().currentUser else {
+            throw NSError(domain: "AuthenticationService", code: -2, userInfo: [NSLocalizedDescriptionKey: "No Firebase user found"])
+        }
+        
+        print("🗑️ Starting account deletion for user: \(user.id)")
+        
+        // Step 1: Delete user document from Firestore
+        do {
+            try await db.collection("users").document(user.id).delete()
+            print("✅ Deleted user document from Firestore")
+        } catch {
+            print("⚠️ Failed to delete user document (may not exist): \(error)")
+        }
+        
+        // Step 2: Delete all user's projects and associated data
+        // Query all projects where user is owner
+        let projectsSnapshot = try await db.collection("projects")
+            .whereField("ownerId", isEqualTo: user.id)
+            .getDocuments()
+        
+        for projectDoc in projectsSnapshot.documents {
+            let projectId = projectDoc.documentID
+            
+            // Delete all songs in this project
+            let songsSnapshot = try await db.collection("projects").document(projectId)
+                .collection("songs")
+                .getDocuments()
+            
+            for songDoc in songsSnapshot.documents {
+                let songId = songDoc.documentID
+                
+                // Delete all mixes in this song
+                let mixesSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("mixes")
+                    .getDocuments()
+                
+                for mixDoc in mixesSnapshot.documents {
+                    try await mixDoc.reference.delete()
+                }
+                
+                // Delete all approvals in this song
+                let approvalsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("approvals")
+                    .getDocuments()
+                
+                for approvalDoc in approvalsSnapshot.documents {
+                    try await approvalDoc.reference.delete()
+                }
+                
+                // Delete all comments in this song
+                let commentsSnapshot = try await db.collection("projects").document(projectId)
+                    .collection("songs").document(songId)
+                    .collection("comments")
+                    .getDocuments()
+                
+                for commentDoc in commentsSnapshot.documents {
+                    try await commentDoc.reference.delete()
+                }
+                
+                // Delete the song
+                try await songDoc.reference.delete()
+            }
+            
+            // Delete all reviewers in this project
+            let reviewersSnapshot = try await db.collection("projects").document(projectId)
+                .collection("reviewers")
+                .getDocuments()
+            
+            for reviewerDoc in reviewersSnapshot.documents {
+                try await reviewerDoc.reference.delete()
+            }
+            
+            // Delete the project
+            try await projectDoc.reference.delete()
+            print("✅ Deleted project: \(projectId)")
+        }
+        
+        // Step 3: Remove user from any organizations
+        if let orgId = user.organizationId {
+            do {
+                try await db.collection("organizations").document(orgId).updateData([
+                    "memberIds": FieldValue.arrayRemove([user.id])
+                ])
+                print("✅ Removed user from organization")
+            } catch {
+                print("⚠️ Failed to remove from organization: \(error)")
+            }
+        }
+        
+        // Step 4: Delete pending invitations
+        let invitationsSnapshot = try await db.collection("pending_invitations")
+            .whereField("inviteeEmail", isEqualTo: user.email)
+            .getDocuments()
+        
+        for invitationDoc in invitationsSnapshot.documents {
+            try await invitationDoc.reference.delete()
+        }
+        
+        print("✅ Deleted pending invitations")
+        
+        // Step 5: Delete Firebase Auth account (this must be last)
+        try await firebaseUser.delete()
+        print("✅ Deleted Firebase Auth account")
+        
+        // Step 6: Clear local state
+        await MainActor.run {
+            self.currentUser = nil
+        }
+        
+        print("✅ Account deletion completed successfully")
+    }
+
     // MARK: - Migration Helper
 
     private func createMissingProfile(uid: String, email: String) async {

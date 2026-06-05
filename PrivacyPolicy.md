@@ -1,0 +1,237 @@
+# Privacy Policy for Approvl
+
+**Last Updated: June 2, 2026**
+
+## Introduction
+
+Approvl ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.
+
+## Information We Collect
+
+### Information You Provide to Us
+
+**Account Information**
+- Email address
+- Display name
+- User role (Producer or Approver)
+- Organization name (if applicable)
+
+**Content You Create**
+- Project names and descriptions
+- Song titles and metadata
+- Audio files (mixes and voice notes)
+- Comments and feedback on mixes
+- Approval status and ratings
+
+**Communication Data**
+- Project invitation emails
+- In-app notifications
+- Push notification preferences
+
+### Information Collected Automatically
+
+**Device Information**
+- Device type and model
+- Operating system version
+- Unique device identifiers
+- App version
+
+**Usage Information**
+- Features used within the app
+- Project and mix access patterns
+- Subscription status and transaction history
+- Time and date of app usage
+
+**Technical Data**
+- IP address
+- Network connection type
+- Crash logs and error reports
+
+## How We Use Your Information
+
+We use the collected information for the following purposes:
+
+**To Provide Our Services**
+- Create and manage your account
+- Store and sync your projects, songs, and mixes across devices
+- Enable collaboration between producers and approvers
+- Deliver push notifications for project updates and comments
+- Process subscription payments via Apple In-App Purchase
+
+**To Improve Our Services**
+- Analyze usage patterns to enhance app functionality
+- Fix bugs and resolve technical issues
+- Develop new features based on user needs
+- Monitor app performance and stability
+
+**To Communicate With You**
+- Send project invitations and notifications
+- Provide customer support
+- Send important service announcements
+- Respond to your inquiries
+
+**Legal and Security**
+- Comply with legal obligations
+- Enforce our Terms of Service
+- Protect against fraud and abuse
+- Ensure account and data security
+
+## Data Storage and Security
+
+### Cloud Storage
+- Your audio files are stored securely in Firebase Cloud Storage
+- Your account and project data are stored in Firebase Firestore
+- All data transmissions are encrypted using industry-standard SSL/TLS protocols
+
+### Local Storage
+- Projects, songs, and mixes are cached locally on your device for offline access
+- Local data is synchronized with the cloud when you're online
+
+### Security Measures
+- Encryption of data in transit and at rest
+- Authentication via Firebase Authentication
+- Regular security audits and updates
+- Restricted access to user data by authorized personnel only
+
+### Data Retention
+- Active account data is retained for as long as your account remains active
+- After subscription expiration, you have a 30-day grace period with read-only access
+- Account data may be deleted 30 days after subscription expiration if not renewed
+- You may request account deletion at any time through app settings
+
+## Data Sharing and Disclosure
+
+### With Other Users
+- Project creators can invite approvers to view and comment on specific projects
+- Approvers can see project names, song titles, mixes, and related comments for projects they're invited to
+- Your display name and email are visible to users who invite you to projects
+
+### With Service Providers
+We share data with third-party service providers who assist us in operating our app:
+- **Firebase (Google Cloud)**: Cloud storage, database, authentication, and push notifications
+- **Apple**: Payment processing for subscriptions via In-App Purchase
+
+These providers are contractually obligated to protect your data and use it only for the services they provide to us.
+
+### Legal Requirements
+We may disclose your information if required to do so by law or in response to:
+- Valid legal requests from authorities
+- Court orders or subpoenas
+- Protection of our legal rights
+- Prevention of fraud or security threats
+
+### Business Transfers
+If Approvl is involved in a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction. We will notify you via email and/or prominent notice in the app of any such change.
+
+## Your Rights and Choices
+
+### Account Management
+- **Access**: View your account information in app settings
+- **Edit**: Update your display name, email, and preferences
+- **Delete**: Request account deletion through app settings or by contacting support
+
+### Communication Preferences
+- **Push Notifications**: Enable/disable in iOS/macOS system settings
+- **Email Invitations**: Controlled by project creators who invite you
+
+### Data Rights
+Depending on your location, you may have the right to:
+- Access the personal data we hold about you
+- Request correction of inaccurate data
+- Request deletion of your data
+- Object to processing of your data
+- Request data portability
+- Withdraw consent
+
+To exercise these rights, contact us at the email address below.
+
+### Subscription Management
+- View subscription status in app settings
+- Manage subscriptions through the App Store
+- Cancel subscriptions at any time (access continues until period ends)
+
+## Children's Privacy
+
+Approvl is not intended for users under the age of 13 (or the applicable age of digital consent in your country). We do not knowingly collect personal information from children. If we learn that we have collected information from a child without parental consent, we will delete that information promptly.
+
+## International Data Transfers
+
+Your information may be transferred to and stored on servers located outside your country of residence. By using Approvl, you consent to the transfer of your information to countries that may have different data protection laws than your country.
+
+We rely on Firebase (Google Cloud) infrastructure, which maintains servers worldwide. Google complies with applicable data protection frameworks for international transfers.
+
+## California Privacy Rights
+
+If you are a California resident, you have specific rights under the California Consumer Privacy Act (CCPA):
+- Right to know what personal information is collected
+- Right to know if personal information is sold or disclosed
+- Right to refuse the sale of personal information (Note: We do not sell personal information)
+- Right to delete personal information
+- Right to non-discrimination for exercising your rights
+
+To exercise these rights, contact us at the email address below.
+
+## European Privacy Rights (GDPR)
+
+If you are located in the European Economic Area (EEA), you have rights under the General Data Protection Regulation (GDPR):
+- Right of access to your personal data
+- Right to rectification of inaccurate data
+- Right to erasure ("right to be forgotten")
+- Right to restrict processing
+- Right to data portability
+- Right to object to processing
+- Rights related to automated decision-making
+
+Our legal basis for processing your data includes:
+- Performance of our contract with you (providing app services)
+- Your consent (where explicitly given)
+- Compliance with legal obligations
+- Our legitimate interests (improving services, security)
+
+## Cookies and Tracking Technologies
+
+Approvl uses minimal tracking technologies:
+- **Authentication Tokens**: To maintain your logged-in session
+- **Local Preferences**: To store app settings and preferences
+- **Analytics**: Firebase Analytics to understand app usage (anonymized)
+
+We do not use advertising cookies or third-party tracking for marketing purposes.
+
+## Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements. We will notify you of material changes by:
+- Posting the updated policy in the app
+- Updating the "Last Updated" date
+- Sending a notification (for significant changes)
+
+Your continued use of Approvl after changes are posted constitutes acceptance of the updated policy.
+
+## Third-Party Links
+
+Approvl may contain links to third-party websites or services. We are not responsible for the privacy practices of these third parties. We encourage you to review their privacy policies before providing any information.
+
+## Contact Us
+
+If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
+
+**Email**: [Your Support Email]
+
+**Address**: [Your Business Address]
+
+For data protection inquiries specific to GDPR, you may also contact our Data Protection Officer at: [DPO Email if applicable]
+
+## Data Protection Officer
+
+[If you have a DPO, include their contact information here. Otherwise, remove this section]
+
+## Dispute Resolution
+
+If you have concerns about our privacy practices, please contact us first. If you are not satisfied with our response, you have the right to lodge a complaint with your local data protection authority.
+
+---
+
+**Your Privacy Matters**
+
+We are committed to transparency and protecting your privacy. This policy explains how Approvl handles your data responsibly while providing you with powerful collaboration tools for music production feedback.
+
+By using Approvl, you acknowledge that you have read and understood this Privacy Policy.

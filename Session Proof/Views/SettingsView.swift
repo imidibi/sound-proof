@@ -42,6 +42,9 @@ struct SettingsView: View {
     @State private var editedRole: UserRole = .artist
     @State private var isEditingProfile = false
     @State private var isSavingProfile = false
+    @State private var showingDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
     
     private var userOrganization: Organization? {
         guard let userId = authService.currentUser?.id else {
@@ -347,6 +350,25 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    Button(role: .destructive) {
+                        showingDeleteAccountConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("Delete Account")
+                            if isDeletingAccount {
+                                Spacer()
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(isDeletingAccount)
+                } footer: {
+                    Text("Permanently delete your account and all associated data. This action cannot be undone.")
+                        .foregroundStyle(.red)
+                }
+                
+                Section {
                     Button {
                         #if os(iOS)
                         showingHelp = true
@@ -416,6 +438,29 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Are you sure you want to sign out?")
+            }
+            .confirmationDialog(
+                "Delete Account",
+                isPresented: $showingDeleteAccountConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Account", role: .destructive) {
+                    Task {
+                        await deleteAccount()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete your account and all associated data including projects, mixes, and comments. This action cannot be undone.")
+            }
+            .alert("Error Deleting Account", isPresented: .constant(deleteAccountError != nil)) {
+                Button("OK") {
+                    deleteAccountError = nil
+                }
+            } message: {
+                if let error = deleteAccountError {
+                    Text(error)
+                }
             }
             .sheet(isPresented: $showingOrganizationManagement) {
                 OrganizationManagementView()
@@ -621,6 +666,57 @@ struct SettingsView: View {
             print("✅ Purchases restored and synced")
         } catch {
             print("❌ Failed to restore purchases: \(error.localizedDescription)")
+        }
+    }
+    
+    private func deleteAccount() async {
+        isDeletingAccount = true
+        deleteAccountError = nil
+        
+        do {
+            // Delete FCM token first
+            await notificationService.deleteFCMToken()
+            
+            // Delete account from Firebase
+            try await authService.deleteAccount()
+            
+            // Clear all local SwiftData
+            await MainActor.run {
+                print("🗑️ Clearing all local data...")
+                
+                do {
+                    // Delete all projects (cascade will delete songs, mixes, comments, reviewers, approvals)
+                    let descriptor = FetchDescriptor<Project>()
+                    let allProjects = try modelContext.fetch(descriptor)
+                    for project in allProjects {
+                        modelContext.delete(project)
+                    }
+                    
+                    // Delete all organizations
+                    let orgDescriptor = FetchDescriptor<Organization>()
+                    let allOrganizations = try modelContext.fetch(orgDescriptor)
+                    for organization in allOrganizations {
+                        modelContext.delete(organization)
+                    }
+                    
+                    // Save changes
+                    try modelContext.save()
+                    print("✅ All local data cleared")
+                } catch {
+                    print("❌ Error clearing local data: \(error)")
+                }
+                
+                isDeletingAccount = false
+                dismiss()
+            }
+            
+            print("✅ Account deleted successfully")
+        } catch {
+            await MainActor.run {
+                isDeletingAccount = false
+                deleteAccountError = error.localizedDescription
+                print("❌ Error deleting account: \(error.localizedDescription)")
+            }
         }
     }
 }
