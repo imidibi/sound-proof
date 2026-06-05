@@ -476,7 +476,7 @@ struct ProjectFolderRow: View {
                             .fontWeight(.semibold)
                             .focused($isNameFieldFocused)
                             .onSubmit {
-                                isEditingName = false
+                                syncProjectName()
                             }
                     } else {
                         Text(project.name)
@@ -678,6 +678,32 @@ struct ProjectFolderRow: View {
             print("❌ Error reloading project: \(error)")
         }
     }
+    
+    private func syncProjectName() {
+        isEditingName = false
+        
+        do {
+            try modelContext.save()
+            Logger.debug("✅ Project name updated locally: \(project.name)")
+            
+            // Sync to Firestore
+            if let projectId = project.firestoreId {
+                Task {
+                    do {
+                        let data: [String: Any] = [
+                            "name": project.name
+                        ]
+                        try await firestoreService.updateProject(projectId: projectId, data: data)
+                        Logger.debug("✅ Project name synced to Firestore: \(project.name)")
+                    } catch {
+                        Logger.error("Error syncing project name to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            Logger.error("Error saving project name: \(error)")
+        }
+    }
 }
 
 struct SongFolderRow: View {
@@ -732,7 +758,7 @@ struct SongFolderRow: View {
                         .fontWeight(.medium)
                         .focused($isNameFieldFocused)
                         .onSubmit {
-                            isEditingName = false
+                            syncSongName()
                         }
                 } else {
                     Text(song.name)
@@ -899,6 +925,33 @@ struct SongFolderRow: View {
             }
         } catch {
             print("❌ Error reloading song: \(error)")
+        }
+    }
+    
+    private func syncSongName() {
+        isEditingName = false
+        
+        do {
+            try modelContext.save()
+            Logger.debug("✅ Song name updated locally: \(song.name)")
+            
+            // Sync to Firestore
+            if let projectId = song.project?.firestoreId,
+               let songId = song.firestoreId {
+                Task {
+                    do {
+                        let data: [String: Any] = [
+                            "name": song.name
+                        ]
+                        try await firestoreService.updateSong(projectId: projectId, songId: songId, data: data)
+                        Logger.debug("✅ Song name synced to Firestore: \(song.name)")
+                    } catch {
+                        Logger.error("Error syncing song name to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            Logger.error("Error saving song name: \(error)")
         }
     }
 }

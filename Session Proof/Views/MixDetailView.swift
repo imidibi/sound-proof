@@ -269,6 +269,9 @@ struct MixHeaderView: View {
     @FocusState private var mixNameFocused: Bool
     @FocusState private var songNameFocused: Bool
     
+    @Environment(\.modelContext) private var modelContext
+    @Environment(FirestoreService.self) private var firestoreService
+    
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -283,7 +286,7 @@ struct MixHeaderView: View {
                         .fontWeight(.semibold)
                         .focused($songNameFocused)
                         .onSubmit {
-                            isEditingSongName = false
+                            syncSongName()
                         }
                     } else {
                         Text(song.name)
@@ -346,6 +349,34 @@ struct MixHeaderView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    private func syncSongName() {
+        guard let song = mix.song else { return }
+        isEditingSongName = false
+        
+        do {
+            try modelContext.save()
+            Logger.debug("✅ Song name updated locally: \(song.name)")
+            
+            // Sync to Firestore
+            if let projectId = song.project?.firestoreId,
+               let songId = song.firestoreId {
+                Task {
+                    do {
+                        let data: [String: Any] = [
+                            "name": song.name
+                        ]
+                        try await firestoreService.updateSong(projectId: projectId, songId: songId, data: data)
+                        Logger.debug("✅ Song name synced to Firestore: \(song.name)")
+                    } catch {
+                        Logger.error("Error syncing song name to Firestore: \(error)")
+                    }
+                }
+            }
+        } catch {
+            Logger.error("Error saving song name: \(error)")
+        }
     }
 }
 
