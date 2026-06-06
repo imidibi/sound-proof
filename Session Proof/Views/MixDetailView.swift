@@ -276,28 +276,39 @@ struct MixHeaderView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 if let song = mix.song {
-                    if isEditingSongName {
-                        TextField("Song Name", text: Binding(
-                            get: { song.name },
-                            set: { song.name = $0 }
-                        ))
-                        .textFieldStyle(.plain)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .focused($songNameFocused)
-                        .onSubmit {
-                            syncSongName()
-                        }
-                        .onChange(of: songNameFocused) { oldValue, newValue in
-                            // When focus is lost, save the changes
-                            if oldValue && !newValue {
-                                syncSongName()
-                            }
-                        }
-                    } else {
-                        Text(song.name)
+                    HStack {
+                        if isEditingSongName {
+                            TextField("Song Name", text: Binding(
+                                get: { song.name },
+                                set: { song.name = $0 }
+                            ))
+                            .textFieldStyle(.plain)
                             .font(.title2)
                             .fontWeight(.semibold)
+                            .focused($songNameFocused)
+                            .onSubmit {
+                                syncSongName()
+                            }
+                            .onChange(of: songNameFocused) { oldValue, newValue in
+                                // When focus is lost, save the changes
+                                if oldValue && !newValue {
+                                    syncSongName()
+                                }
+                            }
+                            
+                            Button {
+                                syncSongName()
+                            } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.title2)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(song.name)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
                     }
                 }
                 
@@ -316,6 +327,15 @@ struct MixHeaderView: View {
                                     syncMixName()
                                 }
                             }
+                        
+                        Button {
+                            syncMixName()
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.title3)
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         Text(mix.name)
                             .font(.headline)

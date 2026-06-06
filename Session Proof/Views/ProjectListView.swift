@@ -469,25 +469,36 @@ struct ProjectFolderRow: View {
                     .font(.title3)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    if isEditingName {
-                        TextField("Project Name", text: $project.name)
-                            .textFieldStyle(.plain)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .focused($isNameFieldFocused)
-                            .onSubmit {
-                                syncProjectName()
-                            }
-                            .onChange(of: isNameFieldFocused) { oldValue, newValue in
-                                // When focus is lost, save the changes
-                                if oldValue && !newValue && isEditingName {
+                    HStack {
+                        if isEditingName {
+                            TextField("Project Name", text: $project.name)
+                                .textFieldStyle(.plain)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .focused($isNameFieldFocused)
+                                .onSubmit {
                                     syncProjectName()
                                 }
+                                .onChange(of: isNameFieldFocused) { oldValue, newValue in
+                                    // When focus is lost, save the changes
+                                    if oldValue && !newValue && isEditingName {
+                                        syncProjectName()
+                                    }
+                                }
+                            
+                            Button {
+                                syncProjectName()
+                            } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.title3)
                             }
-                    } else {
-                        Text(project.name)
-                            .font(.title3)
-                            .fontWeight(.semibold)
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(project.name)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                        }
                     }
                     
                     if let clientName = project.clientName {
@@ -772,6 +783,15 @@ struct SongFolderRow: View {
                                 syncSongName()
                             }
                         }
+                    
+                    Button {
+                        syncSongName()
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.body)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     Text(song.name)
                         .font(.body)
