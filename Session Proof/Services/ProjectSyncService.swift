@@ -819,8 +819,49 @@ class ProjectSyncService {
             } else {
                 Logger.debug("✓ Song already exists locally: \(songData["name"] ?? "Unknown")")
                 
-                // Still sync mixes in case there are new ones or updates
+                // Update existing song's fields from Firestore
                 if let existingSong = existingSongs.first {
+                    var needsSave = false
+                    
+                    // Update name if different
+                    if let cloudName = songData["name"] as? String, existingSong.name != cloudName {
+                        Logger.debug("   🔄 Updating song name: '\(existingSong.name)' → '\(cloudName)'")
+                        existingSong.name = cloudName
+                        needsSave = true
+                    }
+                    
+                    // Update artist if different
+                    if let cloudArtist = songData["artist"] as? String, existingSong.artist != cloudArtist {
+                        existingSong.artist = cloudArtist
+                        needsSave = true
+                    }
+                    
+                    // Update notes if different
+                    if let cloudNotes = songData["notes"] as? String, existingSong.notes != cloudNotes {
+                        existingSong.notes = cloudNotes
+                        needsSave = true
+                    }
+                    
+                    // Update sort order if different
+                    if let cloudSortOrder = songData["sortOrder"] as? Int, existingSong.sortOrder != cloudSortOrder {
+                        existingSong.sortOrder = cloudSortOrder
+                        needsSave = true
+                    }
+                    
+                    // Update status if different
+                    if let statusString = songData["status"] as? String,
+                       let cloudStatus = SongStatus(rawValue: statusString),
+                       existingSong.status != cloudStatus {
+                        existingSong.status = cloudStatus
+                        needsSave = true
+                    }
+                    
+                    if needsSave {
+                        try modelContext.save()
+                        Logger.debug("   ✅ Song fields updated from Firestore")
+                    }
+                    
+                    // Still sync mixes in case there are new ones or updates
                     try await syncSongMixesFromCloud(
                         projectId: projectId,
                         songId: songId,

@@ -438,6 +438,21 @@ class FirestoreService {
             .updateData(data)
     }
     
+    func updateMix(
+        projectId: String,
+        songId: String,
+        mixId: String,
+        data: [String: Any]
+    ) async throws {
+        var updateData = data
+        updateData["updatedAt"] = Timestamp(date: Date())
+        
+        try await db.collection("projects").document(projectId)
+            .collection("songs").document(songId)
+            .collection("mixes").document(mixId)
+            .updateData(updateData)
+    }
+    
     func deleteMix(
         projectId: String,
         songId: String,

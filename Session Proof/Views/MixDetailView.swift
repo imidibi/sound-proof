@@ -302,7 +302,7 @@ struct MixHeaderView: View {
                             .font(.headline)
                             .focused($mixNameFocused)
                             .onSubmit {
-                                isEditingMixName = false
+                                syncMixName()
                             }
                     } else {
                         Text(mix.name)
@@ -376,6 +376,38 @@ struct MixHeaderView: View {
             }
         } catch {
             Logger.error("Error saving song name: \(error)")
+        }
+    }
+    
+    private func syncMixName() {
+        isEditingMixName = false
+        
+        do {
+            try modelContext.save()
+            Logger.debug("✅ Mix name updated locally: \(mix.name)")
+            
+            // Sync to Firestore
+            guard let song = mix.song,
+                  let projectId = song.project?.firestoreId,
+                  let songId = song.firestoreId,
+                  let mixId = mix.firestoreId else {
+                Logger.warning("⚠️ Cannot sync mix name - missing IDs")
+                return
+            }
+            
+            Task {
+                do {
+                    let data: [String: Any] = [
+                        "name": mix.name
+                    ]
+                    try await firestoreService.updateMix(projectId: projectId, songId: songId, mixId: mixId, data: data)
+                    Logger.debug("✅ Mix name synced to Firestore: \(mix.name)")
+                } catch {
+                    Logger.error("Error syncing mix name to Firestore: \(error)")
+                }
+            }
+        } catch {
+            Logger.error("Error saving mix name: \(error)")
         }
     }
 }
