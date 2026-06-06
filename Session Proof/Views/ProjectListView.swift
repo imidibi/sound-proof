@@ -478,6 +478,12 @@ struct ProjectFolderRow: View {
                             .onSubmit {
                                 syncProjectName()
                             }
+                            .onChange(of: isNameFieldFocused) { oldValue, newValue in
+                                // When focus is lost, save the changes
+                                if oldValue && !newValue && isEditingName {
+                                    syncProjectName()
+                                }
+                            }
                     } else {
                         Text(project.name)
                             .font(.title3)
@@ -759,6 +765,12 @@ struct SongFolderRow: View {
                         .focused($isNameFieldFocused)
                         .onSubmit {
                             syncSongName()
+                        }
+                        .onChange(of: isNameFieldFocused) { oldValue, newValue in
+                            // When focus is lost, save the changes
+                            if oldValue && !newValue && isEditingName {
+                                syncSongName()
+                            }
                         }
                 } else {
                     Text(song.name)

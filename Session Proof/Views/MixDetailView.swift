@@ -288,6 +288,12 @@ struct MixHeaderView: View {
                         .onSubmit {
                             syncSongName()
                         }
+                        .onChange(of: songNameFocused) { oldValue, newValue in
+                            // When focus is lost, save the changes
+                            if oldValue && !newValue {
+                                syncSongName()
+                            }
+                        }
                     } else {
                         Text(song.name)
                             .font(.title2)
@@ -303,6 +309,12 @@ struct MixHeaderView: View {
                             .focused($mixNameFocused)
                             .onSubmit {
                                 syncMixName()
+                            }
+                            .onChange(of: mixNameFocused) { oldValue, newValue in
+                                // When focus is lost, save the changes
+                                if oldValue && !newValue {
+                                    syncMixName()
+                                }
                             }
                     } else {
                         Text(mix.name)
