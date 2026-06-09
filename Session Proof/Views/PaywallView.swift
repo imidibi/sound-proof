@@ -17,6 +17,7 @@ struct PaywallView: View {
     @State private var isPurchasing = false
     @State private var purchaseError: String?
     @State private var showError = false
+    @State private var purchaseSuccess = false
     
     /// Is user currently in an active trial?
     private var isInActiveTrial: Bool {
@@ -179,6 +180,25 @@ struct PaywallView: View {
                     }
                 }
             }
+            .onAppear {
+                // Auto-select yearly subscription (best value) if nothing selected
+                if selectedProductID == nil {
+                    selectedProductID = subscriptionService.availableProducts
+                        .first(where: { $0.period == "year" })?.id
+                        ?? subscriptionService.availableProducts.first?.id
+                }
+            }
+            .alert("Welcome to Producer!", isPresented: $purchaseSuccess) {
+                Button("Get Started") {
+                    dismiss()
+                }
+            } message: {
+                if isInActiveTrial {
+                    Text("Your subscription is now active. Enjoy full access to all Producer features!")
+                } else {
+                    Text("Your 14-day free trial has started. Enjoy full access to all Producer features!")
+                }
+            }
             .alert("Purchase Error", isPresented: $showError) {
                 Button("OK") {
                     showError = false
@@ -216,20 +236,18 @@ struct PaywallView: View {
                 // Sync to Firestore
                 await syncSubscriptionToFirestore()
                 
-                // Dismiss paywall
+                // Show success message
                 await MainActor.run {
-                    dismiss()
+                    isPurchasing = false
+                    purchaseSuccess = true
                 }
             }
         } catch {
             await MainActor.run {
+                isPurchasing = false
                 purchaseError = error.localizedDescription
                 showError = true
             }
-        }
-        
-        await MainActor.run {
-            isPurchasing = false
         }
     }
     
