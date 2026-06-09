@@ -18,31 +18,65 @@ struct ContentView: View {
     
     @State private var hasSyncedOnce = false
     @State private var syncTimer: Task<Void, Never>?
+    @State private var isPerformingInitialSync = false
     
     var body: some View {
-        ProjectListView()
-            .task {
+        ZStack {
+            ProjectListView()
+            
+            // Show loading overlay during initial sync
+            if isPerformingInitialSync {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                    
+                    Text("Syncing projects...")
+                        .foregroundStyle(.white)
+                        .font(.headline)
+                }
+                .padding(32)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .task {
                 // Sync projects from cloud when user first logs in
                 if !hasSyncedOnce, let userId = authService.currentUser?.id {
                     hasSyncedOnce = true
+                    isPerformingInitialSync = true
                     print("🔄 Initial sync triggered for user: \(userId)")
                     
                     Task {
+                        defer {
+                            // Always hide loading indicator when done
+                            Task { @MainActor in
+                                isPerformingInitialSync = false
+                            }
+                        }
+                        
                         do {
-                            // Accept any pending invitations for this user
+                            // Accept any pending invitations for this user (with timeout)
                             if let userEmail = authService.currentUser?.email {
-                                try await syncService.acceptPendingInvitations(
+                                try? await withTimeout(seconds: 10) {
+                                    try await syncService.acceptPendingInvitations(
+                                        userId: userId,
+                                        userEmail: userEmail,
+                                        modelContext: modelContext
+                                    )
+                                }
+                            }
+                            
+                            // Sync user's projects (with timeout to prevent indefinite hang)
+                            try await withTimeout(seconds: 30) {
+                                try await syncService.syncUserProjectsFromCloud(
                                     userId: userId,
-                                    userEmail: userEmail,
                                     modelContext: modelContext
                                 )
                             }
-                            
-                            // Sync user's projects
-                            try await syncService.syncUserProjectsFromCloud(
-                                userId: userId,
-                                modelContext: modelContext
-                            )
                             print("✅ Initial project sync completed")
                             
                             // Sync user's organization
@@ -237,6 +271,29 @@ struct ContentView: View {
             }
         }
     }
+    
+    /// Execute an async operation with a timeout
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            
+            guard let result = try await group.next() else {
+                throw TimeoutError()
+            }
+            
+            group.cancelAll()
+            return result
+        }
+    }
+    
+    private struct TimeoutError: Error {}
 }
 
 #Preview {
