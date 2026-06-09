@@ -73,6 +73,15 @@ final class SubscriptionService {
     var gracePeriodEndDate: Date?
     var originalTransactionId: String?  // StoreKit original transaction ID
     
+    // Environment detection
+    var environment: String {
+        #if DEBUG
+        return "sandbox"
+        #else
+        return "production"
+        #endif
+    }
+    
     private var updateTask: Task<Void, Never>?
     private var transactionListener: Task<Void, Never>?
     

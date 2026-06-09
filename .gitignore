@@ -12,3 +12,6 @@ firebase-debug.log*
 *.swo
 *~
 .DS_Store
+
+# StoreKit testing configuration (Xcode only, not for builds)
+Configuration.storekit
