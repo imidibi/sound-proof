@@ -77,10 +77,8 @@ struct Session_ProofApp: App {
     }()
     
     init() {
-        // Configure Firebase FIRST before creating any services
-        FirebaseApp.configure()
-        
-        // Now initialize services
+        // Firebase is already configured in AppDelegate
+        // Now initialize services (lightweight, non-blocking)
         let auth = AuthenticationService()
         let firestore = FirestoreService()
         let cloudStorage = CloudStorageService()
@@ -114,10 +112,7 @@ struct Session_ProofApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if authService.isCheckingAuth {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if authService.isAuthenticated {
+            if authService.isAuthenticated {
                 ContentView()
                     .environment(authService)
                     .environment(firestoreService)
@@ -135,6 +130,9 @@ struct Session_ProofApp: App {
                         handleIncomingURL(url)
                     }
                     .task {
+                        // Clear badge on app launch
+                        notificationService.clearBadge()
+                        
                         // Request notification permissions after user is authenticated
                         _ = await notificationService.requestPermissions()
                         

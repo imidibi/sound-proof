@@ -100,24 +100,55 @@ class AuthenticationService {
     var isAuthenticated: Bool {
         currentUser != nil
     }
-    var isCheckingAuth: Bool = true
+    var isCheckingAuth: Bool = false
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
     
     init() {
-        // Check if user is already signed in
+        // Check if user is already signed in in the background
+        // Don't block UI - show login screen immediately and transition if authenticated
         if let firebaseUser = auth.currentUser {
-            Task {
-                await loadUserProfile(uid: firebaseUser.uid, email: firebaseUser.email ?? "")
-                await MainActor.run {
-                    self.isCheckingAuth = false
+            Task { [weak self] in
+                guard let self = self else { return }
+                
+                // Add timeout to prevent indefinite loading
+                // If profile loading takes more than 3 seconds, assume network issue and show login
+                do {
+                    try await self.withTimeout(seconds: 3) {
+                        await self.loadUserProfile(uid: firebaseUser.uid, email: firebaseUser.email ?? "")
+                    }
+                } catch {
+                    Logger.warning("⚠️ Profile loading timed out - user will need to sign in again")
+                    // Sign out the user so they see the login screen instead of hanging
+                    try? self.auth.signOut()
                 }
             }
-        } else {
-            isCheckingAuth = false
         }
     }
+    
+    /// Execute an async operation with a timeout
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            
+            guard let result = try await group.next() else {
+                throw TimeoutError()
+            }
+            
+            group.cancelAll()
+            return result
+        }
+    }
+    
+    private struct TimeoutError: Error {}
     
     // MARK: - Authentication
     
