@@ -71,6 +71,7 @@ final class SubscriptionService {
     var trialEndDate: Date?
     var subscriptionExpiryDate: Date?
     var gracePeriodEndDate: Date?
+    var originalTransactionId: String?  // StoreKit original transaction ID
     
     private var updateTask: Task<Void, Never>?
     private var transactionListener: Task<Void, Never>?
@@ -226,7 +227,10 @@ final class SubscriptionService {
             print("⚠️ Could not verify transaction")
             return
         }
-        
+
+        // Store the original transaction ID (unique per purchase, persists across renewals)
+        originalTransactionId = String(transaction.originalID)
+
         // Determine subscription status based on renewal state
         if transaction.offerType == .introductory {
             // User is in trial period
@@ -234,6 +238,7 @@ final class SubscriptionService {
             subscriptionTier = .producer
             trialEndDate = transaction.expirationDate
             print("📊 Subscription status: Trial (ends \(trialEndDate?.formatted() ?? "unknown"))")
+            print("   Original Transaction ID: \(originalTransactionId ?? "none")")
         } else if state == .subscribed {
             // Active paid subscription
             subscriptionStatus = .active

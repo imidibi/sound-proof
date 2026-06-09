@@ -41,6 +41,7 @@ struct User: Codable, Identifiable {
     // Subscription fields (StoreKit)
     var subscriptionTier: String?           // "free" or "producer"
     var subscriptionStatus: String?         // "active", "trial", "expired", "cancelled", "free"
+    var originalTransactionId: String?      // StoreKit original transaction ID (unique per purchase)
     var trialStartedAt: Date?
     var trialEndsAt: Date?
     var subscriptionExpiresAt: Date?
@@ -407,6 +408,7 @@ class AuthenticationService {
     func updateSubscriptionStatus(
         tier: String,
         status: String,
+        originalTransactionId: String? = nil,
         trialStartedAt: Date? = nil,
         trialEndsAt: Date? = nil,
         subscriptionExpiresAt: Date? = nil,
@@ -422,6 +424,9 @@ class AuthenticationService {
             "subscriptionStatus": status
         ]
 
+        if let transactionId = originalTransactionId {
+            updateData["originalTransactionId"] = transactionId
+        }
         if let trialStarted = trialStartedAt {
             updateData["trialStartedAt"] = Timestamp(date: trialStarted)
         }
@@ -444,6 +449,7 @@ class AuthenticationService {
                 var updatedUser = user
                 updatedUser.subscriptionTier = tier
                 updatedUser.subscriptionStatus = status
+                updatedUser.originalTransactionId = originalTransactionId
                 updatedUser.trialStartedAt = trialStartedAt
                 updatedUser.trialEndsAt = trialEndsAt
                 updatedUser.subscriptionExpiresAt = subscriptionExpiresAt

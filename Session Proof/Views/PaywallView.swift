@@ -285,12 +285,13 @@ struct PaywallView: View {
             try await authService.updateSubscriptionStatus(
                 tier: subscriptionService.subscriptionTier.rawValue,
                 status: subscriptionService.subscriptionStatus.rawValue,
+                originalTransactionId: subscriptionService.originalTransactionId,
                 trialStartedAt: subscriptionService.isInTrial ? subscriptionService.trialEndDate?.addingTimeInterval(-14 * 24 * 60 * 60) : nil,
                 trialEndsAt: subscriptionService.trialEndDate,
                 subscriptionExpiresAt: subscriptionService.subscriptionExpiryDate,
                 gracePeriodEndsAt: subscriptionService.gracePeriodEndDate
             )
-            print("✅ Synced subscription to Firestore")
+            print("✅ Synced subscription to Firestore (Transaction ID: \(subscriptionService.originalTransactionId ?? "none"))")
         } catch {
             print("❌ Failed to sync subscription to Firestore: \(error.localizedDescription)")
         }
