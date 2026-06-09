@@ -413,7 +413,7 @@ struct SignUpView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "star.circle.fill")
                                     .foregroundStyle(.blue)
-                                Text("Account Type: Producer (14-day free trial)")
+                                Text("Account Type: Producer")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                             }
@@ -422,7 +422,7 @@ struct SignUpView: View {
                             .background(Color.blue.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             
-                            Text("Start your 14-day free trial to create unlimited projects and invite approvers. $9.99/month after trial.")
+                            Text("Create unlimited projects and invite approvers. Choose your subscription after signup.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -564,25 +564,12 @@ struct SignUpView: View {
             print("✅ Sign up successful!")
             
             // Initialize subscription status for new users
-            if isInvitedReviewer {
-                // Free approver - set as free tier
-                try await authService.updateSubscriptionStatus(
-                    tier: "free",
-                    status: "free"
-                )
-                print("✅ Initialized as free approver")
-            } else {
-                // Producer - start 14-day trial
-                let trialStart = Date()
-                let trialEnd = Calendar.current.date(byAdding: .day, value: 14, to: trialStart)!
-                try await authService.updateSubscriptionStatus(
-                    tier: "producer",
-                    status: "trial",
-                    trialStartedAt: trialStart,
-                    trialEndsAt: trialEnd
-                )
-                print("✅ Initialized 14-day trial for producer")
-            }
+            // All new users start as "free" - they must go through paywall to get access
+            try await authService.updateSubscriptionStatus(
+                tier: "free",
+                status: "free"
+            )
+            print("✅ Initialized as free user - will see paywall for producer access")
             
             // Check for pending invitations after signup
             await checkForPendingInvitations()
