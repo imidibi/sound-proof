@@ -10,8 +10,10 @@ import FirebaseCore
 
 struct AuthenticationView: View {
     @State private var isSignUp = false
+    
+    #if DEBUG
     @State private var showFirebaseStatus = false
-    @State private var showDebugAlert = false
+    #endif
     
     var body: some View {
         ZStack {
@@ -37,7 +39,8 @@ struct AuthenticationView: View {
                 })
             }
             
-            // Firebase status indicator in top-right corner
+            #if DEBUG
+            // Firebase status indicator in top-right corner (DEBUG ONLY)
             VStack {
                 HStack {
                     Spacer()
@@ -62,12 +65,14 @@ struct AuthenticationView: View {
                 .padding()
                 Spacer()
             }
-        }
-        .sheet(isPresented: $showFirebaseStatus) {
-            FirebaseStatusView()
+            .sheet(isPresented: $showFirebaseStatus) {
+                FirebaseStatusView()
+            }
+            #endif
         }
     }
     
+    #if DEBUG
     private var firebaseStatusColor: Color {
         guard let app = FirebaseApp.app() else { return .red }
         let options = app.options
@@ -81,6 +86,7 @@ struct AuthenticationView: View {
         guard let apiKey = options.apiKey, !apiKey.isEmpty else { return "No API Key" }
         return "Firebase Ready"
     }
+    #endif
 }
 
 struct SignInView: View {
@@ -600,6 +606,7 @@ struct SignUpView: View {
     }
 }
 
+#if DEBUG
 struct FirebaseStatusView: View {
     @Environment(\.dismiss) private var dismiss
     
@@ -716,7 +723,9 @@ struct FirebaseStatusView: View {
         .frame(minWidth: 500, minHeight: 600)
     }
 }
+#endif
 
+#if DEBUG
 struct StatusRow: View {
     let label: String
     let status: Bool
@@ -737,7 +746,9 @@ struct StatusRow: View {
         }
     }
 }
+#endif
 
+#if DEBUG
 struct ServiceRow: View {
     let name: String
     let description: String
@@ -762,6 +773,7 @@ struct ServiceRow: View {
         .padding(.vertical, 4)
     }
 }
+#endif
 
 struct ForgotPasswordSheet: View {
     @Environment(AuthenticationService.self) private var authService
@@ -881,6 +893,8 @@ struct ForgotPasswordSheet: View {
         .environment(AuthenticationService())
 }
 
+#if DEBUG
 #Preview("Firebase Status") {
     FirebaseStatusView()
 }
+#endif
