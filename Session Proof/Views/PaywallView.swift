@@ -32,9 +32,15 @@ struct PaywallView: View {
                             .font(.title)
                             .fontWeight(.bold)
                         
-                        Text("Start your 14-day free trial")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                        if subscriptionService.isInTrial {
+                            Text("Subscribe to continue after trial")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Start your 14-day free trial")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.top, 32)
                     
@@ -75,7 +81,7 @@ struct PaywallView: View {
                                     .progressViewStyle(.circular)
                                     .tint(.white)
                             }
-                            Text(isPurchasing ? "Processing..." : "Start Free Trial")
+                            Text(isPurchasing ? "Processing..." : (subscriptionService.isInTrial ? "Subscribe Now" : "Start Free Trial"))
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -89,9 +95,15 @@ struct PaywallView: View {
                     
                     // Trial details
                     VStack(spacing: 8) {
-                        Text("14-day free trial, then \(selectedPriceText)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if subscriptionService.isInTrial {
+                            Text(selectedPriceText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("14-day free trial, then \(selectedPriceText)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         
                         Text("Cancel anytime in Settings")
                             .font(.caption)

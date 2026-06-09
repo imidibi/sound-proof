@@ -126,7 +126,11 @@ struct SettingsView: View {
                         HStack {
                             Label("Subscription", systemImage: "star.circle.fill")
                             Spacer()
-                            if user.canCreateProjects {
+                            if subscriptionService.isInTrial {
+                                Text("Trial")
+                                    .foregroundStyle(.orange)
+                                    .fontWeight(.semibold)
+                            } else if subscriptionService.hasActiveSubscription {
                                 Text("Producer")
                                     .foregroundStyle(.blue)
                                     .fontWeight(.semibold)
