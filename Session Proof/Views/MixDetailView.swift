@@ -429,9 +429,7 @@ struct MixHeaderView: View {
             
             Task {
                 do {
-                    let data: [String: Any] = [
-                        "name": mix.name
-                    ]
+                    let data: [String: Any] = ["name": mix.name]
                     try await firestoreService.updateMix(projectId: projectId, songId: songId, mixId: mixId, data: data)
                     Logger.debug("✅ Mix name synced to Firestore: \(mix.name)")
                 } catch {

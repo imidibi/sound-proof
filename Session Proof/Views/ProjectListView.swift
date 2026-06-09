@@ -535,39 +535,43 @@ struct ProjectFolderRow: View {
                 }
             }
             .contextMenu {
-                Button {
-                    showingEditProjectSheet = true
-                } label: {
-                    Label("Edit Project", systemImage: "pencil")
+                // Producer-only actions
+                if canDelete {
+                    Button {
+                        showingEditProjectSheet = true
+                    } label: {
+                        Label("Edit Project", systemImage: "pencil")
+                    }
+                    
+                    Button {
+                        isEditingName = true
+                        isNameFieldFocused = true
+                    } label: {
+                        Label("Rename", systemImage: "text.cursor")
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        selectedProjectForMenu = project
+                        selectedSongForMenu = nil
+                        showingNewSongSheet = true
+                    } label: {
+                        Label("Add Song", systemImage: "music.note")
+                    }
+                    
+                    Button {
+                        showingReviewersSheet = true
+                    } label: {
+                        Label("Manage Approvers", systemImage: "person.2")
+                    }
                 }
                 
-                Button {
-                    isEditingName = true
-                    isNameFieldFocused = true
-                } label: {
-                    Label("Rename", systemImage: "text.cursor")
-                }
-                
+                // Available to all users
                 Button {
                     showingApprovalsStatus = true
                 } label: {
                     Label("Approvals Status", systemImage: "checkmark.circle")
-                }
-                
-                Divider()
-                
-                Button {
-                    selectedProjectForMenu = project
-                    selectedSongForMenu = nil
-                    showingNewSongSheet = true
-                } label: {
-                    Label("Add Song", systemImage: "music.note")
-                }
-                
-                Button {
-                    showingReviewersSheet = true
-                } label: {
-                    Label("Manage Approvers", systemImage: "person.2")
                 }
                 
                 if canDelete {
@@ -825,16 +829,15 @@ struct SongFolderRow: View {
                 }
             }
             .contextMenu {
-                Button {
-                    isEditingName = true
-                    isNameFieldFocused = true
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-                
-                Divider()
-                
-                if authService.currentUser?.isProducer == true {
+                // Producer-only actions
+                if canDelete {
+                    Button {
+                        isEditingName = true
+                        isNameFieldFocused = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    
                     Button {
                         selectedSongForMenu = song
                         selectedProjectForMenu = nil
@@ -842,8 +845,11 @@ struct SongFolderRow: View {
                     } label: {
                         Label("Import Mix", systemImage: "square.and.arrow.down")
                     }
+                    
+                    Divider()
                 }
                 
+                // Available to all users
                 Button {
                     showingApprovalsStatus = true
                 } label: {
@@ -996,6 +1002,7 @@ struct MixRow: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthenticationService.self) private var authService
+    @Environment(FirestoreService.self) private var firestoreService
 
     @State private var isEditingName = false
     @State private var showingDeleteConfirmation = false
@@ -1013,13 +1020,29 @@ struct MixRow: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 if isEditingName {
-                    TextField("Mix Name", text: $mix.name)
-                        .textFieldStyle(.plain)
-                        .font(.callout)
-                        .focused($isNameFieldFocused)
-                        .onSubmit {
-                            isEditingName = false
+                    HStack(spacing: 4) {
+                        TextField("Mix Name", text: $mix.name)
+                            .textFieldStyle(.plain)
+                            .font(.callout)
+                            .focused($isNameFieldFocused)
+                            .onSubmit {
+                                syncMixName()
+                            }
+                            .onChange(of: isNameFieldFocused) { oldValue, newValue in
+                                if oldValue && !newValue && isEditingName {
+                                    syncMixName()
+                                }
+                            }
+                        
+                        Button {
+                            syncMixName()
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.callout)
                         }
+                        .buttonStyle(.plain)
+                    }
                 } else {
                     Text(mix.name)
                         .font(.callout)
@@ -1045,14 +1068,15 @@ struct MixRow: View {
         }
         .tag(mix)
         .contextMenu {
-            Button {
-                isEditingName = true
-                isNameFieldFocused = true
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-            
+            // Producer-only actions
             if canDelete {
+                Button {
+                    isEditingName = true
+                    isNameFieldFocused = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                
                 Divider()
                 
                 Button(role: .destructive) {
@@ -1082,6 +1106,35 @@ struct MixRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete \"\(mix.name)\"? This action cannot be undone.")
+        }
+    }
+    
+    private func syncMixName() {
+        isEditingName = false
+        
+        do {
+            try modelContext.save()
+            Logger.debug("✅ Mix name updated locally: \(mix.name)")
+            
+            guard let song = mix.song,
+                  let projectId = song.project?.firestoreId,
+                  let songId = song.firestoreId,
+                  let mixId = mix.firestoreId else {
+                Logger.warning("⚠️ Cannot sync mix name - missing IDs")
+                return
+            }
+            
+            Task {
+                do {
+                    let data: [String: Any] = ["name": mix.name]
+                    try await firestoreService.updateMix(projectId: projectId, songId: songId, mixId: mixId, data: data)
+                    Logger.debug("✅ Mix name synced to Firestore: \(mix.name)")
+                } catch {
+                    Logger.error("Error syncing mix name to Firestore: \(error)")
+                }
+            }
+        } catch {
+            Logger.error("Error saving mix name: \(error)")
         }
     }
     
