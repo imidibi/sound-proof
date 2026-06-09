@@ -100,14 +100,13 @@ class AuthenticationService {
     var isAuthenticated: Bool {
         currentUser != nil
     }
-    var isCheckingAuth: Bool = false
+    var isCheckingAuth: Bool = true
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
     
     init() {
-        // Check if user is already signed in in the background
-        // Don't block UI - show login screen immediately and transition if authenticated
+        // Check if user is already signed in
         if let firebaseUser = auth.currentUser {
             Task { [weak self] in
                 guard let self = self else { return }
@@ -123,7 +122,15 @@ class AuthenticationService {
                     // Sign out the user so they see the login screen instead of hanging
                     try? self.auth.signOut()
                 }
+                
+                // Always set isCheckingAuth to false when done (success or failure)
+                await MainActor.run {
+                    self.isCheckingAuth = false
+                }
             }
+        } else {
+            // No Firebase user - show login immediately
+            isCheckingAuth = false
         }
     }
     

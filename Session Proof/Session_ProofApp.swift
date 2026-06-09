@@ -117,7 +117,33 @@ struct Session_ProofApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if authService.isAuthenticated {
+            if authService.isCheckingAuth {
+                // Show simple loading indicator while checking auth
+                // This prevents the login screen flash for returning users
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.6), Color.purple.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
+                    
+                    VStack(spacing: 24) {
+                        Image(systemName: "waveform.circle.fill")
+                            .font(.system(size: 80))
+                            .foregroundStyle(.white)
+                        
+                        Text("Approvl")
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .tint(.white)
+                            .padding(.top, 8)
+                    }
+                }
+            } else if authService.isAuthenticated {
                 ContentView()
                     .environment(authService)
                     .environment(firestoreService)
