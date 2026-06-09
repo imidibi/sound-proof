@@ -60,12 +60,17 @@ struct User: Codable, Identifiable {
         role == .artist
     }
 
-    /// Can this user create projects? (Has active subscription or trial)
+    /// Can this user create projects? (Must be producer AND have active subscription or trial)
     var canCreateProjects: Bool {
+        // Must have producer role
+        guard isProducer else { return false }
+        
+        // Check subscription status
         guard let status = subscriptionStatus else {
-            // No subscription info yet - allow based on role for backward compatibility
-            return isProducer
+            // No subscription info yet - default to false for new users
+            return false
         }
+        
         return status == "active" || status == "trial"
     }
 
@@ -201,12 +206,19 @@ class AuthenticationService {
     // MARK: - User Profile
     
     private func saveUserProfile(user: User) async throws {
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "email": user.email,
             "displayName": user.displayName,
             "role": user.role.rawValue,
             "createdAt": Timestamp(date: user.createdAt)
         ]
+        
+        // For new producer users, set initial subscription status as "free"
+        // This ensures they see the paywall before getting access
+        if user.subscriptionStatus == nil && user.isProducer {
+            data["subscriptionStatus"] = "free"
+            data["subscriptionTier"] = "free"
+        }
         
         try await db.collection("users").document(user.id).setData(data)
     }

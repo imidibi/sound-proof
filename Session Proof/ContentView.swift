@@ -19,13 +19,28 @@ struct ContentView: View {
     @State private var hasSyncedOnce = false
     @State private var syncTimer: Task<Void, Never>?
     @State private var isPerformingInitialSync = false
+    @State private var showMandatoryPaywall = false
+    
+    /// Check if user is a free producer who needs to see paywall
+    private var needsPaywall: Bool {
+        guard let user = authService.currentUser else { return false }
+        return user.isProducer && !user.canCreateProjects
+    }
     
     var body: some View {
         ZStack {
             ProjectListView()
             
+            // Show mandatory paywall for free producers
+            if needsPaywall {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                
+                PaywallView()
+            }
+            
             // Show loading overlay during initial sync
-            if isPerformingInitialSync {
+            else if isPerformingInitialSync {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
                 
