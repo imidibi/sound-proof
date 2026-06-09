@@ -77,7 +77,12 @@ struct Session_ProofApp: App {
     }()
     
     init() {
-        // Firebase is already configured in AppDelegate
+        // Configure Firebase first if not already configured
+        // This ensures Firebase is ready before creating services
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+        
         // Now initialize services (lightweight, non-blocking)
         let auth = AuthenticationService()
         let firestore = FirestoreService()
