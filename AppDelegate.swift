@@ -14,15 +14,6 @@ import UIKit
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
-                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // Configure Firebase FIRST, before any UI is created
-        // This ensures Firebase is ready but doesn't block the UI thread
-        FirebaseApp.configure()
-        print("✅ Firebase configured in AppDelegate")
-        return true
-    }
-    
-    func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         print("📱 APNS device token received")
         
@@ -42,13 +33,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 import AppKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // Configure Firebase FIRST, before any UI is created
-        // This ensures Firebase is ready but doesn't block the UI thread
-        FirebaseApp.configure()
-        print("✅ Firebase configured in AppDelegate")
-    }
-    
     func application(_ application: NSApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         print("📱 APNS device token received")
