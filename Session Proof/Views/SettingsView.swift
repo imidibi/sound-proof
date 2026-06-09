@@ -39,7 +39,6 @@ struct SettingsView: View {
     // Profile editing
     @State private var editedDisplayName = ""
     @State private var editedEmail = ""
-    @State private var editedRole: UserRole = .artist
     @State private var isEditingProfile = false
     @State private var isSavingProfile = false
     @State private var showingDeleteAccountConfirmation = false
@@ -80,18 +79,6 @@ struct SettingsView: View {
                                     .autocapitalization(.none)
                                     .keyboardType(.emailAddress)
                                     #endif
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Role")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Picker("Role", selection: $editedRole) {
-                                    ForEach([UserRole.producer, .studio, .artist], id: \.self) { role in
-                                        Text(role == .artist ? "Approver" : role.rawValue.capitalized).tag(role)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
                             }
                             
                             // Save and Cancel buttons
@@ -176,19 +163,23 @@ struct SettingsView: View {
                         }
                         
                         // Action buttons
-                        if !user.canCreateProjects {
-                            // Free user - show upgrade button
-                            Button {
-                                showingPaywall = true
-                            } label: {
-                                Label("Upgrade to Producer", systemImage: "arrow.up.circle.fill")
-                            }
-                        } else {
-                            // Subscribed user - show manage button
+                        if subscriptionService.hasActiveSubscription {
+                            // Paid subscriber - show manage button to access App Store
                             Button {
                                 subscriptionService.openManageSubscriptions()
                             } label: {
                                 Label("Manage Subscription", systemImage: "gearshape")
+                            }
+                        } else {
+                            // Free user or trial user - show upgrade/subscribe button
+                            Button {
+                                showingPaywall = true
+                            } label: {
+                                if subscriptionService.isInTrial {
+                                    Label("Subscribe Now", systemImage: "star.fill")
+                                } else {
+                                    Label("Upgrade to Producer", systemImage: "arrow.up.circle.fill")
+                                }
                             }
                         }
                         
@@ -616,7 +607,6 @@ struct SettingsView: View {
         guard let user = authService.currentUser else { return }
         editedDisplayName = user.displayName
         editedEmail = user.email
-        editedRole = user.role
         isEditingProfile = true
     }
     
@@ -629,12 +619,12 @@ struct SettingsView: View {
         let normalizedEmail = editedEmail.lowercased().trimmingCharacters(in: .whitespaces)
         
         do {
-            // Update user profile
+            // Update user profile (keep existing role - users cannot change their own role)
             let updatedUser = User(
                 id: user.id,
                 email: normalizedEmail,
                 displayName: editedDisplayName,
-                role: editedRole,
+                role: user.role,  // Keep existing role, don't allow changes
                 createdAt: user.createdAt,
                 organizationId: user.organizationId,
                 organizationName: user.organizationName
