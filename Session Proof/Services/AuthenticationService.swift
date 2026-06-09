@@ -8,6 +8,8 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import AuthenticationServices
+import CryptoKit
 
 enum UserRole: String, Codable {
     case studio        // Studio owner/admin
@@ -109,7 +111,10 @@ class AuthenticationService {
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
-    
+
+    // Sign in with Apple
+    private var currentNonce: String?
+
     init() {
         // Check if user is already signed in
         if let firebaseUser = auth.currentUser {
@@ -163,12 +168,12 @@ class AuthenticationService {
     private struct TimeoutError: Error {}
     
     // MARK: - Authentication
-    
+
     func signUp(email: String, password: String, displayName: String, role: UserRole) async throws {
         // Always use lowercase email for consistency
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
         let result = try await auth.createUser(withEmail: normalizedEmail, password: password)
-        
+
         // Create user profile in Firestore
         let user = User(
             id: result.user.uid,
@@ -177,32 +182,224 @@ class AuthenticationService {
             role: role,
             createdAt: Date()
         )
-        
+
         try await saveUserProfile(user: user)
-        
+
         await MainActor.run {
             self.currentUser = user
         }
     }
-    
+
     func signIn(email: String, password: String) async throws {
         // Always use lowercase email for consistency
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
         let result = try await auth.signIn(withEmail: normalizedEmail, password: password)
         await loadUserProfile(uid: result.user.uid, email: result.user.email ?? normalizedEmail)
     }
-    
+
     func signOut() throws {
         try auth.signOut()
         currentUser = nil
     }
-    
+
     func resetPassword(email: String) async throws {
         // Always use lowercase email for consistency
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
         try await auth.sendPasswordReset(withEmail: normalizedEmail)
     }
-    
+
+    // MARK: - Sign in with Apple
+
+    /// Check if email has pending invitations
+    private func checkForPendingInvitations(email: String) async -> Bool {
+        do {
+            // Check pending_invitations collection
+            let invitationDoc = try await db.collection("pending_invitations").document(email.lowercased()).getDocument()
+            if invitationDoc.exists {
+                Logger.debug("✉️ Found pending invitation for \(email)")
+                return true
+            }
+
+            // Also check for reviewer invitations across all projects
+            let reviewersQuery = db.collectionGroup("reviewers")
+                .whereField("email", isEqualTo: email.lowercased())
+            let reviewerDocs = try await reviewersQuery.getDocuments()
+
+            if !reviewerDocs.documents.isEmpty {
+                Logger.debug("✉️ Found \(reviewerDocs.documents.count) reviewer invitation(s) for \(email)")
+                return true
+            }
+
+            return false
+        } catch {
+            Logger.error("❌ Error checking for invitations: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Check if user should be auto-assigned as approver based on pending invitations
+    func getSuggestedRoleForEmail(_ email: String) async -> UserRole? {
+        let hasInvitation = await checkForPendingInvitations(email: email)
+        return hasInvitation ? .artist : nil
+    }
+
+    /// Check if current user has Apple ID linked
+    var hasAppleIDLinked: Bool {
+        guard let currentFirebaseUser = auth.currentUser else { return false }
+        return currentFirebaseUser.providerData.contains { $0.providerID == "apple.com" }
+    }
+
+    /// Link Apple ID to existing account (for Approvers upgrading to Producer)
+    func linkAppleID(authorization: ASAuthorization) async throws {
+        guard let currentFirebaseUser = auth.currentUser else {
+            throw NSError(domain: "AuthenticationService", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "No user logged in"])
+        }
+
+        // Check if already linked
+        if hasAppleIDLinked {
+            Logger.warning("⚠️ Apple ID already linked to this account")
+            return
+        }
+
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            throw NSError(domain: "AuthenticationService", code: -2,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid Apple ID credential"])
+        }
+
+        guard let nonce = currentNonce else {
+            throw NSError(domain: "AuthenticationService", code: -3,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid state: nonce missing"])
+        }
+
+        guard let appleIDToken = appleIDCredential.identityToken else {
+            throw NSError(domain: "AuthenticationService", code: -4,
+                         userInfo: [NSLocalizedDescriptionKey: "Unable to fetch identity token"])
+        }
+
+        guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+            throw NSError(domain: "AuthenticationService", code: -5,
+                         userInfo: [NSLocalizedDescriptionKey: "Unable to serialize token string from data"])
+        }
+
+        // Create Firebase credential
+        let credential = OAuthProvider.credential(
+            providerID: AuthProviderID.apple,
+            idToken: idTokenString,
+            rawNonce: nonce
+        )
+
+        // Link credential to existing account
+        try await currentFirebaseUser.link(with: credential)
+
+        Logger.debug("✅ Successfully linked Apple ID to account")
+    }
+
+    /// Prepare a Sign in with Apple request
+    func prepareSignInWithAppleRequest() -> ASAuthorizationAppleIDRequest {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+
+        // Generate nonce for security
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        request.nonce = sha256(nonce)
+
+        return request
+    }
+
+    /// Handle Sign in with Apple authorization
+    func handleSignInWithApple(authorization: ASAuthorization, role: UserRole) async throws {
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            throw NSError(domain: "AuthenticationService", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid Apple ID credential"])
+        }
+
+        guard let nonce = currentNonce else {
+            throw NSError(domain: "AuthenticationService", code: -2,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid state: nonce missing"])
+        }
+
+        guard let appleIDToken = appleIDCredential.identityToken else {
+            throw NSError(domain: "AuthenticationService", code: -3,
+                         userInfo: [NSLocalizedDescriptionKey: "Unable to fetch identity token"])
+        }
+
+        guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+            throw NSError(domain: "AuthenticationService", code: -4,
+                         userInfo: [NSLocalizedDescriptionKey: "Unable to serialize token string from data"])
+        }
+
+        // Create Firebase credential
+        let credential = OAuthProvider.credential(
+            providerID: AuthProviderID.apple,
+            idToken: idTokenString,
+            rawNonce: nonce
+        )
+
+        // Sign in to Firebase
+        let result = try await auth.signIn(with: credential)
+        let firebaseUser = result.user
+
+        // Get email from Apple credential or Firebase
+        let email = appleIDCredential.email ?? firebaseUser.email ?? ""
+
+        // Check if user profile exists
+        let userDoc = try await db.collection("users").document(firebaseUser.uid).getDocument()
+
+        if userDoc.exists {
+            // Existing user - load profile
+            await loadUserProfile(uid: firebaseUser.uid, email: email)
+        } else {
+            // New user - create profile
+            let displayName = [appleIDCredential.fullName?.givenName, appleIDCredential.fullName?.familyName]
+                .compactMap { $0 }
+                .joined(separator: " ")
+
+            let user = User(
+                id: firebaseUser.uid,
+                email: email,
+                displayName: displayName.isEmpty ? email : displayName,
+                role: role,
+                createdAt: Date()
+            )
+
+            try await saveUserProfile(user: user)
+
+            await MainActor.run {
+                self.currentUser = user
+            }
+        }
+    }
+
+    // MARK: - Sign in with Apple Helpers
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+        }
+
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let nonce = randomBytes.map { byte in
+            charset[Int(byte) % charset.count]
+        }
+
+        return String(nonce)
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)
+        }.joined()
+
+        return hashString
+    }
+
     // MARK: - User Profile
     
     private func saveUserProfile(user: User) async throws {
@@ -416,6 +613,13 @@ class AuthenticationService {
             Logger.warning("⚠️ Cannot update subscription - no current user")
             return
         }
+        
+        // Log auth state for debugging
+        if let firebaseUser = auth.currentUser {
+            Logger.debug("🔑 Updating subscription for authenticated user: \(firebaseUser.uid)")
+        } else {
+            Logger.warning("⚠️ No Firebase authenticated user found")
+        }
 
         var updateData: [String: Any] = [
             "subscriptionTier": tier,
@@ -434,25 +638,29 @@ class AuthenticationService {
         if let graceEnds = gracePeriodEndsAt {
             updateData["subscriptionGracePeriodEndsAt"] = Timestamp(date: graceEnds)
         }
+        
+        // Always update local user object first so UI can respond immediately
+        await MainActor.run {
+            var updatedUser = user
+            updatedUser.subscriptionTier = tier
+            updatedUser.subscriptionStatus = status
+            updatedUser.trialStartedAt = trialStartedAt
+            updatedUser.trialEndsAt = trialEndsAt
+            updatedUser.subscriptionExpiresAt = subscriptionExpiresAt
+            updatedUser.subscriptionGracePeriodEndsAt = gracePeriodEndsAt
+            self.currentUser = updatedUser
+            Logger.debug("✅ Local subscription status updated")
+        }
 
+        // Then sync to Firestore
         do {
-            try await db.collection("users").document(user.id).updateData(updateData)
-            Logger.debug("✅ Subscription status updated in Firestore")
-
-            // Update local user object
-            await MainActor.run {
-                var updatedUser = user
-                updatedUser.subscriptionTier = tier
-                updatedUser.subscriptionStatus = status
-                updatedUser.trialStartedAt = trialStartedAt
-                updatedUser.trialEndsAt = trialEndsAt
-                updatedUser.subscriptionExpiresAt = subscriptionExpiresAt
-                updatedUser.subscriptionGracePeriodEndsAt = gracePeriodEndsAt
-                self.currentUser = updatedUser
-            }
+            // Use setData with merge to ensure document exists
+            try await db.collection("users").document(user.id).setData(updateData, merge: true)
+            Logger.debug("✅ Subscription status synced to Firestore")
         } catch {
-            Logger.error("❌ Failed to update subscription status: \(error.localizedDescription)")
-            throw error
+            Logger.error("❌ Failed to sync subscription to Firestore: \(error.localizedDescription)")
+            // Don't throw - we've already updated locally
+            // Firestore will sync eventually when connection is restored
         }
     }
 

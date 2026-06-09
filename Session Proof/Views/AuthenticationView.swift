@@ -6,15 +6,11 @@
 //
 
 import SwiftUI
-import FirebaseCore
+import AuthenticationServices
 
 struct AuthenticationView: View {
     @State private var isSignUp = false
-    
-    #if DEBUG
-    @State private var showFirebaseStatus = false
-    #endif
-    
+
     var body: some View {
         ZStack {
             // Background gradient
@@ -24,7 +20,7 @@ struct AuthenticationView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
+
             if isSignUp {
                 SignUpView(showSignIn: {
                     withAnimation {
@@ -38,812 +34,626 @@ struct AuthenticationView: View {
                     }
                 })
             }
-            
-            #if DEBUG
-            // Firebase status indicator in top-right corner (DEBUG ONLY)
-            VStack {
-                HStack {
-                    Spacer()
-                    Button {
-                        showFirebaseStatus.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(firebaseStatusColor)
-                                .frame(width: 10, height: 10)
-                            Text(firebaseStatusText)
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.3))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding()
-                Spacer()
-            }
-            .sheet(isPresented: $showFirebaseStatus) {
-                FirebaseStatusView()
-            }
-            #endif
         }
     }
-    
-    #if DEBUG
-    private var firebaseStatusColor: Color {
-        guard let app = FirebaseApp.app() else { return .red }
-        let options = app.options
-        guard let apiKey = options.apiKey, !apiKey.isEmpty else { return .red }
-        return .green
-    }
-    
-    private var firebaseStatusText: String {
-        guard let app = FirebaseApp.app() else { return "Firebase Not Configured" }
-        let options = app.options
-        guard let apiKey = options.apiKey, !apiKey.isEmpty else { return "No API Key" }
-        return "Firebase Ready"
-    }
-    #endif
 }
 
 struct SignInView: View {
     @Environment(AuthenticationService.self) private var authService
-    @Environment(ProjectSyncService.self) private var syncService
-    @Environment(FirestoreService.self) private var firestoreService
-    
-    let showSignUp: () -> Void
-    
     @State private var email = ""
     @State private var password = ""
-    @State private var errorMessage: String?
     @State private var isLoading = false
-    @State private var invitationToken: String?
-    @State private var showForgotPassword = false
-    @State private var resetEmail = ""
-    @State private var resetSuccess = false
-    
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var showingAppleSignIn = false
+
+    let showSignUp: () -> Void
+
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 40) {
             Spacer()
-            
-            // Logo and title
+
+            // App branding
             VStack(spacing: 16) {
-                Image(systemName: "waveform.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.white)
-                
+                Image("AppIconImage")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 120, height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 27))
+                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+
                 Text("Approvl")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .font(.system(size: 48, weight: .bold))
                     .foregroundStyle(.white)
-                
-                Text("Mix Distribution & Approval")
+
+                Text("Professional Mix Approval")
                     .font(.title3)
                     .foregroundStyle(.white.opacity(0.9))
             }
-            
+
             Spacer()
-            
-            // Sign in form
+
             VStack(spacing: 20) {
-                emailPasswordSection
-                
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
+                // Sign in with Apple (for Producers)
+                VStack(spacing: 12) {
+                    Button {
+                        showingAppleSignIn = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign in with Apple")
+                        }
+                        .font(.headline)
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    Text("Recommended for Producers")
                         .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+
+                // Divider
+                HStack {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1)
+                }
+
+                // Email/Password (for Approvers)
+                VStack(spacing: 16) {
+                    TextField("Email", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    SecureField("Password", text: $password)
+                        .textContentType(.password)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Button {
+                        signIn()
+                    } label: {
+                        if isLoading {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Sign In")
+                                .font(.headline)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .disabled(isLoading || email.isEmpty || password.isEmpty)
+
+                    Text("For invited Approvers")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .padding(32)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .shadow(radius: 20)
             .padding(.horizontal, 40)
-            
-            Spacer()
-                .frame(height: 20)
-        }
-    }
-    
-    private var emailPasswordSection: some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Email")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                TextField("email@example.com", text: $email)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.emailAddress)
-                    #if os(iOS)
-                    .autocapitalization(.none)
-                    .keyboardType(.emailAddress)
-                    #endif
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Password")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-            }
-            
+
+            // Sign up link
             Button {
-                Task {
-                    await signIn()
-                }
+                showSignUp()
             } label: {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                } else {
-                    Text("Sign In")
-                        .fontWeight(.semibold)
-                }
+                Text("Don't have an account? Sign Up")
+                    .foregroundStyle(.white)
+                    .font(.subheadline)
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.blue)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .disabled(email.isEmpty || password.isEmpty || isLoading)
-            .buttonStyle(.borderless)
-            
-            HStack(spacing: 20) {
-                Button("Create an account") {
-                    showSignUp()
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                
-                Text("•")
-                    .foregroundStyle(.secondary)
-                
-                Button("Forgot password?") {
-                    resetEmail = email
-                    showForgotPassword = true
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            .padding(.top, 8)
+
+            Spacer()
+                .frame(height: 60)
+        }
+        .alert("Sign In Error", isPresented: $showError) {
+            Button("OK") {
+                showError = false
             }
-        }
-        .sheet(isPresented: $showForgotPassword) {
-            ForgotPasswordSheet(email: $resetEmail, resetSuccess: $resetSuccess)
-        }
-        .alert("Password Reset Email Sent", isPresented: $resetSuccess) {
-            Button("OK", role: .cancel) { }
         } message: {
-            Text("Check your email for instructions to reset your password.")
+            Text(errorMessage ?? "An error occurred")
+        }
+        .sheet(isPresented: $showingAppleSignIn) {
+            AppleSignInSheet()
         }
     }
-    
-    private func signIn() async {
-        errorMessage = nil
+
+    private func signIn() {
         isLoading = true
-        
-        defer {
-            isLoading = false
+        errorMessage = nil
+
+        Task {
+            do {
+                try await authService.signIn(email: email, password: password)
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                    isLoading = false
+                }
+            }
         }
-        
-        do {
-            print("🔵 Attempting to sign in with email: \(email)")
-            try await authService.signIn(email: email, password: password)
-            print("✅ Sign in successful!")
-            
-            // Check if this user has pending invitations
-            await checkForPendingInvitations()
-            
-            // Success - the view will automatically transition when currentUser is set
-        } catch {
-            errorMessage = "Sign in failed: \(error.localizedDescription)"
-            print("❌ Sign in error: \(error)")
-            print("❌ Error details: \(error)")
-        }
-    }
-    
-    private func checkForPendingInvitations() async {
-        guard let userEmail = authService.currentUser?.email else {
-            return
-        }
-        
-        print("🔍 Checking for pending invitations for: \(userEmail)")
-        
-        // This will be handled in ContentView after successful sign-in
-        // We'll add a method to ProjectSyncService to auto-accept pending invitations
     }
 }
 
 struct SignUpView: View {
     @Environment(AuthenticationService.self) private var authService
-    @Environment(ProjectSyncService.self) private var syncService
-    @Environment(FirestoreService.self) private var firestoreService
-    
-    let showSignIn: () -> Void
-    
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var displayName = ""
     @State private var selectedRole: UserRole = .producer
-    @State private var errorMessage: String?
     @State private var isLoading = false
-    @State private var invitationToken: String?
-    @State private var isInvitedReviewer = false
-    @State private var invitedProjectNames: [String] = []
-    @State private var isCheckingEmail = false
-    
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var showingAppleSignIn = false
+    @State private var hasInvitation = false
+    @State private var isCheckingInvitation = false
+
+    let showSignIn: () -> Void
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 32) {
-                Spacer()
-                    .frame(height: 40)
-                
-                // Logo and title
+            VStack(spacing: 30) {
+                // Header
                 VStack(spacing: 16) {
-                    Image(systemName: "person.badge.plus.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.white)
-                    
+                    Image("AppIconImage")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 80, height: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+
                     Text("Create Account")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                
-                // Sign up form
-                VStack(spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Full Name")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        TextField("John Doe", text: $displayName)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.name)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Email")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            if isCheckingEmail {
-                                ProgressView()
-                                    .controlSize(.mini)
-                            }
-                        }
-                        
-                        TextField("email@example.com", text: $email)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.emailAddress)
-                            #if os(iOS)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            #endif
-                            .onChange(of: email) { oldValue, newValue in
-                                Task {
-                                    await checkIfInvitedReviewer(email: newValue)
-                                }
-                            }
-                        
-                        if isInvitedReviewer && !invitedProjectNames.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "envelope.badge.fill")
-                                    .foregroundStyle(.green)
-                                    .font(.caption)
-                                Text("You've been invited to: \(invitedProjectNames.joined(separator: ", "))")
-                                    .font(.caption)
-                                    .foregroundStyle(.green)
-                            }
-                            .padding(.top, 4)
-                        }
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Password")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        SecureField("Password", text: $password)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.newPassword)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Confirm Password")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        SecureField("Confirm Password", text: $confirmPassword)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.newPassword)
-                        
-                        if !confirmPassword.isEmpty && password != confirmPassword {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundStyle(.red)
-                                    .font(.caption)
-                                Text("Passwords do not match")
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
-                            }
-                            .padding(.top, 4)
-                        }
-                        
-                        if !password.isEmpty && password.count < 6 {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundStyle(.orange)
-                                    .font(.caption)
-                                Text("Password must be at least 6 characters")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                            .padding(.top, 4)
-                        }
-                    }
-                    
-                    if isInvitedReviewer {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text("Account Type: Approver (Free)")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.green.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            
-                            Text("You're signing up as an approver for the invited project(s). Your account will be free forever.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "star.circle.fill")
-                                    .foregroundStyle(.blue)
-                                Text("Account Type: Producer")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.blue.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            
-                            Text("Create unlimited projects and invite approvers. Choose your subscription after signup.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    if let errorMessage = errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                    
+                .padding(.top, 40)
+
+                // Sign up with Apple (for Producers)
+                VStack(spacing: 12) {
                     Button {
-                        Task {
-                            await signUp()
+                        showingAppleSignIn = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign up with Apple")
                         }
+                        .font(.headline)
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    Text("Best for Producers (subscription required)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 40)
+
+                // Divider
+                HStack {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 1)
+                }
+                .padding(.horizontal, 40)
+
+                // Email/Password signup
+                VStack(spacing: 20) {
+                    TextField("Display Name", text: $displayName)
+                        .textContentType(.name)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    TextField("Email", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    SecureField("Password", text: $password)
+                        .textContentType(.newPassword)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    SecureField("Confirm Password", text: $confirmPassword)
+                        .textContentType(.newPassword)
+                        .padding()
+                        .background(Color.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    // Show invitation message if found
+                    if hasInvitation {
+                        HStack(spacing: 8) {
+                            Image(systemName: "envelope.badge.fill")
+                                .foregroundStyle(.green)
+                            Text("Invitation found! You'll be added as an Approver.")
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                        }
+                        .padding()
+                        .background(Color.green.opacity(0.3))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        // Role selection (only if no invitation)
+                        Picker("Account Type", selection: $selectedRole) {
+                            Text("Producer").tag(UserRole.producer)
+                            Text("Approver").tag(UserRole.artist)
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(hasInvitation)
+
+                        Text(selectedRole == .producer
+                             ? "Create unlimited projects and manage mix approvals"
+                             : "Review and approve mixes shared with you")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Button {
+                        signUp()
                     } label: {
                         if isLoading {
                             ProgressView()
-                                .progressViewStyle(.circular)
                                 .tint(.white)
                         } else {
                             Text("Create Account")
-                                .fontWeight(.semibold)
+                                .font(.headline)
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
                     .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.blue)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .disabled(!isFormValid || isLoading)
-                    .buttonStyle(.borderless)
-                    
-                    Button("Already have an account? Sign in") {
-                        showSignIn()
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .disabled(isLoading || !isFormValid)
                 }
-                .padding(32)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 24))
-                .shadow(radius: 20)
                 .padding(.horizontal, 40)
-                
+
+                // Sign in link
+                Button {
+                    showSignIn()
+                } label: {
+                    Text("Already have an account? Sign In")
+                        .foregroundStyle(.white)
+                        .font(.subheadline)
+                }
+
                 Spacer()
             }
         }
+        .alert("Sign Up Error", isPresented: $showError) {
+            Button("OK") {
+                showError = false
+            }
+        } message: {
+            Text(errorMessage ?? "An error occurred")
+        }
+        .sheet(isPresented: $showingAppleSignIn) {
+            AppleSignInSheet()
+        }
+        .onChange(of: email) { oldValue, newValue in
+            // Check for invitation when email changes
+            guard !newValue.isEmpty, newValue.contains("@") else {
+                hasInvitation = false
+                return
+            }
+
+            Task {
+                isCheckingInvitation = true
+                if let suggestedRole = await authService.getSuggestedRoleForEmail(newValue) {
+                    await MainActor.run {
+                        hasInvitation = true
+                        selectedRole = suggestedRole
+                    }
+                } else {
+                    await MainActor.run {
+                        hasInvitation = false
+                    }
+                }
+                isCheckingInvitation = false
+            }
+        }
     }
-    
+
     private var isFormValid: Bool {
+        !displayName.isEmpty &&
         !email.isEmpty &&
         !password.isEmpty &&
-        !displayName.isEmpty &&
         password == confirmPassword &&
         password.count >= 6
     }
-    
-    private func checkIfInvitedReviewer(email: String) async {
-        // Only check if email is valid format
-        guard email.contains("@") && email.contains(".") else {
-            await MainActor.run {
-                isInvitedReviewer = false
-                invitedProjectNames = []
-            }
-            return
-        }
-        
-        await MainActor.run {
-            isCheckingEmail = true
-        }
-        
-        defer {
-            Task { @MainActor in
-                isCheckingEmail = false
-            }
-        }
-        
-        do {
-            // Check if this email exists in any project's reviewers
-            print("🔍 Checking for pending invitations for email: \(email)")
-            let invitations = try await firestoreService.findPendingInvitationsByEmail(email: email)
-            print("✅ Found \(invitations.count) pending invitation(s)")
-            
-            await MainActor.run {
-                if !invitations.isEmpty {
-                    print("✅ Setting user as invited reviewer")
-                    isInvitedReviewer = true
-                    selectedRole = .artist  // Automatically set to artist
-                    
-                    // Get project names for display
-                    Task {
-                        var projectNames: [String] = []
-                        for invitation in invitations {
-                            if let project = try? await firestoreService.getProject(projectId: invitation.projectId) {
-                                projectNames.append(project["name"] as? String ?? "Unknown Project")
-                            }
-                        }
-                        await MainActor.run {
-                            invitedProjectNames = projectNames
-                        }
-                    }
-                } else {
-                    isInvitedReviewer = false
-                    invitedProjectNames = []
+
+    private func signUp() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                // Check for pending invitations before signup
+                let suggestedRole = await authService.getSuggestedRoleForEmail(email)
+                let finalRole = suggestedRole ?? selectedRole
+
+                // If invitation found, override selected role with Approver
+                if suggestedRole != nil {
+                    print("✉️ Found invitation for \(email), auto-assigning as Approver")
+                }
+
+                try await authService.signUp(email: email, password: password, displayName: displayName, role: finalRole)
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                    isLoading = false
                 }
             }
-        } catch {
-            print("❌ Error checking for invitations: \(error)")
-            await MainActor.run {
-                isInvitedReviewer = false
-                invitedProjectNames = []
-            }
         }
-    }
-    
-    private func signUp() async {
-        errorMessage = nil
-        isLoading = true
-        
-        defer {
-            isLoading = false
-        }
-        
-        do {
-            print("🔵 Attempting to sign up with email: \(email)")
-            
-            // If user is invited reviewer, they're free. Otherwise, they're a producer starting trial.
-            let finalRole: UserRole = isInvitedReviewer ? .artist : .producer
-            print("   Role: \(finalRole.rawValue)")
-            print("   Is invited reviewer: \(isInvitedReviewer)")
-            
-            try await authService.signUp(
-                email: email,
-                password: password,
-                displayName: displayName,
-                role: finalRole
-            )
-            print("✅ Sign up successful!")
-            
-            // Initialize subscription status for new users
-            // All new users start as "free" - they must go through paywall to get access
-            try await authService.updateSubscriptionStatus(
-                tier: "free",
-                status: "free"
-            )
-            print("✅ Initialized as free user - will see paywall for producer access")
-            
-            // Check for pending invitations after signup
-            await checkForPendingInvitations()
-            
-            // Success - the view will automatically transition when currentUser is set
-        } catch {
-            errorMessage = "Sign up failed: \(error.localizedDescription)"
-            print("❌ Sign up error: \(error)")
-            print("❌ Error details: \(error)")
-        }
-    }
-    
-    private func checkForPendingInvitations() async {
-        guard let userEmail = authService.currentUser?.email else {
-            return
-        }
-        
-        print("🔍 Checking for pending invitations for: \(userEmail)")
-        
-        // This will be handled in ContentView after successful sign-in/up
     }
 }
 
-#if DEBUG
-struct FirebaseStatusView: View {
+// Separate sheet for Apple Sign In
+struct AppleSignInSheet: View {
+    @Environment(AuthenticationService.self) private var authService
     @Environment(\.dismiss) private var dismiss
-    
+    @State private var showRoleSelection = false
+    @State private var selectedRole: UserRole = .producer
+    @State private var pendingAuthorization: ASAuthorization?
+    @State private var isProcessing = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var userEmail: String?
+    @State private var userName: String?
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Firebase Configuration") {
-                    StatusRow(
-                        label: "Firebase App",
-                        status: FirebaseApp.app() != nil,
-                        detail: FirebaseApp.app() != nil ? "Configured" : "Not configured"
-                    )
-                    
-                    if let app = FirebaseApp.app() {
-                        let options = app.options
-                        
-                        StatusRow(
-                            label: "API Key",
-                            status: options.apiKey != nil && !(options.apiKey?.isEmpty ?? true),
-                            detail: (options.apiKey == nil || options.apiKey!.isEmpty) ? "Missing" : "Present (\(options.apiKey!.prefix(10))...)"
-                        )
-                        
-                        StatusRow(
-                            label: "Project ID",
-                            status: options.projectID != nil && !options.projectID!.isEmpty,
-                            detail: options.projectID ?? "Missing"
-                        )
-                        
-                        StatusRow(
-                            label: "App ID",
-                            status: !(options.googleAppID.isEmpty),
-                            detail: options.googleAppID.isEmpty ? "Missing" : "Present"
-                        )
-                        
-                        StatusRow(
-                            label: "Storage Bucket",
-                            status: options.storageBucket != nil && !options.storageBucket!.isEmpty,
-                            detail: options.storageBucket ?? "Not configured"
-                        )
-                    }
+            VStack(spacing: 30) {
+                Spacer()
+
+                VStack(spacing: 16) {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.primary)
+
+                    Text("Sign in with Apple")
+                        .font(.title2.bold())
+
+                    Text("Secure authentication using your Apple ID")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                
-                Section("Required Services") {
-                    ServiceRow(
-                        name: "Authentication",
-                        description: "Email/password sign-in must be enabled in Firebase Console",
-                        icon: "person.circle"
-                    )
-                    
-                    ServiceRow(
-                        name: "Firestore Database",
-                        description: "Must be created in Firebase Console",
-                        icon: "externaldrive"
-                    )
-                    
-                    ServiceRow(
-                        name: "Cloud Storage",
-                        description: "Must be enabled for audio file uploads",
-                        icon: "cloud"
-                    )
-                }
-                
-                Section("Next Steps") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if FirebaseApp.app() == nil {
-                            Text("⚠️ Firebase not configured")
-                                .font(.headline)
-                                .foregroundStyle(.orange)
-                            Text("The GoogleService-Info.plist file is missing or invalid. See FIREBASE_SETUP.md for instructions.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if let options = FirebaseApp.app()?.options, options.projectID == nil || options.projectID!.isEmpty {
-                            Text("⚠️ Incomplete configuration")
-                                .font(.headline)
-                                .foregroundStyle(.orange)
-                            Text("Firebase is initialized but missing project ID. Check your GoogleService-Info.plist file.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("✓ Configuration looks good")
-                                .font(.headline)
-                                .foregroundStyle(.green)
-                            Text("Firebase SDK is configured. Make sure to enable Authentication, Firestore, and Storage in the Firebase Console.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+
+                SignInWithAppleButton(
+                    onRequest: { request in
+                        let preparedRequest = authService.prepareSignInWithAppleRequest()
+                        request.requestedScopes = preparedRequest.requestedScopes
+                        request.nonce = preparedRequest.nonce
+                    },
+                    onCompletion: { result in
+                        switch result {
+                        case .success(let authorization):
+                            pendingAuthorization = authorization
+
+                            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                                userEmail = appleIDCredential.email
+
+                                if let fullName = appleIDCredential.fullName {
+                                    let nameComponents = [fullName.givenName, fullName.familyName]
+                                        .compactMap { $0 }
+                                    userName = nameComponents.joined(separator: " ")
+                                }
+
+                                // Check for pending invitations
+                                if let email = appleIDCredential.email {
+                                    Task {
+                                        if let suggestedRole = await authService.getSuggestedRoleForEmail(email) {
+                                            await MainActor.run {
+                                                selectedRole = suggestedRole
+                                            }
+                                            handleRoleSelection()
+                                        } else {
+                                            await MainActor.run {
+                                                showRoleSelection = true
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    showRoleSelection = true
+                                }
+                            }
+
+                        case .failure(let error):
+                            errorMessage = error.localizedDescription
+                            showError = true
                         }
                     }
-                    .padding(.vertical, 4)
+                )
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 50)
+                .padding(.horizontal, 40)
+
+                if isProcessing {
+                    ProgressView()
                 }
-                
-                Section("Test Connection") {
-                    Text("Try creating an account to test if Firebase Authentication is working. If you get network errors, check that:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Email/Password auth is enabled in Firebase Console", systemImage: "checkmark.circle")
-                        Label("Your Mac has internet connection", systemImage: "checkmark.circle")
-                        Label("The app has network entitlements", systemImage: "checkmark.circle")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+
+                Spacer()
             }
-            .navigationTitle("Firebase Status")
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
                         dismiss()
                     }
                 }
             }
+            .sheet(isPresented: $showRoleSelection) {
+                RoleSelectionSheet(
+                    selectedRole: $selectedRole,
+                    userEmail: userEmail,
+                    userName: userName,
+                    onContinue: {
+                        handleRoleSelection()
+                    },
+                    onUseOtherAccount: {
+                        showRoleSelection = false
+                        pendingAuthorization = nil
+                        userEmail = nil
+                        userName = nil
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
+            .alert("Sign In Error", isPresented: $showError) {
+                Button("OK") {
+                    showError = false
+                }
+            } message: {
+                Text(errorMessage ?? "An error occurred during sign in")
+            }
         }
-        .frame(minWidth: 500, minHeight: 600)
     }
-}
-#endif
 
-#if DEBUG
-struct StatusRow: View {
-    let label: String
-    let status: Bool
-    let detail: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: status ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(status ? .green : .red)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.subheadline)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private func handleRoleSelection() {
+        guard let authorization = pendingAuthorization else { return }
+
+        isProcessing = true
+
+        Task {
+            do {
+                try await authService.handleSignInWithApple(authorization: authorization, role: selectedRole)
+
+                await MainActor.run {
+                    isProcessing = false
+                    showRoleSelection = false
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessing = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
             }
         }
     }
 }
-#endif
 
-#if DEBUG
-struct ServiceRow: View {
-    let name: String
-    let description: String
-    let icon: String
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(.blue)
-                .frame(width: 30)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-#endif
-
-struct ForgotPasswordSheet: View {
-    @Environment(AuthenticationService.self) private var authService
+struct RoleSelectionSheet: View {
+    @Binding var selectedRole: UserRole
+    let userEmail: String?
+    let userName: String?
+    let onContinue: () -> Void
+    let onUseOtherAccount: () -> Void
     @Environment(\.dismiss) private var dismiss
-    
-    @Binding var email: String
-    @Binding var resetSuccess: Bool
-    
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                Image(systemName: "key.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.blue)
-                    .padding(.top, 40)
-                
-                VStack(spacing: 8) {
-                    Text("Reset Password")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Text("Enter your email address and we'll send you instructions to reset your password.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Email")
+                Text("Choose Your Role")
+                    .font(.title2.bold())
+                    .padding(.top)
+
+                // Show signed-in account info
+                if let email = userEmail ?? userName {
+                    VStack(spacing: 4) {
+                        Text("Signed in as")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        
-                        TextField("email@example.com", text: $email)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.emailAddress)
-                            #if os(iOS)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            #endif
-                            .autocorrectionDisabled()
+                        Text(email)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
                     }
-                    
-                    if let errorMessage = errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    Button {
-                        Task {
-                            await sendResetEmail()
-                        }
-                    } label: {
-                        if isLoading {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(.white)
-                        } else {
-                            Text("Send Reset Email")
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .disabled(email.isEmpty || isLoading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color.secondary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .padding(.horizontal, 32)
-                
+
+                Text("Select how you'll use Approvl")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 16) {
+                    RoleOptionButton(
+                        role: .producer,
+                        title: "Producer",
+                        description: "Create unlimited projects and manage mix approvals",
+                        icon: "music.note.list",
+                        isSelected: selectedRole == .producer
+                    ) {
+                        selectedRole = .producer
+                    }
+
+                    RoleOptionButton(
+                        role: .artist,
+                        title: "Approver",
+                        description: "Review and approve mixes shared with you",
+                        icon: "checkmark.circle",
+                        isSelected: selectedRole == .artist
+                    ) {
+                        selectedRole = .artist
+                    }
+                }
+                .padding(.horizontal)
+
                 Spacer()
+
+                VStack(spacing: 12) {
+                    Button {
+                        onContinue()
+                    } label: {
+                        Text("Continue")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    Button {
+                        onUseOtherAccount()
+                        dismiss()
+                    } label: {
+                        Text("Use a different Apple account")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
             }
-            .navigationTitle("Forgot Password")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -853,35 +663,58 @@ struct ForgotPasswordSheet: View {
             }
         }
     }
-    
-    private func sendResetEmail() async {
-        errorMessage = nil
-        isLoading = true
-        
-        defer {
-            isLoading = false
-        }
-        
-        do {
-            try await authService.resetPassword(email: email.lowercased().trimmingCharacters(in: .whitespaces))
-            
-            await MainActor.run {
-                resetSuccess = true
-                dismiss()
+}
+
+struct RoleOptionButton: View {
+    let role: UserRole
+    let title: String
+    let description: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(isSelected ? .blue : .secondary)
+                    .frame(width: 40)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.blue)
+                        .font(.title3)
+                }
             }
-        } catch {
-            errorMessage = "Failed to send reset email: \(error.localizedDescription)"
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.blue.opacity(0.1) : Color.secondary.opacity(0.1))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+            )
         }
+        .buttonStyle(.plain)
     }
 }
 
-#Preview("Sign In") {
+#Preview {
     AuthenticationView()
         .environment(AuthenticationService())
 }
-
-#if DEBUG
-#Preview("Firebase Status") {
-    FirebaseStatusView()
-}
-#endif

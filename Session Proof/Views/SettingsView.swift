@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import AuthenticationServices
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -31,7 +32,9 @@ struct SettingsView: View {
     @State private var lastSyncTime: Date?
     @State private var showingHelp = false
     @State private var showingPaywall = false
-    
+    @State private var showingAppleIDLinking = false
+    @State private var showLinkAppleIDAlert = false
+
     // Display preferences
     @AppStorage("showArchivedProjects") private var showArchivedProjects = false
     @AppStorage("projectSortOrder") private var projectSortOrder = "lastActivity"
@@ -177,13 +180,24 @@ struct SettingsView: View {
                         } else {
                             // Free user or trial user - show upgrade/subscribe button
                             Button {
-                                showingPaywall = true
+                                handleUpgradeToProducer()
                             } label: {
                                 if subscriptionService.isInTrial {
                                     Label("Subscribe Now", systemImage: "star.fill")
                                 } else {
                                     Label("Upgrade to Producer", systemImage: "arrow.up.circle.fill")
                                 }
+                            }
+
+                            // Show "Link Apple ID" if Approver wants to become Producer
+                            if let user = authService.currentUser,
+                               !user.isProducer && !authService.hasAppleIDLinked {
+                                Button {
+                                    showLinkAppleIDAlert = true
+                                } label: {
+                                    Label("Link Apple ID", systemImage: "link")
+                                }
+                                .foregroundStyle(.blue)
                             }
                         }
                         
@@ -469,6 +483,18 @@ struct SettingsView: View {
                     .environment(subscriptionService)
                     .environment(authService)
             }
+            .sheet(isPresented: $showingAppleIDLinking) {
+                AppleIDLinkingSheet()
+                    .environment(authService)
+            }
+            .alert("Link Apple ID Required", isPresented: $showLinkAppleIDAlert) {
+                Button("Link Now") {
+                    showingAppleIDLinking = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("To become a Producer and manage subscriptions, you need to link your Apple ID to your account. This allows you to purchase subscriptions while keeping your current login.")
+            }
         }
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 600, minHeight: 400)
@@ -552,6 +578,27 @@ struct SettingsView: View {
         #endif
     }
     
+    private func handleUpgradeToProducer() {
+        guard let user = authService.currentUser else { return }
+
+        // Check if user is already a producer
+        if user.isProducer {
+            // Already producer, just show paywall for subscription
+            showingPaywall = true
+            return
+        }
+
+        // Approver wants to become producer
+        // Check if Apple ID is linked
+        if authService.hasAppleIDLinked {
+            // Has Apple ID, can proceed to upgrade
+            showingPaywall = true
+        } else {
+            // Needs to link Apple ID first
+            showLinkAppleIDAlert = true
+        }
+    }
+
     private func signOut() async {
         isLoggingOut = true
         
@@ -724,6 +771,108 @@ struct SettingsView: View {
                 isDeletingAccount = false
                 deleteAccountError = error.localizedDescription
                 print("❌ Error deleting account: \(error.localizedDescription)")
+            }
+        }
+    }
+}
+
+// Apple ID Linking Sheet
+struct AppleIDLinkingSheet: View {
+    @Environment(AuthenticationService.self) private var authService
+    @Environment(\.dismiss) private var dismiss
+    @State private var isLinking = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var showSuccess = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 30) {
+                Spacer()
+
+                VStack(spacing: 16) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.blue)
+
+                    Text("Link Apple ID")
+                        .font(.title2.bold())
+
+                    Text("Link your Apple ID to enable Producer features and subscription management while keeping your current login method.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                SignInWithAppleButton(
+                    onRequest: { request in
+                        let preparedRequest = authService.prepareSignInWithAppleRequest()
+                        request.requestedScopes = []  // Don't request name/email for linking
+                        request.nonce = preparedRequest.nonce
+                    },
+                    onCompletion: { result in
+                        switch result {
+                        case .success(let authorization):
+                            linkAppleID(authorization: authorization)
+
+                        case .failure(let error):
+                            errorMessage = error.localizedDescription
+                            showError = true
+                        }
+                    }
+                )
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 50)
+                .padding(.horizontal, 40)
+
+                if isLinking {
+                    ProgressView("Linking...")
+                }
+
+                Spacer()
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Linking Error", isPresented: $showError) {
+                Button("OK") {
+                    showError = false
+                }
+            } message: {
+                Text(errorMessage ?? "An error occurred while linking your Apple ID")
+            }
+            .alert("Success!", isPresented: $showSuccess) {
+                Button("Continue") {
+                    dismiss()
+                }
+            } message: {
+                Text("Your Apple ID has been successfully linked. You can now upgrade to Producer and manage subscriptions.")
+            }
+        }
+    }
+
+    private func linkAppleID(authorization: ASAuthorization) {
+        isLinking = true
+
+        Task {
+            do {
+                try await authService.linkAppleID(authorization: authorization)
+
+                await MainActor.run {
+                    isLinking = false
+                    showSuccess = true
+                }
+            } catch {
+                await MainActor.run {
+                    isLinking = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
             }
         }
     }
