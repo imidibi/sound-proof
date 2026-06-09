@@ -18,6 +18,11 @@ struct PaywallView: View {
     @State private var purchaseError: String?
     @State private var showError = false
     
+    /// Is user currently in an active trial?
+    private var isInActiveTrial: Bool {
+        authService.currentUser?.isInTrial ?? false
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -28,15 +33,21 @@ struct PaywallView: View {
                             .font(.system(size: 60))
                             .foregroundStyle(.blue)
                         
-                        Text("Unlock Producer Features")
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        if subscriptionService.isInTrial {
-                            Text("Subscribe to continue after trial")
+                        if isInActiveTrial {
+                            Text("Subscribe to Producer")
+                                .font(.title)
+                                .fontWeight(.bold)
+                            
+                            Text("Keep access to all your projects and features")
                                 .font(.title3)
                                 .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                         } else {
+                            Text("Unlock Producer Features")
+                                .font(.title)
+                                .fontWeight(.bold)
+                            
                             Text("Start your 14-day free trial")
                                 .font(.title3)
                                 .foregroundStyle(.secondary)
@@ -46,12 +57,23 @@ struct PaywallView: View {
                     
                     // Features list
                     VStack(alignment: .leading, spacing: 16) {
-                        FeatureRow(icon: "folder.badge.plus", title: "Unlimited Projects", description: "Create and manage unlimited music projects")
-                        FeatureRow(icon: "waveform", title: "Upload Mixes", description: "Upload and share multiple mix versions")
-                        FeatureRow(icon: "person.2", title: "Invite Approvers", description: "Collaborate with unlimited reviewers")
-                        FeatureRow(icon: "bubble.left.and.bubble.right", title: "Comments & Feedback", description: "Get timestamped comments on your mixes")
-                        FeatureRow(icon: "checkmark.seal", title: "Track Approvals", description: "Know exactly who approved what")
-                        FeatureRow(icon: "icloud", title: "Cloud Sync", description: "Access your projects on all your devices")
+                        if isInActiveTrial {
+                            // Features for trial users (emphasize keeping access)
+                            FeatureRow(icon: "folder.fill", title: "Retain Access to Projects", description: "Keep all your projects and work")
+                            FeatureRow(icon: "waveform", title: "Continue Uploading Mixes", description: "Upload and share multiple mix versions")
+                            FeatureRow(icon: "person.2", title: "Keep All Approvers", description: "Maintain your collaborator relationships")
+                            FeatureRow(icon: "bubble.left.and.bubble.right", title: "Preserve All Feedback", description: "Keep all comments and approvals")
+                            FeatureRow(icon: "icloud", title: "Cloud Sync", description: "Access your projects on all your devices")
+                            FeatureRow(icon: "checkmark.seal", title: "Full Producer Features", description: "Unlimited projects and collaboration")
+                        } else {
+                            // Features for new users
+                            FeatureRow(icon: "folder.badge.plus", title: "Unlimited Projects", description: "Create and manage unlimited music projects")
+                            FeatureRow(icon: "waveform", title: "Upload Mixes", description: "Upload and share multiple mix versions")
+                            FeatureRow(icon: "person.2", title: "Invite Approvers", description: "Collaborate with unlimited reviewers")
+                            FeatureRow(icon: "bubble.left.and.bubble.right", title: "Comments & Feedback", description: "Get timestamped comments on your mixes")
+                            FeatureRow(icon: "checkmark.seal", title: "Track Approvals", description: "Know exactly who approved what")
+                            FeatureRow(icon: "icloud", title: "Cloud Sync", description: "Access your projects on all your devices")
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -69,33 +91,50 @@ struct PaywallView: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // Purchase button
-                    Button {
-                        Task {
-                            await purchaseSubscription()
-                        }
-                    } label: {
-                        HStack {
-                            if isPurchasing {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .tint(.white)
+                    // Purchase button(s)
+                    VStack(spacing: 12) {
+                        // Main button
+                        Button {
+                            Task {
+                                await purchaseSubscription()
                             }
-                            Text(isPurchasing ? "Processing..." : (subscriptionService.isInTrial ? "Subscribe Now" : "Start Free Trial"))
-                                .fontWeight(.semibold)
+                        } label: {
+                            HStack {
+                                if isPurchasing {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .tint(.white)
+                                }
+                                Text(isPurchasing ? "Processing..." : (isInActiveTrial ? "Subscribe Now" : "Start Free Trial"))
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(selectedProductID != nil && !isPurchasing ? Color.blue : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(selectedProductID != nil && !isPurchasing ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+                        .disabled(selectedProductID == nil || isPurchasing)
+                        
+                        // Subscribe Now option for new users (skip trial)
+                        if !isInActiveTrial {
+                            Button {
+                                Task {
+                                    await purchaseSubscription()
+                                }
+                            } label: {
+                                Text("Subscribe Now")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.blue)
+                            }
+                            .disabled(selectedProductID == nil || isPurchasing)
+                        }
                     }
-                    .disabled(selectedProductID == nil || isPurchasing)
                     .padding(.horizontal, 20)
                     
                     // Trial details
                     VStack(spacing: 8) {
-                        if subscriptionService.isInTrial {
+                        if isInActiveTrial {
                             Text(selectedPriceText)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
