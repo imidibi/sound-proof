@@ -23,8 +23,13 @@ struct ContentView: View {
     
     /// Check if user is a free producer who needs to see paywall
     private var needsPaywall: Bool {
-        guard let user = authService.currentUser else { return false }
-        return user.isProducer && !user.canCreateProjects
+        guard let user = authService.currentUser else {
+            print("🚧 needsPaywall: No current user")
+            return false
+        }
+        let needs = user.isProducer && !user.canCreateProjects
+        print("🚧 needsPaywall: \(needs) (isProducer: \(user.isProducer), canCreateProjects: \(user.canCreateProjects), status: \(user.subscriptionStatus ?? "nil"))")
+        return needs
     }
     
     var body: some View {
