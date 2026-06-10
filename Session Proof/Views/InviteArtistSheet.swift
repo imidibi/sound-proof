@@ -478,17 +478,14 @@ Section {
         let subject = "\(producerName) invited you to review \(projectName)"
         let body = """
         Hi \(artistName),
-        
+
         \(producerName) has invited you to review the project "\(projectName)" on Approvl.
-        
+
         To get started:
         1. Download Approvl from the App Store
         2. Create an account using this email address: \(email)
         3. Sign in and you'll automatically see the project
-        
-        Or tap this link on your iOS device to accept the invitation directly:
-        \(deepLink)
-        
+
         Thanks,
         The Approvl Team
         """
