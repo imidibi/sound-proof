@@ -181,7 +181,6 @@ final class SubscriptionService {
     /// Update current subscription status
     func updateSubscriptionStatus() async {
         var highestStatus: Product.SubscriptionInfo.Status?
-        var highestProduct: Product?
         
         // Check all subscription statuses
         for product in availableProducts.map(\.product) {
@@ -198,12 +197,11 @@ final class SubscriptionService {
                 // Track highest priority status
                 if highestStatus == nil || status.state.priority > highestStatus!.state.priority {
                     highestStatus = status
-                    highestProduct = product
                 }
                 
                 // Track purchased products
                 if status.state == .subscribed || status.state == .inGracePeriod {
-                    await MainActor.run {
+                    _ = await MainActor.run {
                         purchasedProductIDs.insert(transaction.productID)
                     }
                 }
@@ -241,7 +239,10 @@ final class SubscriptionService {
         originalTransactionId = String(transaction.originalID)
 
         // Determine subscription status based on renewal state
-        if transaction.offerType == .introductory {
+        // Check if user is in trial by checking the offer property
+        let isInTrial = transaction.offer?.type == .introductory
+        
+        if isInTrial {
             // User is in trial period
             subscriptionStatus = .trial
             subscriptionTier = .producer
@@ -313,9 +314,11 @@ final class SubscriptionService {
     
     /// Listen for transaction updates
     private func listenForTransactions() -> Task<Void, Never> {
-        return Task.detached {
+        return Task.detached { [weak self] in
+            guard let self = self else { return }
+            
             for await result in Transaction.updates {
-                guard let transaction = try? self.checkVerified(result) else {
+                guard let transaction = try? await self.checkVerified(result) else {
                     continue
                 }
                 

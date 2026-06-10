@@ -230,27 +230,38 @@ struct PaywallView: View {
             let transaction = try await subscriptionService.purchase(subscriptionProduct.product)
             
             if transaction != nil {
+                #if DEBUG
                 print("💳 Purchase transaction completed")
+                #endif
                 
                 // Purchase successful - update subscription status
                 await subscriptionService.updateSubscriptionStatus()
+                
+                #if DEBUG
                 print("📊 SubscriptionService status: \(subscriptionService.subscriptionStatus.rawValue)")
                 print("📊 SubscriptionService tier: \(subscriptionService.subscriptionTier.rawValue)")
                 print("📊 Can create projects: \(subscriptionService.canCreateProjects)")
+                #endif
                 
                 // Sync to Firestore
                 await syncSubscriptionToFirestore()
+                
+                #if DEBUG
                 print("☁️ Synced to Firestore")
                 print("👤 Current user status: \(authService.currentUser?.subscriptionStatus ?? "nil")")
                 print("👤 Current user tier: \(authService.currentUser?.subscriptionTier ?? "nil")")
                 print("👤 Can create projects: \(authService.currentUser?.canCreateProjects ?? false)")
+                #endif
                 
                 // Show success message
                 await MainActor.run {
                     isPurchasing = false
                     purchaseSuccess = true
                 }
+                
+                #if DEBUG
                 print("✅ Purchase flow complete, showing success alert")
+                #endif
             }
         } catch {
             await MainActor.run {
