@@ -44,6 +44,9 @@ struct SettingsView: View {
     @State private var showingDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
+    @State private var showingConvertToApproverConfirmation = false
+    @State private var isConvertingToApprover = false
+    @State private var convertToApproverError: String?
     
     private var userOrganization: Organization? {
         guard let userId = authService.currentUser?.id else {
@@ -195,6 +198,15 @@ struct SettingsView: View {
                         } label: {
                             Label("Restore Purchases", systemImage: "arrow.clockwise")
                         }
+                        
+                        // Convert to Approver button (for producers who don't need producer features)
+                        if user.isProducer && !user.canCreateProjects {
+                            Button(role: .destructive) {
+                                showingConvertToApproverConfirmation = true
+                            } label: {
+                                Label("Switch to Approver Account", systemImage: "person.crop.circle.badge.checkmark")
+                            }
+                        }
                     }
                 } header: {
                     Text("Subscription")
@@ -204,8 +216,10 @@ struct SettingsView: View {
                     if let user = authService.currentUser {
                         if user.canCreateProjects {
                             Text("You have full access to all Producer features.")
+                        } else if user.isProducer {
+                            Text("Upgrade to Producer to create projects. If you only need to review projects, you can switch to a free Approver account.")
                         } else {
-                            Text("Upgrade to Producer to create projects and share your music for approval.")
+                            Text("Your Approver account is free forever. You can review projects that producers share with you.")
                         }
                     }
                 }
@@ -454,6 +468,29 @@ struct SettingsView: View {
                 }
             } message: {
                 if let error = deleteAccountError {
+                    Text(error)
+                }
+            }
+            .confirmationDialog(
+                "Switch to Approver Account",
+                isPresented: $showingConvertToApproverConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Switch to Approver", role: .destructive) {
+                    Task {
+                        await convertToApprover()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will convert your account to a free Approver account. You'll no longer be able to create projects, but you can still review projects that others share with you.\n\nThis action cannot be undone - you'll need to create a new account if you want to be a Producer again.")
+            }
+            .alert("Error Converting Account", isPresented: .constant(convertToApproverError != nil)) {
+                Button("OK") {
+                    convertToApproverError = nil
+                }
+            } message: {
+                if let error = convertToApproverError {
                     Text(error)
                 }
             }
@@ -724,6 +761,26 @@ struct SettingsView: View {
                 isDeletingAccount = false
                 deleteAccountError = error.localizedDescription
                 print("❌ Error deleting account: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func convertToApprover() async {
+        isConvertingToApprover = true
+        convertToApproverError = nil
+        
+        do {
+            try await authService.convertToApprover()
+            
+            await MainActor.run {
+                isConvertingToApprover = false
+                print("✅ Converted to approver successfully")
+            }
+        } catch {
+            await MainActor.run {
+                isConvertingToApprover = false
+                convertToApproverError = error.localizedDescription
+                print("❌ Error converting to approver: \(error.localizedDescription)")
             }
         }
     }

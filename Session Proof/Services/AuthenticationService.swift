@@ -691,6 +691,70 @@ class AuthenticationService {
         Logger.debug("✅ Account deletion completed successfully")
     }
 
+    // MARK: - Role Conversion
+
+    /// Check if user has any owned projects in Firestore
+    func getUserOwnedProjectsCount(userId: String) async throws -> Int {
+        let snapshot = try await db.collection("projects")
+            .whereField("ownerUserId", isEqualTo: userId)
+            .getDocuments()
+        return snapshot.documents.count
+    }
+
+    /// Convert a producer account to an approver account
+    /// This is useful when a producer signed up but only needs approver access
+    func convertToApprover() async throws {
+        guard let user = currentUser else {
+            throw NSError(domain: "AuthenticationService", code: -1, 
+                         userInfo: [NSLocalizedDescriptionKey: "No user logged in"])
+        }
+
+        guard user.isProducer else {
+            throw NSError(domain: "AuthenticationService", code: -2, 
+                         userInfo: [NSLocalizedDescriptionKey: "User is already an approver"])
+        }
+
+        Logger.debug("🔄 Converting user to approver: \(user.email)")
+
+        // Update role and subscription status in Firestore
+        try await db.collection("users").document(user.id).updateData([
+            "role": UserRole.artist.rawValue,
+            "subscriptionTier": "free",
+            "subscriptionStatus": "free"
+        ])
+
+        // Create new user object with updated role
+        let updatedUser = User(
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            role: .artist,
+            createdAt: user.createdAt,
+            organizationId: user.organizationId,
+            organizationName: user.organizationName,
+            phone: user.phone,
+            title: user.title,
+            enablePushNotifications: user.enablePushNotifications,
+            enableSMSNotifications: user.enableSMSNotifications,
+            enableEmailNotifications: user.enableEmailNotifications,
+            isOrganizationAdmin: user.isOrganizationAdmin,
+            subscriptionTier: "free",
+            subscriptionStatus: "free",
+            originalTransactionId: nil,
+            trialStartedAt: nil,
+            trialEndsAt: nil,
+            subscriptionExpiresAt: nil,
+            subscriptionGracePeriodEndsAt: nil
+        )
+
+        // Update local user object
+        await MainActor.run {
+            self.currentUser = updatedUser
+        }
+
+        Logger.debug("✅ User converted to approver successfully")
+    }
+
     // MARK: - Migration Helper
 
     private func createMissingProfile(uid: String, email: String) async {
