@@ -129,14 +129,17 @@ struct Session_ProofApp: App {
                     .ignoresSafeArea()
                     
                     VStack(spacing: 24) {
-                        Image(systemName: "waveform.circle.fill")
-                            .font(.system(size: 80))
-                            .foregroundStyle(.white)
-                        
+                        Image("AppIconImage")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 120, height: 120)
+                            .clipShape(RoundedRectangle(cornerRadius: 27))
+                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+
                         Text("Approvl")
                             .font(.system(size: 48, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                        
+
                         ProgressView()
                             .scaleEffect(1.2)
                             .tint(.white)
