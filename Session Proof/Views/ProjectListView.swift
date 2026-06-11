@@ -1008,8 +1008,10 @@ struct MixRow: View {
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
     
-    var canDelete: Bool {
-        authService.currentUser?.role == .producer
+    // Check if current user is the project owner
+    var isProjectOwner: Bool {
+        guard let project = mix.song?.project else { return false }
+        return project.isOwner(userId: authService.currentUser?.id)
     }
     
     var body: some View {
@@ -1052,14 +1054,15 @@ struct MixRow: View {
         }
         .tag(mix)
         .contextMenu {
-            Button {
-                isEditingName = true
-                isNameFieldFocused = true
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-            
-            if canDelete {
+            // Owner-only actions
+            if isProjectOwner {
+                Button {
+                    isEditingName = true
+                    isNameFieldFocused = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                
                 Divider()
                 
                 Button(role: .destructive) {
@@ -1070,7 +1073,7 @@ struct MixRow: View {
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if canDelete {
+            if isProjectOwner {
                 Button(role: .destructive) {
                     showingDeleteConfirmation = true
                 } label: {
