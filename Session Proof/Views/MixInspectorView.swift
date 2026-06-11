@@ -691,10 +691,13 @@ struct MyApprovalSection: View {
         }
         
         // Create or update approval
+        let approvalToSync: Approval
         if let approval = myApproval {
             // Update existing approval
             approval.status = status
             approval.updatedAt = Date()
+            approval.needsUpload = true
+            approvalToSync = approval
             print("✅ Updated my approval to: \(status.rawValue)")
         } else {
             // Create new approval
@@ -703,6 +706,7 @@ struct MyApprovalSection: View {
             approval.reviewer = reviewer
             approval.needsUpload = true
             modelContext.insert(approval)
+            approvalToSync = approval
             print("✅ Created new approval with status: \(status.rawValue)")
         }
         
@@ -713,13 +717,12 @@ struct MyApprovalSection: View {
             // Sync to Firestore
             if let projectId = project.firestoreId,
                let songId = mix.song?.firestoreId,
-               let mixId = mix.firestoreId,
-               let approval = myApproval {
+               let mixId = mix.firestoreId {
                 _ = try await firestoreService.createOrUpdateApproval(
                     projectId: projectId,
                     songId: songId,
                     mixId: mixId,
-                    approval: approval,
+                    approval: approvalToSync,
                     reviewerUserId: currentUserId
                 )
                 print("✅ Approval synced to Firestore")
