@@ -441,8 +441,9 @@ struct ProjectFolderRow: View {
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
     
-    var canDelete: Bool {
-        authService.currentUser?.role == .producer
+    // Check if current user is the project owner
+    var isProjectOwner: Bool {
+        project.isOwner(userId: authService.currentUser?.id)
     }
     
     var sortedSongs: [Song] {
@@ -526,7 +527,7 @@ struct ProjectFolderRow: View {
                 onToggleExpand()
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if canDelete {
+                if isProjectOwner {
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
@@ -535,42 +536,46 @@ struct ProjectFolderRow: View {
                 }
             }
             .contextMenu {
-                Button {
-                    showingEditProjectSheet = true
-                } label: {
-                    Label("Edit Project", systemImage: "pencil")
-                }
-                
-                Button {
-                    isEditingName = true
-                    isNameFieldFocused = true
-                } label: {
-                    Label("Rename", systemImage: "text.cursor")
-                }
-                
+                // Show Approvals Status to everyone
                 Button {
                     showingApprovalsStatus = true
                 } label: {
                     Label("Approvals Status", systemImage: "checkmark.circle")
                 }
                 
-                Divider()
-                
-                Button {
-                    selectedProjectForMenu = project
-                    selectedSongForMenu = nil
-                    showingNewSongSheet = true
-                } label: {
-                    Label("Add Song", systemImage: "music.note")
-                }
-                
-                Button {
-                    showingReviewersSheet = true
-                } label: {
-                    Label("Manage Approvers", systemImage: "person.2")
-                }
-                
-                if canDelete {
+                // Owner-only actions
+                if isProjectOwner {
+                    Divider()
+                    
+                    Button {
+                        showingEditProjectSheet = true
+                    } label: {
+                        Label("Edit Project", systemImage: "pencil")
+                    }
+                    
+                    Button {
+                        isEditingName = true
+                        isNameFieldFocused = true
+                    } label: {
+                        Label("Rename", systemImage: "text.cursor")
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        selectedProjectForMenu = project
+                        selectedSongForMenu = nil
+                        showingNewSongSheet = true
+                    } label: {
+                        Label("Add Song", systemImage: "music.note")
+                    }
+                    
+                    Button {
+                        showingReviewersSheet = true
+                    } label: {
+                        Label("Manage Approvers", systemImage: "person.2")
+                    }
+                    
                     Divider()
                     
                     // Archive/Reload option
@@ -741,8 +746,10 @@ struct SongFolderRow: View {
     @State private var showingDeleteConfirmation = false
     @FocusState private var isNameFieldFocused: Bool
     
-    var canDelete: Bool {
-        authService.currentUser?.role == .producer
+    // Check if current user is the project owner
+    var isProjectOwner: Bool {
+        guard let project = song.project else { return false }
+        return project.isOwner(userId: authService.currentUser?.id)
     }
     
     var sortedMixes: [Mix] {
@@ -816,7 +823,7 @@ struct SongFolderRow: View {
                 onToggleExpand()
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if canDelete {
+                if isProjectOwner {
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
@@ -825,16 +832,24 @@ struct SongFolderRow: View {
                 }
             }
             .contextMenu {
+                // Show Approvals Status to everyone
                 Button {
-                    isEditingName = true
-                    isNameFieldFocused = true
+                    showingApprovalsStatus = true
                 } label: {
-                    Label("Rename", systemImage: "pencil")
+                    Label("Approvals Status", systemImage: "checkmark.circle")
                 }
                 
-                Divider()
-                
-                if authService.currentUser?.isProducer == true {
+                // Owner-only actions
+                if isProjectOwner {
+                    Divider()
+                    
+                    Button {
+                        isEditingName = true
+                        isNameFieldFocused = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    
                     Button {
                         selectedSongForMenu = song
                         selectedProjectForMenu = nil
@@ -842,15 +857,7 @@ struct SongFolderRow: View {
                     } label: {
                         Label("Import Mix", systemImage: "square.and.arrow.down")
                     }
-                }
-                
-                Button {
-                    showingApprovalsStatus = true
-                } label: {
-                    Label("Approvals Status", systemImage: "checkmark.circle")
-                }
-                
-                if canDelete {
+                    
                     Divider()
                     
                     // Archive/Reload option
