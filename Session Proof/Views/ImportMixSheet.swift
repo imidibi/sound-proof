@@ -207,10 +207,10 @@ struct ImportMixSheet: View {
     private func importMix() async {
         guard let sourceURL = selectedFileURL else { return }
         
-        // Only producers can create mixes
-        guard authService.currentUser?.isProducer == true else {
+        // Only project owners can create mixes
+        guard let project = song.project, project.isOwner(userId: authService.currentUser?.id) else {
             await MainActor.run {
-                errorMessage = "Only producers can create mixes"
+                errorMessage = "Only the project owner can create mixes"
                 isImporting = false
             }
             return

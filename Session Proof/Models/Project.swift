@@ -131,4 +131,13 @@ final class Project {
         self.isArchived = isArchived
         self.archivedAt = archivedAt
     }
+    
+    // MARK: - Helper Methods
+    
+    /// Check if the given user ID is the owner of this project
+    /// This should be used for permission checks instead of checking user role
+    func isOwner(userId: String?) -> Bool {
+        guard let userId = userId else { return false }
+        return self.ownerUserID == userId
+    }
 }

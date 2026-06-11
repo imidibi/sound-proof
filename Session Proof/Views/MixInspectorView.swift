@@ -277,17 +277,17 @@ struct MixInfoSection: View {
     @Environment(FirestoreService.self) private var firestoreService
     @Environment(AuthenticationService.self) private var authService
     
-    // Check if current user can approve mixes (producer or key approver)
+    // Check if current user can approve mixes (project owner or key approver)
     var canApproveMix: Bool {
         guard let currentUserId = authService.currentUser?.id,
               let project = mix.song?.project else {
             return false
         }
         
-        let isProducer = authService.currentUser?.isProducer ?? false
+        let isOwner = project.isOwner(userId: currentUserId)
         let isKeyApprover = project.reviewers.first(where: { $0.userId == currentUserId })?.isKeyApprover ?? false
         
-        return isProducer || isKeyApprover
+        return isOwner || isKeyApprover
     }
     
     var body: some View {

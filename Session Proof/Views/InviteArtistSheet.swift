@@ -123,30 +123,6 @@ Section {
                     await loadPreviousReviewers()
                 }
                 
-                Section {
-                    Picker("Role", selection: $role) {
-                        Text("Approver").tag(ReviewerRole.reviewer)
-                        Text("Viewer").tag(ReviewerRole.viewer)
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Permissions")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("•")
-                            Text("Approver: Can add comments and approve mixes")
-                        }
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("•")
-                            Text("Viewer: Can only view and listen to mixes")
-                        }
-                    }
-                    .font(.caption)
-                }
-                
                 if let errorMessage = errorMessage {
                     Section {
                         HStack(spacing: 8) {

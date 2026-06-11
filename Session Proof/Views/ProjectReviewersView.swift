@@ -43,9 +43,9 @@ struct ProjectReviewersView: View {
             List {
                 Section {
                     ForEach(sortedReviewers) { reviewer in
-                        ReviewerRow(reviewer: reviewer, isProducerView: authService.currentUser?.isProducer == true)
+                        ReviewerRow(reviewer: reviewer, isProducerView: project.isOwner(userId: authService.currentUser?.id))
                             .contextMenu {
-                                if reviewer.role != .owner && authService.currentUser?.isProducer == true {
+                                if reviewer.role != .owner && project.isOwner(userId: authService.currentUser?.id) {
                                     Button {
                                         reviewerToEdit = reviewer
                                         showingEditSheet = true
@@ -97,7 +97,7 @@ struct ProjectReviewersView: View {
                     }
                 }
                 
-                if authService.currentUser?.isProducer == true {
+                if project.isOwner(userId: authService.currentUser?.id) {
                     ToolbarItem(placement: .automatic) {
                         Button {
                             emailAllApprovers()

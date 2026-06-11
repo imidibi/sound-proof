@@ -244,6 +244,12 @@ struct ReviewerApprovalRow: View {
         })
     }
     
+    // Check if current user is project owner
+    var isProjectOwner: Bool {
+        guard let project = mix.song?.project else { return false }
+        return project.isOwner(userId: authService.currentUser?.id)
+    }
+    
     var body: some View {
         HStack(spacing: 8) {
             // Status icon
@@ -251,13 +257,13 @@ struct ReviewerApprovalRow: View {
                 .foregroundStyle(statusColor)
                 .frame(width: 20)
             
-            // Approver name with key approver indicator (only visible to producers)
+            // Approver name with key approver indicator (only visible to project owner)
             HStack(spacing: 4) {
                 Text(reviewer.displayName)
                     .font(.caption)
                 
-                // Show crown icon for key approver (producer view only)
-                if reviewer.isKeyApprover && authService.currentUser?.isProducer == true {
+                // Show crown icon for key approver (project owner view only)
+                if reviewer.isKeyApprover && isProjectOwner {
                     Image(systemName: "crown.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
