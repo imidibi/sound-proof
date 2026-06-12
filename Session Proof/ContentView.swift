@@ -134,13 +134,16 @@ struct ContentView: View {
                             // Auto-convert producers with expired trials to approver if they have no owned projects
                             if let user = authService.currentUser,
                                user.isProducer,
-                               user.subscriptionStatus == "free" || user.subscriptionStatus == "expired" {
-                                // Check if they have any owned projects
-                                let projectCount = try? await authService.getUserOwnedProjectsCount(userId: user.id)
-                                if projectCount == 0 {
-                                    print("🔄 Auto-converting producer with no projects to approver")
-                                    try? await authService.convertToApprover()
-                                    print("✅ Auto-converted to approver (no owned projects)")
+                               user.subscriptionStatus == "expired" {
+                                // Only convert if trial has actually ended (not brand new users with status "free")
+                                if let trialEnded = user.trialEndsAt, trialEnded < Date() {
+                                    // Check if they have any owned projects
+                                    let projectCount = try? await authService.getUserOwnedProjectsCount(userId: user.id)
+                                    if projectCount == 0 {
+                                        print("🔄 Auto-converting expired producer with no projects to approver")
+                                        try? await authService.convertToApprover()
+                                        print("✅ Auto-converted to approver (trial expired, no owned projects)")
+                                    }
                                 }
                             }
                             
