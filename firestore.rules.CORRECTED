@@ -1,0 +1,222 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Helpers -----------------------------------------------------
+
+    // Helper function to check if user is authenticated (iOS app users)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper for REAL users (not anonymous guests)
+    function isSignedInUser() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Guest access helpers
+    function guestClaims() {
+      return request.auth.token;
+    }
+
+    function isGuestForMix(projectId, songId, mixId) {
+      return request.auth != null &&
+        guestClaims().guestProjectId == projectId &&
+        guestClaims().guestSongId == songId &&
+        guestClaims().guestMixId == mixId;
+    }
+
+    function isGuestForProject(projectId) {
+      return request.auth != null && guestClaims().guestProjectId == projectId;
+    }
+
+    function isGuestForSong(projectId, songId) {
+      return request.auth != null &&
+        guestClaims().guestProjectId == projectId &&
+        guestClaims().guestSongId == songId;
+    }
+
+    function guestCanComment() {
+      return guestClaims().guestCanComment == true;
+    }
+
+    // Helper function to check if user owns the project
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+    }
+
+    // Helper function to check if user is a reviewer on the project
+    function isProjectReviewer(projectId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/projects/$(projectId)/reviewers/$(request.auth.uid));
+    }
+
+    // Helper function to check if user is producer or studio
+    function isProducer() {
+      return isSignedIn() &&
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'producer' ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'studio');
+    }
+
+    // Helper function to check if user is a member of the organization
+    function isOrganizationMember(organizationId) {
+      return isSignedIn() &&
+             request.auth.uid in get(/databases/$(database)/documents/organizations/$(organizationId)).data.memberIds;
+    }
+
+    // ---- Users ---------------------------------------------------------
+    // iOS app users can read all users and write their own profile
+    // Guests never access this collection
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---- guest_access ----------------------------------------------------
+    // Redemption happens via Cloud Function (Admin SDK), so normal clients
+    // only need read access for producers who created the codes
+
+    match /guest_access/{guestId} {
+      allow read: if isSignedInUser() && resource.data.createdBy == request.auth.uid;
+      allow create: if isSignedInUser() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isSignedInUser() && resource.data.createdBy == request.auth.uid;
+    }
+
+    // ---- Projects ----------------------------------------------------
+
+    match /projects/{projectId} {
+      // iOS app: Owner or reviewer can read
+      // Web guests: Can read if they have guest access
+      allow get: if isSignedIn() &&
+                    (resource.data.ownerUserId == request.auth.uid ||
+                     isProjectReviewer(projectId)) ||
+                    isGuestForProject(projectId);
+
+      // Allow listing all projects (needed for finding invitations by email)
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerUserId == request.auth.uid;
+
+      // Reviewers subcollection - guests never see this
+      match /reviewers/{reviewerId} {
+        allow get: if isSignedIn() &&
+                      (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                       isProjectReviewer(projectId) ||
+                       reviewerId == request.auth.uid);
+        allow list: if isSignedIn();
+        allow create: if isSignedIn() &&
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                          reviewerId == request.auth.uid);
+        allow update: if isSignedIn() &&
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                          reviewerId == request.auth.uid ||
+                          (resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email &&
+                           request.resource.data.userId == request.auth.uid));
+        allow delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+      }
+
+      // Songs subcollection
+      match /songs/{songId} {
+        // iOS: Reviewers cannot access archived songs
+        // Web: Guests can read if they have access
+        allow read: if (isSignedIn() &&
+                       (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                        (isProjectReviewer(projectId) &&
+                         (!('isArchived' in resource.data) || resource.data.isArchived == false)))) ||
+                       isGuestForSong(projectId, songId);
+
+        allow write: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+
+        // Mixes subcollection
+        match /mixes/{mixId} {
+          // iOS + Web guests can read
+          allow read: if (isSignedIn() &&
+                         (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                          isProjectReviewer(projectId))) ||
+                         isGuestForMix(projectId, songId, mixId);
+
+          allow create, delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+
+          // Allow project owner to update any field
+          allow update: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+
+          // Allow reviewers to update only the approvalStatus field
+          allow update: if isSignedIn() &&
+                           isProjectReviewer(projectId) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus']);
+
+          // Approvals subcollection
+          match /approvals/{approvalId} {
+            // Read-only for guests
+            allow read: if (isSignedIn() &&
+                           (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                            isProjectReviewer(projectId))) ||
+                           isGuestForMix(projectId, songId, mixId);
+
+            allow create: if isSignedIn() && isProjectReviewer(projectId);
+            allow update: if isSignedIn() &&
+                             isProjectReviewer(projectId) &&
+                             resource.data.reviewerUserId == request.auth.uid;
+            allow delete: if isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid;
+          }
+
+          // Comments subcollection
+          match /comments/{commentId} {
+            // iOS + Web guests can read
+            allow read: if (isSignedIn() &&
+                           (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                            isProjectReviewer(projectId))) ||
+                           isGuestForMix(projectId, songId, mixId);
+
+            // iOS users can create
+            allow create: if isSignedIn() &&
+                             (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid ||
+                              isProjectReviewer(projectId));
+
+            // Web guests can ONLY create (not update/delete)
+            allow create: if isGuestForMix(projectId, songId, mixId) &&
+                            guestCanComment() &&
+                            request.resource.data.authorID == 'guest' &&
+                            request.resource.data.text.size() > 0 &&
+                            request.resource.data.text.size() < 2000;
+
+            // Only iOS users can update/delete
+            allow update: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId ||
+                              get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid);
+            allow delete: if isSignedIn() &&
+                             (request.auth.uid == resource.data.authorId ||
+                              get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUserId == request.auth.uid);
+          }
+        }
+      }
+    }
+
+    // Organizations collection
+    match /organizations/{organizationId} {
+      allow get: if isSignedIn() && isOrganizationMember(organizationId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isProducer();
+      allow update: if isSignedIn() && isOrganizationMember(organizationId);
+      allow delete: if isSignedIn() && isOrganizationMember(organizationId);
+    }
+
+    // Pending invitations collection (root level)
+    match /pending_invitations/{email} {
+      allow read: if true;  // Anyone can check for pending invitations
+      allow write, delete: if isSignedIn();
+    }
+
+    // Collection group query for reviewers
+    match /{path=**}/reviewers/{reviewerId} {
+      allow read: if isSignedIn() &&
+                     (reviewerId == request.auth.uid ||
+                      resource.data.userId == request.auth.uid);
+    }
+  }
+}
