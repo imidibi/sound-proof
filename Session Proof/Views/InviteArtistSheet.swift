@@ -446,6 +446,9 @@ Section {
         let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? email
         let deepLink = "approvl://invite?token=\(invitationToken)&email=\(encodedEmail)"
         
+        // Create web app link with pre-populated email
+        let webAppLink = "https://approvl.web.app/signup?email=\(encodedEmail)"
+        
         await MainActor.run {
             invitationLink = deepLink
         }
@@ -457,7 +460,12 @@ Section {
 
         \(producerName) has invited you to review the project "\(projectName)" on Approvl.
 
-        To get started:
+        To get started, choose one of these options:
+
+        OPTION 1: Use the web app (recommended for quick access)
+        \(webAppLink)
+
+        OPTION 2: Download the mobile app
         1. Download Approvl from the App Store
         2. Create an account using this email address: \(email)
         3. Sign in and you'll automatically see the project

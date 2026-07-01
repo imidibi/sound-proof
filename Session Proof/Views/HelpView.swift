@@ -69,8 +69,13 @@ struct HelpView: View {
                         Text("A producer can add one or more approvers to the project. A \"key\" approver can also be optionally identified who has the override decision making ability where there are multiple approvers or commenters, for example in a band.")
                             .font(.body)
 
-                        Text("Approvers are invited via email to download the app and create an account. Once they do, any projects they are associated with will download into their device, from where they can audition the mixes, and comment.")
-                            .font(.body)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Approvers are invited via email to download the app and create an account. Once they do, any projects they are associated with will download into their device, from where they can audition the mixes, and comment.")
+                                .font(.body)
+                            
+                            Text("Approvers can also create accounts and access projects at [https://approvl.web.app](https://approvl.web.app)")
+                                .font(.body)
+                        }
                     }
 
                     Divider()
