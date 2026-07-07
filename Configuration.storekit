@@ -1,0 +1,136 @@
+{
+  "identifier" : "E8C08F47",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21441416",
+      "localizations" : [
+
+      ],
+      "name" : "Producer",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6478063278",
+          "introductoryOffer" : {
+            "internalID" : "INTRO_OFFER_1",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P14D"
+          },
+          "localizations" : [
+            {
+              "description" : "Monthly Producer Subscription",
+              "displayName" : "Producer Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "approvl.producer.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Producer Monthly",
+          "subscriptionGroupID" : "21441416",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6478063406",
+          "introductoryOffer" : {
+            "internalID" : "INTRO_OFFER_2",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P14D"
+          },
+          "localizations" : [
+            {
+              "description" : "Yearly Producer Subscription",
+              "displayName" : "Producer Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "approvl.producer.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Producer Yearly",
+          "subscriptionGroupID" : "21441416",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
