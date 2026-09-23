@@ -14,12 +14,18 @@ struct MixDetailView: View {
     @State private var audioPlayerService = AudioPlayerService()
     @State private var showingCommentSheet = false
     @State private var showingInspector = false
+    @State private var showCommentsInTimeline = true
     @State private var commentListener: ListenerRegistration?
     @State private var reviewerListener: ListenerRegistration?
     @State private var approvalListener: ListenerRegistration?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(ProjectSyncService.self) private var syncService
+    #if os(iOS)
+    @Environment(\.devicePosture) private var devicePosture
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     
     var body: some View {
         Group {
@@ -80,7 +86,8 @@ struct MixDetailView: View {
                 WaveformPlayerView(
                     mix: mix,
                     audioPlayerService: audioPlayerService,
-                    inspectorWidth: showingInspector ? 300 : 0
+                    inspectorWidth: showingInspector ? 300 : 0,
+                    showCommentsInTimeline: showCommentsInTimeline
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -97,7 +104,8 @@ struct MixDetailView: View {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showingInspector = false
                             }
-                        }
+                        },
+                        showCommentsInTimeline: $showCommentsInTimeline
                     )
                 }
                 .frame(width: 300)
@@ -111,14 +119,102 @@ struct MixDetailView: View {
     
     #if os(iOS)
     private var iOSLayout: some View {
+        Group {
+            // iPhone Duo half-open: Split view with waveform on top, inspector on bottom
+            if devicePosture == .duoHalfOpen {
+                duoHalfOpenLayout
+            } else {
+                // Standard iPhone, iPad, or Duo fully open/closed
+                standardIOSLayout
+            }
+        }
+    }
+    
+    // iPhone Duo half-open mode: waveform on top, inspector on bottom
+    private var duoHalfOpenLayout: some View {
         VStack(spacing: 0) {
+            // Top half: Waveform with compact header
+            VStack(spacing: 0) {
+                // Compact header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mix.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        
+                        HStack(spacing: 8) {
+                            Text(formatDuration(mix.duration))
+                                .font(.caption)
+                                .monospacedDigit()
+                            
+                            Text("•")
+                                .font(.caption)
+                            
+                            Text("\(Int(mix.sampleRate / 1000))kHz • \(mix.channels)ch")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        showingCommentSheet = true
+                    } label: {
+                        Image(systemName: "plus.message.fill")
+                            .font(.title3)
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Color.accentColor)
+                            .clipShape(Circle())
+                            .shadow(radius: 3)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                
+                Divider()
+                
+                WaveformPlayerView(
+                    mix: mix,
+                    audioPlayerService: audioPlayerService,
+                    showCommentsInTimeline: showCommentsInTimeline
+                )
+            }
+            
+            // Middle divider for visual separation
+            Divider()
+                .background(Color.primary.opacity(0.3))
+            
+            // Bottom half: Inspector (always visible in half-open mode)
+            MixInspectorView(
+                mix: mix, 
+                audioPlayerService: audioPlayerService,
+                onClose: nil, // No close button in half-open mode
+                showCommentsInTimeline: $showCommentsInTimeline
+            )
+            .frame(maxHeight: .infinity)
+        }
+        .navigationTitle(mix.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingCommentSheet) {
+            NewCommentSheet(mix: mix, timestamp: audioPlayerService.currentTime)
+        }
+    }
+    
+    // Standard iOS layout (iPhone, iPad, Duo fully open/closed)
+    private var standardIOSLayout: some View {
+        VStack(spacing: 0) {
+            // Determine if we're on a larger display using size classes
+            let isLargerDisplay = horizontalSizeClass == .regular && verticalSizeClass == .regular
+            
             // Compact header for both iPad and iPhone
             HStack {
-                if UIDevice.current.userInterfaceIdiom == .pad {
-                    // iPad: full header with mix info
+                if isLargerDisplay {
+                    // iPad or Duo fully open: full header with mix info
                     MixHeaderView(mix: mix)
                 } else {
-                    // iPhone: just format info
+                    // iPhone or Duo outer display: just format info
                     VStack(alignment: .leading, spacing: 4) {
                         Text(mix.name)
                             .font(.headline)
@@ -147,10 +243,10 @@ struct MixDetailView: View {
                         showingInspector = true
                     } label: {
                         Image(systemName: "info.circle.fill")
-                            .font(UIDevice.current.userInterfaceIdiom == .pad ? .title2 : .title3)
+                            .font(isLargerDisplay ? .title2 : .title3)
                             .foregroundStyle(.white)
-                            .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38, 
-                                   height: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38)
+                            .frame(width: isLargerDisplay ? 44 : 38, 
+                                   height: isLargerDisplay ? 44 : 38)
                             .background(Color.blue)
                             .clipShape(Circle())
                             .shadow(radius: 3)
@@ -160,10 +256,10 @@ struct MixDetailView: View {
                         showingCommentSheet = true
                     } label: {
                         Image(systemName: "plus.message.fill")
-                            .font(UIDevice.current.userInterfaceIdiom == .pad ? .title2 : .title3)
+                            .font(isLargerDisplay ? .title2 : .title3)
                             .foregroundStyle(.white)
-                            .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38, 
-                                   height: UIDevice.current.userInterfaceIdiom == .pad ? 44 : 38)
+                            .frame(width: isLargerDisplay ? 44 : 38, 
+                                   height: isLargerDisplay ? 44 : 38)
                             .background(Color.accentColor)
                             .clipShape(Circle())
                             .shadow(radius: 3)
@@ -176,7 +272,8 @@ struct MixDetailView: View {
             
             WaveformPlayerView(
                 mix: mix,
-                audioPlayerService: audioPlayerService
+                audioPlayerService: audioPlayerService,
+                showCommentsInTimeline: showCommentsInTimeline
             )
         }
         .navigationTitle(mix.name)
@@ -186,7 +283,7 @@ struct MixDetailView: View {
         }
         .sheet(isPresented: $showingInspector) {
             NavigationStack {
-                MixInspectorView(mix: mix, audioPlayerService: audioPlayerService)
+                MixInspectorView(mix: mix, audioPlayerService: audioPlayerService, showCommentsInTimeline: $showCommentsInTimeline)
                     .navigationTitle("Inspector")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {

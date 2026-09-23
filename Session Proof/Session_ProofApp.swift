@@ -157,6 +157,9 @@ struct Session_ProofApp: App {
                     .environment(notificationService)
                     .environment(subscriptionService)
                     .environment(inAppNotificationService)
+                    #if os(iOS)
+                    .detectDevicePosture() // Enable iPhone Duo posture detection
+                    #endif
                     .overlay {
                         InAppNotificationOverlay(notificationService: inAppNotificationService)
                     }

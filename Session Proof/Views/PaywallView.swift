@@ -12,7 +12,12 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionService.self) private var subscriptionService
     @Environment(AuthenticationService.self) private var authService
-    
+
+    /// Called when the user taps "Not Now". If nil, the paywall just dismisses (e.g. when shown as a sheet).
+    /// Pass a closure when the paywall is shown as a non-dismissable overlay (e.g. mandatory paywall for
+    /// producers who haven't chosen a trial/subscription) so declining can downgrade the account instead.
+    var onDecline: (() -> Void)? = nil
+
     @State private var selectedProductID: String?
     @State private var isPurchasing = false
     @State private var purchaseError: String?
@@ -176,7 +181,11 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Not Now") {
-                        dismiss()
+                        if let onDecline {
+                            onDecline()
+                        } else {
+                            dismiss()
+                        }
                     }
                 }
             }

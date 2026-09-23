@@ -45,7 +45,15 @@ struct ContentView: View {
                 Color.black.opacity(0.5)
                     .ignoresSafeArea()
                 
-                PaywallView()
+                PaywallView(onDecline: {
+                    Task {
+                        do {
+                            try await authService.convertToApprover()
+                        } catch {
+                            print("❌ Failed to decline producer paywall: \(error.localizedDescription)")
+                        }
+                    }
+                })
             }
             
             // Show loading overlay during initial sync

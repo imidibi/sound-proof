@@ -12,6 +12,7 @@ struct MixInspectorView: View {
     @Bindable var mix: Mix
     let audioPlayerService: AudioPlayerService
     var onClose: (() -> Void)? = nil
+    @Binding var showCommentsInTimeline: Bool
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -84,7 +85,7 @@ struct MixInspectorView: View {
                     Divider()
                     
                     // Comments
-                    CommentsSection(mix: mix)
+                    CommentsSection(mix: mix, showInTimeline: $showCommentsInTimeline)
                     
                     Divider()
                     
@@ -735,6 +736,7 @@ struct MyApprovalSection: View {
 
 struct CommentsSection: View {
     let mix: Mix
+    @Binding var showInTimeline: Bool
     
     var sortedComments: [Comment] {
         mix.comments.sorted { $0.timestamp < $1.timestamp }
@@ -753,6 +755,11 @@ struct CommentsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            
+            // Toggle for showing comments in timeline
+            Toggle("Show comments in timeline", isOn: $showInTimeline)
+                .font(.caption)
+                .toggleStyle(.switch)
             
             if sortedComments.isEmpty {
                 Text("No comments yet")
@@ -1266,6 +1273,8 @@ struct ApprovalStatusIcon: View {
 }
 
 #Preview {
+    @Previewable @State var showComments = true
+    
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: Mix.self, configurations: config)
     let context = container.mainContext
@@ -1273,7 +1282,7 @@ struct ApprovalStatusIcon: View {
     let mix = Mix(name: "Mix V1", versionNumber: 1, duration: 180)
     context.insert(mix)
     
-    return MixInspectorView(mix: mix, audioPlayerService: AudioPlayerService())
+    return MixInspectorView(mix: mix, audioPlayerService: AudioPlayerService(), showCommentsInTimeline: $showComments)
         .frame(width: 300)
         .modelContainer(container)
 }

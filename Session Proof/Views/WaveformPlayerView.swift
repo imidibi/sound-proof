@@ -12,10 +12,15 @@ struct WaveformPlayerView: View {
     @Bindable var mix: Mix
     let audioPlayerService: AudioPlayerService
     var inspectorWidth: CGFloat = 0  // Width of inspector overlay if visible
+    var showCommentsInTimeline: Bool = true  // Whether to show comments on waveform
     
     @Environment(\.modelContext) private var modelContext
     @Environment(ProjectSyncService.self) private var syncService
     @Environment(CloudStorageService.self) private var cloudStorage
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     
     @State private var waveformData: WaveformData?
     @State private var isLoadingWaveform = false
@@ -48,12 +53,13 @@ struct WaveformPlayerView: View {
                         duration: mix.duration,
                         zoomLevel: zoomLevel,
                         verticalScale: verticalScale,
-                        comments: mix.song?.comments.filter { $0.mix?.id == mix.id } ?? [],
+                        comments: showCommentsInTimeline ? (mix.song?.comments.filter { $0.mix?.id == mix.id } ?? []) : [],
                         mix: mix,
                         onSeek: { time in
                             audioPlayerService.seek(to: time)
                         }
                     )
+                    .id("\(mix.id)-\(showCommentsInTimeline)") // Force view refresh when toggle changes
                     .padding(.horizontal)
                     .padding(.vertical, 4)
                     
@@ -61,9 +67,9 @@ struct WaveformPlayerView: View {
                     VStack {
                         HStack {
                             #if os(iOS)
-                            // Position differently for iPhone vs iPad
-                            if UIDevice.current.userInterfaceIdiom == .phone {
-                                // iPhone: smaller, positioned at top left
+                            // Position based on size classes (not device idiom)
+                            if horizontalSizeClass == .compact || verticalSizeClass == .compact {
+                                // Compact: smaller, positioned at top left
                                 Text(formatLargeTime(audioPlayerService.currentTime))
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .monospacedDigit()
@@ -80,7 +86,7 @@ struct WaveformPlayerView: View {
                                 
                                 Spacer()
                             } else {
-                                // iPad: centered at top
+                                // Regular: centered at top
                                 Spacer()
                                 
                                 Text(formatLargeTime(audioPlayerService.currentTime))
@@ -195,8 +201,8 @@ struct WaveformPlayerView: View {
     
     private var timeDisplaySize: CGFloat {
         #if os(iOS)
-        // Smaller font on iPhone
-        return UIDevice.current.userInterfaceIdiom == .phone ? 48 : 72
+        // Smaller font on compact size classes
+        return (horizontalSizeClass == .compact || verticalSizeClass == .compact) ? 48 : 72
         #else
         return 72
         #endif
@@ -204,8 +210,8 @@ struct WaveformPlayerView: View {
     
     private var timeDisplayTopPadding: CGFloat {
         #if os(iOS)
-        // Less padding on iPhone to keep it compact
-        return UIDevice.current.userInterfaceIdiom == .phone ? 8 : 60
+        // Less padding on compact size classes to keep it compact
+        return (horizontalSizeClass == .compact || verticalSizeClass == .compact) ? 8 : 60
         #else
         return 60
         #endif

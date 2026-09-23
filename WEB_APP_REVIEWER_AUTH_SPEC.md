@@ -21,7 +21,7 @@
 
 ## Overview
 
-The web app serves as an **approver-only access path** to Session Proof. It uses the same authentication system as the iOS/Mac app, allowing invited reviewers to:
+The web app serves as an **approver-only access path** to Approvl. It uses the same authentication system as the iOS/Mac app, allowing invited reviewers to:
 
 1. **Sign up** using their invited email address
 2. **Automatically accept** any pending invitations during account creation
@@ -157,7 +157,38 @@ When a producer invites a reviewer in the iOS/Mac app:
    }
    ```
 
-3. **Producer sends invitation email** (outside of Firebase - via email service)
+3. **Producer sends invitation email** using the system mail client with pre-filled content:
+
+   **Email Format:**
+   ```
+   Subject: [Producer Name] invited you to review [Project Name]
+
+   Hi [Reviewer Name],
+
+   [Producer Name] has invited you to review the project "[Project Name]" on Approvl.
+
+   To get started, choose one of these options:
+
+   OPTION 1: Use the web app (recommended for quick access)
+   Click here to get started: https://approvl.web.app/signup?email=[email]
+
+   OPTION 2: Download the mobile app
+   1. Download Approvl from the App Store
+   2. Create an account using this email address: [email]
+   3. Sign in and you'll automatically see the project
+
+   Thanks,
+   The Approvl Team
+   ```
+
+   **Web App Link Format:**
+   ```
+   https://approvl.web.app/signup?email=reviewer@example.com
+   ```
+
+   - Email is URL-encoded in the query parameter
+   - The signup page should detect and pre-populate the email field
+   - This allows one-click access to create an account
 
 ### Accepting Invitations
 
@@ -729,7 +760,21 @@ Unlike producers who have an `ownerUserId` field on projects, reviewers don't ha
    - Display name input
    - "Create Account" button
 
-2. **Implement signUpReviewer() function**
+2. **Detect and pre-populate email from URL parameter**
+   ```typescript
+   // On page load, check for email parameter
+   const urlParams = new URLSearchParams(window.location.search);
+   const emailParam = urlParams.get('email');
+
+   if (emailParam) {
+     // Pre-populate email field
+     setEmail(decodeURIComponent(emailParam));
+     // Optionally focus on the display name or password field
+     // since email is already filled
+   }
+   ```
+
+3. **Implement signUpReviewer() function**
    - Create Firebase Auth account
    - Create Firestore user profile with role 'artist'
    - Call acceptPendingInvitations()
